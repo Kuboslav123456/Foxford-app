@@ -247,8 +247,10 @@ export default function App() {
     if (longPress.current || swipeOff > 10) { longPress.current = false; return; }
     if (!needInsp()) return;
     if (t.done) { setConfirmUndo(t); return; }
-    const time = new Date().toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' });
-    const updated = tasks[subTab].map(x => x.id === t.id ? { ...x, done: true, time, issue: null } : x);
+    const now = new Date();
+    const time = now.toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' });
+    const date = now.toLocaleDateString('sk-SK', { day: 'numeric', month: 'numeric' });
+    const updated = tasks[subTab].map(x => x.id === t.id ? { ...x, done: true, time, date, issue: null } : x);
     setTasks({ ...tasks, [subTab]: updated });
     autoSend(updated);
     if (allResolved(updated)) setTimeout(() => setCelebrate(true), 300);
@@ -446,7 +448,7 @@ export default function App() {
                       </div>
                       {t.issue && <div style={{ fontSize:11, color:C.err, fontWeight:600 }}>⚠ {t.issue}</div>}
                     </div>
-                    {t.done && <span style={{ fontSize:11, fontWeight:700, color:C.ok, flexShrink:0 }}>{t.time}</span>}
+                    {t.done && <span style={{ fontSize:11, fontWeight:700, color:C.ok, flexShrink:0, textAlign:'right', lineHeight:1.4 }}>{t.time}<br/><span style={{ fontSize:10, fontWeight:600, color:C.ok+'99' }}>{t.date}</span></span>}
                   </div>
                 </div>
               ))}
