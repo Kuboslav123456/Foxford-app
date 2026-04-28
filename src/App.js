@@ -496,6 +496,25 @@ export default function App() {
                 </span>
               </div>
 
+              {/* Pridať zariadenie */}
+              {showAddTemp && <div style={{ display:'flex', gap:8, marginBottom:14 }}>
+                <Inp placeholder="Názov zariadenia…" value={newTempLabel} onChange={e => setNewTempLabel(e.target.value)}
+                  style={{ flex:2, padding:'9px 12px', fontSize:13 }} />
+                <Inp placeholder="Max (napr. ≤ 5 °C)" value={newTempMax} onChange={e => setNewTempMax(e.target.value)}
+                  style={{ flex:1, padding:'9px 12px', fontSize:13 }} />
+                <button onClick={() => {
+                  if (!newTempLabel.trim()) return;
+                  const key = 'temp_' + Date.now();
+                  const rawMax = newTempMax.trim();
+                  const formattedMax = rawMax
+                    ? /^[\d.,]+$/.test(rawMax) ? `≤ ${rawMax} °C` : rawMax
+                    : '';
+                  setTempFields(prev => [{ key, label: newTempLabel.trim(), max: formattedMax }, ...prev]);
+                  setTemps(prev => ({ ...prev, [key]: '' }));
+                  setNewTempLabel(''); setNewTempMax(''); setShowAddTemp(false);
+                }} style={{ padding:'9px 14px', borderRadius:12, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:700, fontSize:18, cursor:'pointer', flexShrink:0 }}>+</button>
+              </div>}
+
               {tempFields.map((field) => {
                 const val = temps[field.key] || '';
                 const status = tempColor(field, val);
@@ -532,25 +551,6 @@ export default function App() {
                   </div>
                 );
               })}
-
-              {/* Pridať zariadenie */}
-              {showAddTemp && <div style={{ display:'flex', gap:8, marginTop:6, marginBottom:14 }}>
-                <Inp placeholder="Názov zariadenia…" value={newTempLabel} onChange={e => setNewTempLabel(e.target.value)}
-                  style={{ flex:2, padding:'9px 12px', fontSize:13 }} />
-                <Inp placeholder="Max (napr. ≤ 5 °C)" value={newTempMax} onChange={e => setNewTempMax(e.target.value)}
-                  style={{ flex:1, padding:'9px 12px', fontSize:13 }} />
-                <button onClick={() => {
-                  if (!newTempLabel.trim()) return;
-                  const key = 'temp_' + Date.now();
-                  const rawMax = newTempMax.trim();
-                  const formattedMax = rawMax
-                    ? /^[\d.,]+$/.test(rawMax) ? `≤ ${rawMax} °C` : rawMax
-                    : '';
-                  setTempFields(prev => [{ key, label: newTempLabel.trim(), max: formattedMax }, ...prev]);
-                  setTemps(prev => ({ ...prev, [key]: '' }));
-                  setNewTempLabel(''); setNewTempMax(''); setShowAddTemp(false);
-                }} style={{ padding:'9px 14px', borderRadius:12, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:700, fontSize:18, cursor:'pointer', flexShrink:0 }}>+</button>
-              </div>}
 
               <button disabled={sending} onClick={() => {
                 if (!needName()) return;
