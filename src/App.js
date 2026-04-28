@@ -224,6 +224,25 @@ export default function App() {
     setConfirmUndo(null);
   };
 
+  // všetky úlohy sú buď splnené alebo majú zaznamenaný problém
+  const allResolved = (list) => list.length > 0 && list.every(t => t.done || t.issue);
+
+  const autoSend = (updatedList) => {
+    if (subTab === 'denné') return;
+    if (!allResolved(updatedList)) return;
+    if (!inspectors[subTab].trim()) return;
+    sendToSheets('tasks_summary', {
+      date: new Date().toLocaleDateString('sk-SK'),
+      category: subTab,
+      inspector: inspectors[subTab],
+      tasks: updatedList.map(t => ({
+        text: t.text,
+        done: t.done,
+        issue: t.issue || null,
+      })),
+    });
+  };
+
   const onTaskClick = (t) => {
     if (longPress.current || swipeOff > 10) { longPress.current = false; return; }
     if (!needInsp()) return;
@@ -231,7 +250,8 @@ export default function App() {
     const time = new Date().toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' });
     const updated = tasks[subTab].map(x => x.id === t.id ? { ...x, done: true, time, issue: null } : x);
     setTasks({ ...tasks, [subTab]: updated });
-    if (updated.every(x => x.done)) setTimeout(() => setCelebrate(true), 300);
+    autoSend(updated);
+    if (allResolved(updated)) setTimeout(() => setCelebrate(true), 300);
   };
 
   const longStart = (t) => {
@@ -243,7 +263,10 @@ export default function App() {
   const reportIssue = (reason, e) => {
     if (e) { e.preventDefault(); e.stopPropagation(); }
     if (!needInsp()) { setQuickTask(null); return; }
-    setTasks({ ...tasks, [subTab]: tasks[subTab].map(x => x.id === quickTask.id ? { ...x, done: false, time: null, issue: reason } : x) });
+    const updated = tasks[subTab].map(x => x.id === quickTask.id ? { ...x, done: false, time: null, issue: reason } : x);
+    setTasks({ ...tasks, [subTab]: updated });
+    autoSend(updated);
+    if (allResolved(updated)) setTimeout(() => setCelebrate(true), 300);
     setQuickTask(null);
   };
 
