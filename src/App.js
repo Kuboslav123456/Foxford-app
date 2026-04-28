@@ -155,6 +155,7 @@ export default function App() {
   const [newNote, setNewNote] = useState('');
   const [noteAuthor, setNoteAuthor] = useState('');
   const [celebrate, setCelebrate] = useState(false);
+  const [celebrateHaccp, setCelebrateHaccp] = useState(false);
   const [sending, setSending]   = useState(false);
   const [success, setSuccess]   = useState(false);
   const [shakeName, setShakeName] = useState(false);
@@ -176,7 +177,10 @@ export default function App() {
       setTasks(prev => ({ ...prev, denné: prev.denné.map(t => ({ ...t, done: false, time: null, issue: null })) }));
       setInspectors(prev => ({ ...prev, denné: '' }));
       setBatchTime(null);
+      setLastHaccpDate('');
+      setTemps(prev => Object.keys(prev).reduce((a, k) => ({ ...a, [k]: '' }), {}));
       localStorage.setItem('foxford-last-reset-date', new Date().toDateString());
+      localStorage.setItem('foxford-haccp-date', '');
     }, ms);
     return () => clearTimeout(timer);
   }, []);
@@ -531,7 +535,8 @@ export default function App() {
                       </div>
                       <div style={{ position:'relative' }}>
                         <input type="text" placeholder="0.0" value={val}
-                          onChange={e => setTemps(prev => ({ ...prev, [field.key]: e.target.value }))}
+                          onChange={e => { if (lastHaccpDate === new Date().toDateString()) return; setTemps(prev => ({ ...prev, [field.key]: e.target.value })); }}
+                          readOnly={lastHaccpDate === new Date().toDateString()}
                           style={{
                             width:'100%', padding:'10px 14px', borderRadius:12,
                             border:`1.5px solid ${accentColor}`,
@@ -540,6 +545,7 @@ export default function App() {
                             fontSize:18, fontWeight:800, textAlign:'center', letterSpacing:1,
                             outline:'none', boxSizing:'border-box', fontFamily:'inherit',
                             boxShadow: status ? `0 0 10px ${accentColor}22` : 'none',
+                            cursor: lastHaccpDate === new Date().toDateString() ? 'default' : 'text',
                           }} />
                         {status && (
                           <div style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', fontSize:14 }}>
@@ -552,30 +558,37 @@ export default function App() {
                 );
               })}
 
-              <button disabled={sending} onClick={() => {
-                if (!needName()) return;
-                setSending(true);
-                sendToSheets('haccp', {
-                  date: new Date().toLocaleDateString('sk-SK'),
-                  podpis: controllerName || 'Anonym',
-                  readings: tempFields.map(f => ({ label: f.label, value: temps[f.key] || '', max: f.max })),
-                });
-                setTimeout(() => {
-                  setSending(false); setSuccess(true);
-                  setTemps(tempFields.reduce((a, f) => ({ ...a, [f.key]: '' }), {}));
-                  const today = new Date().toDateString();
-                  setLastHaccpDate(today);
-                  localStorage.setItem('foxford-haccp-date', today);
-                }, 900);
-              }} style={{
-                width:'100%', padding:'13px', marginTop:2,
-                background: C.goldDim, border:`1px solid ${C.goldLine}`,
-                color:C.gold, borderRadius:14, fontWeight:800, fontSize:14,
-                letterSpacing:.8, cursor:'pointer', fontFamily:'inherit',
-                opacity: sending ? .7 : 1,
-              }}>
-                {sending ? 'Odosielam…' : 'Odoslať kontrolu'}
-              </button>
+              {lastHaccpDate === new Date().toDateString() ? (
+                <div style={{ textAlign:'center', padding:'12px 0 4px', color:C.ok, fontSize:13, fontWeight:600 }}>
+                  ✓ Na dnes je všetko zaznamenané
+                  <div style={{ fontSize:11, color:C.muted, marginTop:4, fontWeight:400 }}>🌙 Polia sa odomknú automaticky o polnoci</div>
+                </div>
+              ) : (
+                <button disabled={sending} onClick={() => {
+                  if (!needName()) return;
+                  setSending(true);
+                  sendToSheets('haccp', {
+                    date: new Date().toLocaleDateString('sk-SK'),
+                    podpis: controllerName || 'Anonym',
+                    readings: tempFields.map(f => ({ label: f.label, value: temps[f.key] || '', max: f.max })),
+                  });
+                  setTimeout(() => {
+                    setSending(false);
+                    const today = new Date().toDateString();
+                    setLastHaccpDate(today);
+                    localStorage.setItem('foxford-haccp-date', today);
+                    setCelebrateHaccp(true);
+                  }, 900);
+                }} style={{
+                  width:'100%', padding:'13px', marginTop:2,
+                  background: C.goldDim, border:`1px solid ${C.goldLine}`,
+                  color:C.gold, borderRadius:14, fontWeight:800, fontSize:14,
+                  letterSpacing:.8, cursor:'pointer', fontFamily:'inherit',
+                  opacity: sending ? .7 : 1,
+                }}>
+                  {sending ? 'Odosielam…' : 'Odoslať kontrolu'}
+                </button>
+              )}
             </Glass>
           </>
         )}
@@ -781,6 +794,28 @@ export default function App() {
           );
         })}
       </nav>
+
+      {/* ── CELEBRATION HACCP ────────────────────────────────────────────────── */}
+      {celebrateHaccp && (
+        <div onClick={() => setCelebrateHaccp(false)} style={{ position:'fixed', inset:0, background:'rgba(6,4,2,.96)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', zIndex:3000, cursor:'pointer', padding:32 }}>
+          <style>{`
+            @keyframes pop  { 0%{transform:scale(.4);opacity:0} 70%{transform:scale(1.15)} 100%{transform:scale(1);opacity:1} }
+            @keyframes fall { 0%{transform:translateY(-20px);opacity:0} 100%{transform:translateY(0);opacity:1} }
+            .conf-ring { animation: pop .5s cubic-bezier(.17,.67,.38,1.4) both; }
+            .conf-text { animation: fall .4s .35s ease both; }
+          `}</style>
+          <div className="conf-ring" style={{ width:110, height:110, borderRadius:'50%', border:`3px solid ${C.ok}`, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:`0 0 40px ${C.ok}55, 0 0 80px ${C.ok}22`, marginBottom:28 }}>
+            <span style={{ fontSize:52 }}>🌡️</span>
+          </div>
+          <div className="conf-text" style={{ fontSize:26, fontWeight:900, color:C.text, letterSpacing:2, marginBottom:8 }}>Hotovo!</div>
+          <div className="conf-text" style={{ fontSize:14, color:C.ok, fontWeight:600, marginBottom:16 }}>Na dnes je všetko zaznamenané</div>
+          <div className="conf-text" style={{ fontSize:13, color:C.sub, textAlign:'center', lineHeight:1.7, background:'rgba(255,245,225,0.05)', borderRadius:14, padding:'12px 18px', border:`1px solid ${C.border}` }}>
+            🌙 Polia zostanú uzamknuté do polnoci.<br />
+            <span style={{ fontSize:11, color:C.muted }}>O polnoci sa automaticky odomknú pre nový záznam.</span>
+          </div>
+          <div className="conf-text" style={{ fontSize:11, color:C.muted, marginTop:20 }}>Klepni kdekoľvek pre pokračovanie</div>
+        </div>
+      )}
 
       {/* ── CELEBRATION ──────────────────────────────────────────────────────── */}
       {celebrate && (
