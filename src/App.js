@@ -19,7 +19,7 @@ const C = {
   errDim:   'rgba(232,114,114,0.12)',
 };
 
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx9ZfUav3coWz_EmnLf-oyrucaGb-dtuwBdr5oD0vGY-moChe6r0amhXnaxATskI0uP/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwNITJXNJOe-GAeL-Q46n8kVqI4AYnxafIW6iWRzUwNFiXZO53DkuP14eC6dHoygtYb/exec';
 const MONTHS = ['Január','Február','Marec','Apríl','Máj','Jún','Júl','August','September','Október','November','December'];
 
 const INIT_TASKS = {
