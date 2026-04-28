@@ -140,6 +140,7 @@ export default function App() {
   const [newTempLabel, setNewTempLabel] = useState('');
   const [newTempMax,   setNewTempMax]   = useState('');
   const [confirmRemoveTemp, setConfirmRemoveTemp] = useState(null);
+  const [showAddTemp, setShowAddTemp] = useState(false);
   const [controllerName, setControllerName] = useState('');
   const [selectedMonth, setSelectedMonth]   = useState(MONTHS[new Date().getMonth()]);
   const [invData, setInvData]   = useState(() => JSON.parse(localStorage.getItem('foxford-inventory-data')) || INIT_INV);
@@ -486,7 +487,13 @@ export default function App() {
             </Glass>
 
             <Glass style={{ padding:'14px 16px 16px' }}>
-              <div style={{ fontSize:12, fontWeight:700, letterSpacing:1, color:C.sub, textTransform:'uppercase', marginBottom:14 }}>HACCP — Teplotná kontrola</div>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+                <span style={{ fontSize:12, fontWeight:700, letterSpacing:1, color:C.sub, textTransform:'uppercase' }}>HACCP — Teplotná kontrola</span>
+                <span onClick={() => { setShowAddTemp(v => !v); setNewTempLabel(''); setNewTempMax(''); }}
+                  style={{ width:22, height:22, borderRadius:6, border:`1px solid ${showAddTemp ? C.goldLine : C.border}`, background: showAddTemp ? C.goldDim : 'transparent', color: showAddTemp ? C.gold : C.muted, display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:300, cursor:'pointer', lineHeight:1 }}>
+                  {showAddTemp ? '✕' : '+'}
+                </span>
+              </div>
 
               {tempFields.map((field) => {
                 const val = temps[field.key] || '';
@@ -526,7 +533,7 @@ export default function App() {
               })}
 
               {/* Pridať zariadenie */}
-              <div style={{ display:'flex', gap:8, marginTop:6, marginBottom:14 }}>
+              {showAddTemp && <div style={{ display:'flex', gap:8, marginTop:6, marginBottom:14 }}>
                 <Inp placeholder="Názov zariadenia…" value={newTempLabel} onChange={e => setNewTempLabel(e.target.value)}
                   style={{ flex:2, padding:'9px 12px', fontSize:13 }} />
                 <Inp placeholder="Max (napr. ≤ 5 °C)" value={newTempMax} onChange={e => setNewTempMax(e.target.value)}
@@ -540,9 +547,9 @@ export default function App() {
                     : '';
                   setTempFields(prev => [...prev, { key, label: newTempLabel.trim(), max: formattedMax }]);
                   setTemps(prev => ({ ...prev, [key]: '' }));
-                  setNewTempLabel(''); setNewTempMax('');
+                  setNewTempLabel(''); setNewTempMax(''); setShowAddTemp(false);
                 }} style={{ padding:'9px 14px', borderRadius:12, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:700, fontSize:18, cursor:'pointer', flexShrink:0 }}>+</button>
-              </div>
+              </div>}
 
               <button disabled={sending} onClick={() => {
                 if (!needName()) return;
