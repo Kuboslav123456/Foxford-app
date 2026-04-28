@@ -512,7 +512,7 @@ export default function App() {
                   setTempFields(prev => [{ key, label: newTempLabel.trim(), max: formattedMax }, ...prev]);
                   setTemps(prev => ({ ...prev, [key]: '' }));
                   setNewTempLabel(''); setNewTempMax(''); setShowAddTemp(false);
-                }} style={{ padding:'9px 14px', borderRadius:12, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:700, fontSize:18, cursor:'pointer', flexShrink:0 }}>+</button>
+                }} style={{ padding:'9px 16px', borderRadius:12, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:700, fontSize:13, cursor:'pointer', flexShrink:0, letterSpacing:.5 }}>Pridať</button>
               </div>}
 
               {tempFields.map((field) => {
