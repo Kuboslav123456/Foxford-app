@@ -157,6 +157,20 @@ export default function App() {
     window.addEventListener('online', on); window.addEventListener('offline', off);
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
   }, []);
+
+  // ── MIDNIGHT AUTO-RESET for denné ──────────────────────────────────────────
+  useEffect(() => {
+    const now = new Date();
+    const midnight = new Date(); midnight.setHours(24, 0, 0, 0);
+    const ms = midnight - now;
+    const timer = setTimeout(() => {
+      setTasks(prev => ({ ...prev, denné: prev.denné.map(t => ({ ...t, done: false, time: null, issue: null })) }));
+      setInspectors(prev => ({ ...prev, denné: '' }));
+      setBatchTime(null);
+      localStorage.setItem('foxford-last-reset-date', new Date().toDateString());
+    }, ms);
+    return () => clearTimeout(timer);
+  }, []);
   useEffect(() => {
     localStorage.setItem('foxford-tasks',           JSON.stringify(tasks));
     localStorage.setItem('foxford-batch',           batchTime || '');
@@ -702,11 +716,10 @@ export default function App() {
 
       {/* ── CELEBRATION ──────────────────────────────────────────────────────── */}
       {celebrate && (
-        <div onClick={() => setCelebrate(false)} style={{ position:'fixed', inset:0, background:'rgba(6,4,2,.96)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', zIndex:3000, cursor:'pointer' }}>
+        <div onClick={() => setCelebrate(false)} style={{ position:'fixed', inset:0, background:'rgba(6,4,2,.96)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', zIndex:3000, cursor:'pointer', padding:32 }}>
           <style>{`
             @keyframes pop  { 0%{transform:scale(.4);opacity:0} 70%{transform:scale(1.15)} 100%{transform:scale(1);opacity:1} }
             @keyframes fall { 0%{transform:translateY(-20px);opacity:0} 100%{transform:translateY(0);opacity:1} }
-            @keyframes spin2 { to{transform:rotate(360deg)} }
             .conf-ring { animation: pop .5s cubic-bezier(.17,.67,.38,1.4) both; }
             .conf-text { animation: fall .4s .35s ease both; }
           `}</style>
@@ -714,8 +727,21 @@ export default function App() {
             <span style={{ fontSize:52 }}>🎉</span>
           </div>
           <div className="conf-text" style={{ fontSize:26, fontWeight:900, color:C.text, letterSpacing:2, marginBottom:8 }}>Hotovo!</div>
-          <div className="conf-text" style={{ fontSize:14, color:C.ok, fontWeight:600, marginBottom:6 }}>Všetky úlohy sú splnené</div>
-          <div className="conf-text" style={{ fontSize:12, color:C.muted, marginTop:4 }}>Klepni kdekoľvek pre pokračovanie</div>
+          <div className="conf-text" style={{ fontSize:14, color:C.ok, fontWeight:600, marginBottom:16 }}>Všetky úlohy sú splnené</div>
+          {subTab === 'denné' ? (
+            <div className="conf-text" style={{ fontSize:13, color:C.sub, textAlign:'center', lineHeight:1.7, background:'rgba(255,245,225,0.05)', borderRadius:14, padding:'12px 18px', border:`1px solid ${C.border}` }}>
+              🌙 Denný zoznam sa automaticky resetuje<br />
+              <span style={{ color:C.gold, fontWeight:700 }}>o polnoci</span> — nie je potrebný manuálny reset.<br />
+              <span style={{ fontSize:11, color:C.muted }}>Ak chcete odoslať súhrn skôr, použite Resetovať zoznam.</span>
+            </div>
+          ) : (
+            <div className="conf-text" style={{ fontSize:13, color:C.sub, textAlign:'center', lineHeight:1.7, background:'rgba(255,245,225,0.05)', borderRadius:14, padding:'12px 18px', border:`1px solid ${C.border}` }}>
+              ♻️ Pre začatie nového cyklu<br />
+              kliknite na <span style={{ color:C.gold, fontWeight:700 }}>Resetovať zoznam</span> nižšie.<br />
+              <span style={{ fontSize:11, color:C.muted }}>Úlohy ostanú viditeľné ako splnené.</span>
+            </div>
+          )}
+          <div className="conf-text" style={{ fontSize:11, color:C.muted, marginTop:20 }}>Klepni kdekoľvek pre pokračovanie</div>
         </div>
       )}
 
