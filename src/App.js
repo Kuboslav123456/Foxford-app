@@ -105,6 +105,7 @@ export default function App() {
   const [quickTask, setQuickTask] = useState(null);
   const [confirmUndo, setConfirmUndo] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [lastHaccpDate, setLastHaccpDate] = useState(localStorage.getItem('foxford-haccp-date') || '');
   const [invSearch, setInvSearch] = useState('');
 
   const timerRef = useRef(null);
@@ -367,8 +368,12 @@ export default function App() {
                   style={{ width:42, borderRadius:12, border:`1px solid ${C.border}`, background:C.panelHov, color:C.gold, fontSize:22, fontWeight:300, cursor:'pointer' }}>+</button>
               </div>
 
-              {/* Tasks */}
-              {(tasks[subTab]||[]).map(t => (
+              {/* Tasks — urgent first, then pending, then done */}
+              {[...(tasks[subTab]||[])].sort((a,b) => {
+                if (a.done !== b.done) return a.done ? 1 : -1;
+                if (a.urgent !== b.urgent) return a.urgent ? -1 : 1;
+                return 0;
+              }).map(t => (
                 <div key={t.id} style={{ position:'relative', overflow:'hidden', borderRadius:12, marginBottom:5, background: swipeId===t.id ? C.err+'33' : 'transparent' }}>
                   {swipeId===t.id && <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'flex-end', paddingRight:14, color:C.err, fontWeight:800, fontSize:11 }}>ZMAZAŤ ✕</div>}
                   <div
@@ -381,9 +386,9 @@ export default function App() {
                       position:'relative', zIndex:2,
                       transform: swipeId===t.id ? `translateX(-${swipeOff}px)` : 'none',
                       display:'flex', alignItems:'center', gap:12, padding:'13px 12px',
-                      background: t.done ? C.okDim : t.issue ? C.errDim : C.panelHov,
+                      background: t.done ? C.okDim : t.issue ? C.errDim : t.urgent ? 'rgba(232,114,114,0.07)' : C.panelHov,
                       borderRadius:12,
-                      border:`1px solid ${t.done ? C.ok+'44' : t.issue ? C.err+'44' : C.border}`,
+                      border:`1px solid ${t.done ? C.ok+'44' : t.issue ? C.err+'44' : t.urgent ? C.err+'55' : C.border}`,
                       cursor:'pointer', userSelect:'none',
                     }}>
                     {/* Circle checkbox */}
@@ -398,8 +403,11 @@ export default function App() {
                       {!t.done && t.issue && <span style={{ color:C.err, fontSize:12, fontWeight:900, lineHeight:1 }}>!</span>}
                     </div>
                     <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:14, fontWeight:500, color: t.done ? C.sub : C.text, textDecoration: t.done ? 'line-through' : 'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.text}</div>
-                      {t.issue && <div style={{ fontSize:11, color:C.err, fontWeight:600, marginTop:2 }}>⚠ {t.issue}</div>}
+                      <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom: t.issue ? 2 : 0 }}>
+                        {t.urgent && !t.done && <span style={{ fontSize:9, fontWeight:800, color:C.err, border:`1px solid ${C.err}55`, padding:'1px 5px', borderRadius:5, letterSpacing:.5, flexShrink:0 }}>URGENTNÉ</span>}
+                        <div style={{ fontSize:14, fontWeight:500, color: t.done ? C.sub : C.text, textDecoration: t.done ? 'line-through' : 'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.text}</div>
+                      </div>
+                      {t.issue && <div style={{ fontSize:11, color:C.err, fontWeight:600 }}>⚠ {t.issue}</div>}
                     </div>
                     {t.done && <span style={{ fontSize:11, fontWeight:700, color:C.ok, flexShrink:0 }}>{t.time}</span>}
                   </div>
@@ -465,7 +473,12 @@ export default function App() {
                 if (!needName()) return;
                 setSending(true);
                 push('HACCP', `V:${temps.vitrina} C:${temps.chladnicka} S:${temps.sklad}`);
-                setTimeout(() => { setSending(false); setSuccess(true); setTemps({ vitrina:'', chladnicka:'', sklad:'' }); }, 900);
+                setTimeout(() => {
+                  setSending(false); setSuccess(true); setTemps({ vitrina:'', chladnicka:'', sklad:'' });
+                  const today = new Date().toDateString();
+                  setLastHaccpDate(today);
+                  localStorage.setItem('foxford-haccp-date', today);
+                }, 900);
               }} style={{
                 width:'100%', padding:'15px', marginTop:4,
                 background: C.goldDim, border:`1px solid ${C.goldLine}`,
@@ -567,6 +580,8 @@ export default function App() {
                 return `${item?.name}: ${val} ${item?.unit} (${invNotes[id]||'–'})`;
               }).join(' | ');
               push(`INVENTÚRA ${selectedMonth}`, 'Report', data);
+              setInvQty({});
+              setInvNotes({});
               setSuccess(true);
             }} style={{
               width:'100%', padding:'16px', marginBottom:8, borderRadius:14,
@@ -648,18 +663,24 @@ export default function App() {
           { id:'temps',     emoji:'⊛',  label:'Teploty' },
           { id:'inventory', emoji:'▦',  label:'Sklad' },
           { id:'notes',     emoji:'✉',  label:'Správy' },
-        ].map(({ id, emoji, label }) => (
-          <div key={id} onClick={() => setTab(id)} style={{
-            flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-            cursor:'pointer', gap:3, position:'relative',
-          }}>
-            {tab === id && (
-              <div style={{ position:'absolute', top:-1, left:'50%', transform:'translateX(-50%)', width:24, height:2, background:C.gold, borderRadius:2, boxShadow:`0 0 8px ${C.gold}` }} />
-            )}
-            <div style={{ fontSize:17, opacity: tab===id ? 1 : .3, transition:'opacity .15s' }}>{emoji}</div>
-            <div style={{ fontSize:8.5, fontWeight:700, letterSpacing:.8, textTransform:'uppercase', color: tab===id ? C.gold : C.muted, transition:'color .15s' }}>{label}</div>
-          </div>
-        ))}
+        ].map(({ id, emoji, label }) => {
+          const hasAlert = id === 'temps' && lastHaccpDate !== new Date().toDateString();
+          return (
+            <div key={id} onClick={() => setTab(id)} style={{
+              flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+              cursor:'pointer', gap:3, position:'relative',
+            }}>
+              {tab === id && (
+                <div style={{ position:'absolute', top:-1, left:'50%', transform:'translateX(-50%)', width:24, height:2, background:C.gold, borderRadius:2, boxShadow:`0 0 8px ${C.gold}` }} />
+              )}
+              <div style={{ position:'relative', fontSize:17, opacity: tab===id ? 1 : .3, transition:'opacity .15s' }}>
+                {emoji}
+                {hasAlert && <div style={{ position:'absolute', top:-2, right:-4, width:7, height:7, borderRadius:'50%', background:C.err, boxShadow:`0 0 6px ${C.err}` }} />}
+              </div>
+              <div style={{ fontSize:8.5, fontWeight:700, letterSpacing:.8, textTransform:'uppercase', color: tab===id ? C.gold : C.muted, transition:'color .15s' }}>{label}</div>
+            </div>
+          );
+        })}
       </nav>
 
       {/* ── CELEBRATION ──────────────────────────────────────────────────────── */}
@@ -728,17 +749,46 @@ export default function App() {
         <div onMouseDown={() => setQuickTask(null)} style={{ position:'fixed', inset:0, background:'rgba(6,4,2,.85)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)', display:'flex', alignItems:'flex-end', zIndex:2000 }}>
           <div onMouseDown={e => e.stopPropagation()} style={{ background:'#1a1510', border:`1px solid ${C.borderM}`, width:'100%', borderTopLeftRadius:28, borderTopRightRadius:28, padding:'22px 18px 38px', boxShadow:'0 -8px 40px rgba(0,0,0,.6)' }}>
             <div style={{ width:32, height:3, background:C.muted, borderRadius:2, margin:'0 auto 20px' }} />
-            <div style={{ fontSize:14, fontWeight:800, color:C.text, marginBottom:3 }}>Nahlásiť problém</div>
-            <div style={{ fontSize:12, color:C.sub, marginBottom:18, lineHeight:1.4 }}>{quickTask.text}</div>
+            <div style={{ fontSize:14, fontWeight:800, color:C.text, marginBottom:3 }}>Akcie pre úlohu</div>
+            <div style={{ fontSize:12, color:C.sub, marginBottom:16, lineHeight:1.4 }}>{quickTask.text}</div>
+
+            {/* Urgent toggle */}
+            <button onMouseDown={e => {
+              e.stopPropagation();
+              setTasks({...tasks, [subTab]: tasks[subTab].map(x => x.id === quickTask.id ? {...x, urgent: !x.urgent} : x)});
+              setQuickTask(null);
+            }} style={{
+              display:'block', width:'100%', padding:'14px 16px', marginBottom:7,
+              borderRadius:14, border:`1px solid ${quickTask.urgent ? C.err+'55' : C.border}`,
+              background: quickTask.urgent ? C.errDim : C.panel,
+              textAlign:'left', fontSize:14, fontWeight:600,
+              color: quickTask.urgent ? C.err : C.text,
+              cursor:'pointer', fontFamily:'inherit',
+            }}>{quickTask.urgent ? '✕ Zrušiť urgentnosť' : '⚡ Označiť ako urgentná'}</button>
+
+            {/* Divider */}
+            <div style={{ height:1, background:C.border, margin:'4px 0 10px' }} />
+            <div style={{ fontSize:10, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:8 }}>Nahlásiť problém</div>
+
             {['Chýba tovar / pomôcky','Pokazené zariadenie','Nedostatok času','Iný dôvod'].map(r => (
               <button key={r} onMouseDown={e => reportIssue(r,e)} style={{
-                display:'block', width:'100%', padding:'14px 16px', marginBottom:7,
+                display:'block', width:'100%', padding:'13px 16px', marginBottom:6,
                 borderRadius:14, border:`1px solid ${C.border}`, background:C.panel,
                 textAlign:'left', fontSize:14, fontWeight:500, color:C.text,
                 cursor:'pointer', fontFamily:'inherit',
               }}>{r}</button>
             ))}
-            <button onMouseDown={() => setQuickTask(null)} style={{ display:'block', width:'100%', padding:'12px', marginTop:4, background:'none', border:'none', color:C.err, fontWeight:700, fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>Zrušiť</button>
+
+            {/* Delete */}
+            <button onMouseDown={e => {
+              e.stopPropagation();
+              setTasks({...tasks, [subTab]: tasks[subTab].filter(x => x.id !== quickTask.id)});
+              setQuickTask(null);
+            }} style={{ display:'block', width:'100%', padding:'13px 16px', marginBottom:6, borderRadius:14, border:`1px solid ${C.err}33`, background:C.errDim, textAlign:'left', fontSize:14, fontWeight:700, color:C.err, cursor:'pointer', fontFamily:'inherit' }}>
+              🗑 Zmazať úlohu
+            </button>
+
+            <button onMouseDown={() => setQuickTask(null)} style={{ display:'block', width:'100%', padding:'12px', marginTop:2, background:'none', border:'none', color:C.muted, fontWeight:700, fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>Zrušiť</button>
           </div>
         </div>
       )}
