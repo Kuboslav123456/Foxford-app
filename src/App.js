@@ -156,6 +156,7 @@ export default function App() {
   const [noteAuthor, setNoteAuthor] = useState('');
   const [celebrate, setCelebrate] = useState(false);
   const [celebrateHaccp, setCelebrateHaccp] = useState(false);
+  const [confirmResetHaccp, setConfirmResetHaccp] = useState(false);
   const [sending, setSending]   = useState(false);
   const [success, setSuccess]   = useState(false);
   const [shakeName, setShakeName] = useState(false);
@@ -562,6 +563,9 @@ export default function App() {
                 <div style={{ textAlign:'center', padding:'12px 0 4px', color:C.ok, fontSize:13, fontWeight:600 }}>
                   ✓ Na dnes je všetko zaznamenané
                   <div style={{ fontSize:11, color:C.muted, marginTop:4, fontWeight:400 }}>🌙 Polia sa odomknú automaticky o polnoci</div>
+                  <button onClick={() => setConfirmResetHaccp(true)} style={{ marginTop:12, background:'none', border:'none', color:C.muted, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit', textDecoration:'underline' }}>
+                    Resetovať teraz
+                  </button>
                 </div>
               ) : (
                 <button disabled={sending} onClick={() => {
@@ -864,6 +868,29 @@ export default function App() {
               <button onMouseDown={() => uncheckedTask(confirmUndo)} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.err}44`, background:C.errDim, color:C.err, fontWeight:800, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
                 Zrušiť splnenie
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── CONFIRM RESET HACCP ──────────────────────────────────────────────── */}
+      {confirmResetHaccp && (
+        <div onMouseDown={() => setConfirmResetHaccp(false)} style={{ position:'fixed', inset:0, background:'rgba(6,4,2,.85)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2000, padding:24 }}>
+          <div onMouseDown={e => e.stopPropagation()} style={{ background:'#1a1510', border:`1px solid ${C.borderM}`, width:'100%', borderRadius:24, padding:'28px 22px 24px', boxShadow:'0 8px 40px rgba(0,0,0,.6)' }}>
+            <div style={{ fontSize:32, textAlign:'center', marginBottom:14 }}>🌙</div>
+            <div style={{ fontSize:16, fontWeight:800, color:C.text, textAlign:'center', marginBottom:10 }}>Resetovať teplotný záznam?</div>
+            <div style={{ fontSize:13, color:C.sub, textAlign:'center', marginBottom:24, lineHeight:1.7 }}>
+              Upozornenie: záznam sa resetuje <span style={{ color:C.gold, fontWeight:700 }}>automaticky každú polnoc</span>.<br />
+              Manuálny reset použite len ak bol záznam zadaný omylom.
+            </div>
+            <div style={{ display:'flex', gap:10 }}>
+              <button onMouseDown={() => setConfirmResetHaccp(false)} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>Zrušiť</button>
+              <button onMouseDown={() => {
+                setLastHaccpDate('');
+                setTemps(tempFields.reduce((a, f) => ({ ...a, [f.key]: '' }), {}));
+                localStorage.setItem('foxford-haccp-date', '');
+                setConfirmResetHaccp(false);
+              }} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.err}44`, background:C.errDim, color:C.err, fontWeight:800, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>Áno, resetovať</button>
             </div>
           </div>
         </div>
