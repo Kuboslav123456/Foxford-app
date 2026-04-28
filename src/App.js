@@ -380,7 +380,7 @@ export default function App() {
             {/* Inspector */}
             <Glass accent style={{ padding:'14px 16px' }}>
               <Tag text={`Kontroluje — ${subTab}`} />
-              <Inp ref={inspRef} type="text" placeholder="Meno baristu…"
+              <Inp ref={inspRef} type="text" placeholder="Tvoje meno…"
                 value={inspectors[subTab]}
                 onChange={e => { const v = e.target.value; setInspectors(prev => ({ ...prev, [subTab]: v })); }}
                 shake={shakeInsp}
@@ -486,7 +486,7 @@ export default function App() {
         {tab === 'temps' && (
           <>
             <Glass accent style={{ padding:'14px 16px' }}>
-              <Tag text="Meno baristu" />
+              <Tag text="Tvoje meno" />
               <Inp ref={nameRef} type="text" placeholder="Zadaj meno…" value={controllerName}
                 onChange={e => setControllerName(e.target.value)} shake={shakeName}
                 style={{ marginTop:7, borderColor: controllerName ? C.ok : C.border }} />
@@ -601,7 +601,7 @@ export default function App() {
         {tab === 'inventory' && (
           <>
             <Glass accent style={{ padding:'14px 16px' }}>
-              <Tag text="Meno baristu" />
+              <Tag text="Tvoje meno" />
               <Inp ref={nameRef} type="text" placeholder="Zadaj meno…" value={controllerName}
                 onChange={e => setControllerName(e.target.value)} shake={shakeName}
                 style={{ marginTop:7, marginBottom:14, borderColor: controllerName ? C.ok : C.border }} />
