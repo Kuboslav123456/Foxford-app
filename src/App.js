@@ -38,7 +38,7 @@ const INIT_INV = [
   { category: 'Sirupy', items: [{ id: 'i5', name: 'Vanilkový sirup',               unit: 'ks' }, { id: 'i6', name: 'Karamelový sirup', unit: 'ks' }] },
 ];
 
-const TEMP_FIELDS = [
+const INIT_TEMP_FIELDS = [
   { key: 'vitrina',    label: 'Vitrína',    max: '≤ 8 °C' },
   { key: 'chladnicka', label: 'Chladnička', max: '≤ 5 °C' },
   { key: 'sklad',      label: 'Sklad',      max: '≤ 25 °C' },
@@ -132,7 +132,14 @@ export default function App() {
   const [inspectors, setInspectors] = useState(() => JSON.parse(localStorage.getItem('foxford-inspectors')) || { denné: '', víkendové: '', mesačné: '' });
   const [batchTime, setBatchTime]   = useState(localStorage.getItem('foxford-batch') || null);
   const [newTask, setNewTask]       = useState('');
-  const [temps, setTemps]           = useState({ vitrina: '', chladnicka: '', sklad: '' });
+  const [tempFields, setTempFields] = useState(() => JSON.parse(localStorage.getItem('foxford-temp-fields')) || INIT_TEMP_FIELDS);
+  const [temps, setTemps]           = useState(() => {
+    const fields = JSON.parse(localStorage.getItem('foxford-temp-fields')) || INIT_TEMP_FIELDS;
+    return fields.reduce((a, f) => ({ ...a, [f.key]: '' }), {});
+  });
+  const [newTempLabel, setNewTempLabel] = useState('');
+  const [newTempMax,   setNewTempMax]   = useState('');
+  const [confirmRemoveTemp, setConfirmRemoveTemp] = useState(null);
   const [controllerName, setControllerName] = useState('');
   const [selectedMonth, setSelectedMonth]   = useState(MONTHS[new Date().getMonth()]);
   const [invData, setInvData]   = useState(() => JSON.parse(localStorage.getItem('foxford-inventory-data')) || INIT_INV);
@@ -176,11 +183,12 @@ export default function App() {
     localStorage.setItem('foxford-batch',           batchTime || '');
     localStorage.setItem('foxford-last-reset-date', new Date().toDateString());
     localStorage.setItem('foxford-inspectors',      JSON.stringify(inspectors));
+    localStorage.setItem('foxford-temp-fields',     JSON.stringify(tempFields));
     localStorage.setItem('foxford-inventory-data',  JSON.stringify(invData));
     localStorage.setItem('foxford-inventory',       JSON.stringify(invQty));
     localStorage.setItem('foxford-inventory-notes', JSON.stringify(invNotes));
     localStorage.setItem('foxford-notes',           JSON.stringify(notes));
-  }, [tasks, batchTime, inspectors, invData, invQty, invNotes, notes]);
+  }, [tasks, batchTime, inspectors, tempFields, invData, invQty, invNotes, notes]);
 
   const sendToSheets = (type, payload) => {
     if (!navigator.onLine) return;
@@ -293,10 +301,12 @@ export default function App() {
     setConfirmReset(false);
   };
 
-  const tempColor = (key, val) => {
+  const tempColor = (field, val) => {
     const n = parseFloat((val || '').replace(',', '.'));
     if (isNaN(n) || val === '') return null;
-    return (key === 'vitrina' && n > 8) || (key === 'chladnicka' && n > 5) || (key === 'sklad' && n > 25) ? 'err' : 'ok';
+    const maxNum = parseFloat((field.max || '').replace(/[^\d.]/g, ''));
+    if (isNaN(maxNum)) return 'ok';
+    return n > maxNum ? 'err' : 'ok';
   };
 
   // ── LOADING ────────────────────────────────────────────────────────────────
@@ -475,59 +485,78 @@ export default function App() {
                 style={{ marginTop:7, borderColor: controllerName ? C.ok : C.border }} />
             </Glass>
 
-            <Glass style={{ padding:'18px 16px 20px' }}>
-              <div style={{ fontSize:12, fontWeight:700, letterSpacing:1, color:C.sub, textTransform:'uppercase', marginBottom:20 }}>HACCP — Teplotná kontrola</div>
+            <Glass style={{ padding:'14px 16px 16px' }}>
+              <div style={{ fontSize:12, fontWeight:700, letterSpacing:1, color:C.sub, textTransform:'uppercase', marginBottom:14 }}>HACCP — Teplotná kontrola</div>
 
-              {TEMP_FIELDS.map(({ key, label, max }) => {
-                const val = temps[key];
-                const status = tempColor(key, val);
+              {tempFields.map((field) => {
+                const val = temps[field.key] || '';
+                const status = tempColor(field, val);
                 const accentColor = status === 'ok' ? C.ok : status === 'err' ? C.err : C.border;
                 return (
-                  <div key={key} style={{ marginBottom:16 }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:7 }}>
-                      <span style={{ fontSize:12, fontWeight:700, letterSpacing:.5, color: status ? accentColor : C.sub, textTransform:'uppercase' }}>{label}</span>
-                      <span style={{ fontSize:10, color:C.muted }}>{max}</span>
-                    </div>
-                    <div style={{ position:'relative' }}>
-                      <input type="text" placeholder="0.0" value={val}
-                        onChange={e => setTemps({ ...temps, [key]: e.target.value })}
-                        style={{
-                          width:'100%', padding:'16px', borderRadius:14,
-                          border:`1.5px solid ${accentColor}`,
-                          background: status === 'ok' ? C.okDim : status === 'err' ? C.errDim : C.panel,
-                          color: status ? accentColor : C.text,
-                          fontSize:26, fontWeight:800, textAlign:'center', letterSpacing:2,
-                          outline:'none', boxSizing:'border-box', fontFamily:'inherit',
-                          boxShadow: status ? `0 0 16px ${accentColor}33` : 'none',
-                        }} />
-                      {status && (
-                        <div style={{ position:'absolute', right:14, top:'50%', transform:'translateY(-50%)', fontSize:16 }}>
-                          {status === 'ok' ? '✓' : '⚠'}
+                  <div key={field.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
+                        <span style={{ fontSize:11, fontWeight:700, letterSpacing:.5, color: status ? accentColor : C.sub, textTransform:'uppercase' }}>{field.label}</span>
+                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                          {field.max && <span style={{ fontSize:10, color:C.muted }}>{field.max}</span>}
+                          <span onClick={() => setConfirmRemoveTemp(field)} style={{ color:C.muted, fontSize:12, cursor:'pointer', lineHeight:1 }}>✕</span>
                         </div>
-                      )}
+                      </div>
+                      <div style={{ position:'relative' }}>
+                        <input type="text" placeholder="0.0" value={val}
+                          onChange={e => setTemps(prev => ({ ...prev, [field.key]: e.target.value }))}
+                          style={{
+                            width:'100%', padding:'10px 14px', borderRadius:12,
+                            border:`1.5px solid ${accentColor}`,
+                            background: status === 'ok' ? C.okDim : status === 'err' ? C.errDim : C.panel,
+                            color: status ? accentColor : C.text,
+                            fontSize:18, fontWeight:800, textAlign:'center', letterSpacing:1,
+                            outline:'none', boxSizing:'border-box', fontFamily:'inherit',
+                            boxShadow: status ? `0 0 10px ${accentColor}22` : 'none',
+                          }} />
+                        {status && (
+                          <div style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', fontSize:14 }}>
+                            {status === 'ok' ? '✓' : '⚠'}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
               })}
+
+              {/* Pridať zariadenie */}
+              <div style={{ display:'flex', gap:8, marginTop:6, marginBottom:14 }}>
+                <Inp placeholder="Názov zariadenia…" value={newTempLabel} onChange={e => setNewTempLabel(e.target.value)}
+                  style={{ flex:2, padding:'9px 12px', fontSize:13 }} />
+                <Inp placeholder="Max (napr. ≤ 5 °C)" value={newTempMax} onChange={e => setNewTempMax(e.target.value)}
+                  style={{ flex:1, padding:'9px 12px', fontSize:13 }} />
+                <button onClick={() => {
+                  if (!newTempLabel.trim()) return;
+                  const key = 'temp_' + Date.now();
+                  setTempFields(prev => [...prev, { key, label: newTempLabel.trim(), max: newTempMax.trim() }]);
+                  setTemps(prev => ({ ...prev, [key]: '' }));
+                  setNewTempLabel(''); setNewTempMax('');
+                }} style={{ padding:'9px 14px', borderRadius:12, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:700, fontSize:18, cursor:'pointer', flexShrink:0 }}>+</button>
+              </div>
 
               <button disabled={sending} onClick={() => {
                 if (!needName()) return;
                 setSending(true);
                 sendToSheets('haccp', {
                   date: new Date().toLocaleDateString('sk-SK'),
-                  vitrina: temps.vitrina,
-                  chladnicka: temps.chladnicka,
-                  sklad: temps.sklad,
                   podpis: controllerName || 'Anonym',
+                  readings: tempFields.map(f => ({ label: f.label, value: temps[f.key] || '', max: f.max })),
                 });
                 setTimeout(() => {
-                  setSending(false); setSuccess(true); setTemps({ vitrina:'', chladnicka:'', sklad:'' });
+                  setSending(false); setSuccess(true);
+                  setTemps(tempFields.reduce((a, f) => ({ ...a, [f.key]: '' }), {}));
                   const today = new Date().toDateString();
                   setLastHaccpDate(today);
                   localStorage.setItem('foxford-haccp-date', today);
                 }, 900);
               }} style={{
-                width:'100%', padding:'15px', marginTop:4,
+                width:'100%', padding:'13px', marginTop:2,
                 background: C.goldDim, border:`1px solid ${C.goldLine}`,
                 color:C.gold, borderRadius:14, fontWeight:800, fontSize:14,
                 letterSpacing:.8, cursor:'pointer', fontFamily:'inherit',
@@ -788,6 +817,27 @@ export default function App() {
               <button onMouseDown={() => uncheckedTask(confirmUndo)} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.err}44`, background:C.errDim, color:C.err, fontWeight:800, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
                 Zrušiť splnenie
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── CONFIRM REMOVE TEMP DEVICE ───────────────────────────────────────── */}
+      {confirmRemoveTemp && (
+        <div onMouseDown={() => setConfirmRemoveTemp(null)} style={{ position:'fixed', inset:0, background:'rgba(6,4,2,.85)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2000, padding:24 }}>
+          <div onMouseDown={e => e.stopPropagation()} style={{ background:'#1a1510', border:`1px solid ${C.borderM}`, width:'100%', borderRadius:24, padding:'28px 22px 24px', boxShadow:'0 8px 40px rgba(0,0,0,.6)' }}>
+            <div style={{ fontSize:32, textAlign:'center', marginBottom:14 }}>🗑️</div>
+            <div style={{ fontSize:16, fontWeight:800, color:C.text, textAlign:'center', marginBottom:10 }}>Odstrániť zariadenie?</div>
+            <div style={{ fontSize:13, color:C.sub, textAlign:'center', marginBottom:24, lineHeight:1.6 }}>
+              Zariadenie <span style={{ color:C.gold, fontWeight:700 }}>„{confirmRemoveTemp.label}"</span> bude odstránené zo zoznamu.
+            </div>
+            <div style={{ display:'flex', gap:10 }}>
+              <button onMouseDown={() => setConfirmRemoveTemp(null)} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>Zrušiť</button>
+              <button onMouseDown={() => {
+                setTempFields(prev => prev.filter(f => f.key !== confirmRemoveTemp.key));
+                setTemps(prev => { const n = { ...prev }; delete n[confirmRemoveTemp.key]; return n; });
+                setConfirmRemoveTemp(null);
+              }} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.err}44`, background:C.errDim, color:C.err, fontWeight:800, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>Áno, odstrániť</button>
             </div>
           </div>
         </div>
