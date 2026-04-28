@@ -238,6 +238,8 @@ export default function App() {
       tasks: updatedList.map(t => ({
         text: t.text,
         done: t.done,
+        time: t.time || null,
+        date: t.date || null,
         issue: t.issue || null,
       })),
     });
@@ -282,7 +284,7 @@ export default function App() {
         date: new Date().toLocaleDateString('sk-SK'),
         category: subTab,
         inspector: inspectors[subTab],
-        tasks: taskList.map(t => ({ text: t.text, done: t.done })),
+        tasks: taskList.map(t => ({ text: t.text, done: t.done, time: t.time || null, date: t.date || null, issue: t.issue || null })),
       });
     }
     setTasks({ ...tasks, [subTab]: tasks[subTab].map(t => ({ ...t, done: false, time: null, issue: null })) });
