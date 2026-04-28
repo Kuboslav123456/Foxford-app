@@ -236,17 +236,17 @@ export default function App() {
   const resetList = () => setConfirmReset(true);
 
   const doReset = () => {
+    if (!inspectors[subTab].trim()) { doShake(setShakeInsp, inspRef); setConfirmReset(false); return; }
     const taskList = tasks[subTab] || [];
     if (taskList.length > 0) {
       sendToSheets('tasks_summary', {
         date: new Date().toLocaleDateString('sk-SK'),
         category: subTab,
-        inspector: inspectors[subTab] || 'Anonym',
+        inspector: inspectors[subTab],
         tasks: taskList.map(t => ({ text: t.text, done: t.done })),
       });
     }
     setTasks({ ...tasks, [subTab]: tasks[subTab].map(t => ({ ...t, done: false, time: null, issue: null })) });
-    setInspectors({ ...inspectors, [subTab]: '' });
     if (subTab === 'denné') setBatchTime(null);
     setConfirmReset(false);
   };
