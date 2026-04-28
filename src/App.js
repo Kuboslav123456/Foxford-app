@@ -534,7 +534,11 @@ export default function App() {
                 <button onClick={() => {
                   if (!newTempLabel.trim()) return;
                   const key = 'temp_' + Date.now();
-                  setTempFields(prev => [...prev, { key, label: newTempLabel.trim(), max: newTempMax.trim() }]);
+                  const rawMax = newTempMax.trim();
+                  const formattedMax = rawMax
+                    ? /^[\d.,]+$/.test(rawMax) ? `≤ ${rawMax} °C` : rawMax
+                    : '';
+                  setTempFields(prev => [...prev, { key, label: newTempLabel.trim(), max: formattedMax }]);
                   setTemps(prev => ({ ...prev, [key]: '' }));
                   setNewTempLabel(''); setNewTempMax('');
                 }} style={{ padding:'9px 14px', borderRadius:12, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:700, fontSize:18, cursor:'pointer', flexShrink:0 }}>+</button>
