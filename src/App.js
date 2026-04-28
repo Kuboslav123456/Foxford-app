@@ -141,6 +141,7 @@ export default function App() {
   const [newTempMax,   setNewTempMax]   = useState('');
   const [confirmRemoveTemp, setConfirmRemoveTemp] = useState(null);
   const [showAddTemp, setShowAddTemp] = useState(false);
+  const [confirmAddTemp, setConfirmAddTemp] = useState(false);
   const [controllerName, setControllerName] = useState('');
   const [selectedMonth, setSelectedMonth]   = useState(MONTHS[new Date().getMonth()]);
   const [invData, setInvData]   = useState(() => JSON.parse(localStorage.getItem('foxford-inventory-data')) || INIT_INV);
@@ -489,7 +490,7 @@ export default function App() {
             <Glass style={{ padding:'14px 16px 16px' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
                 <span style={{ fontSize:12, fontWeight:700, letterSpacing:1, color:C.sub, textTransform:'uppercase' }}>HACCP — Teplotná kontrola</span>
-                <span onClick={() => { setShowAddTemp(v => !v); setNewTempLabel(''); setNewTempMax(''); }}
+                <span onClick={() => { if (showAddTemp) { setShowAddTemp(false); setNewTempLabel(''); setNewTempMax(''); } else { setConfirmAddTemp(true); } }}
                   style={{ width:22, height:22, borderRadius:6, border:`1px solid ${showAddTemp ? C.goldLine : C.border}`, background: showAddTemp ? C.goldDim : 'transparent', color: showAddTemp ? C.gold : C.muted, display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:300, cursor:'pointer', lineHeight:1 }}>
                   {showAddTemp ? '✕' : '+'}
                 </span>
@@ -828,6 +829,23 @@ export default function App() {
               <button onMouseDown={() => uncheckedTask(confirmUndo)} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.err}44`, background:C.errDim, color:C.err, fontWeight:800, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
                 Zrušiť splnenie
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── CONFIRM ADD TEMP DEVICE ──────────────────────────────────────────── */}
+      {confirmAddTemp && (
+        <div onMouseDown={() => setConfirmAddTemp(false)} style={{ position:'fixed', inset:0, background:'rgba(6,4,2,.85)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2000, padding:24 }}>
+          <div onMouseDown={e => e.stopPropagation()} style={{ background:'#1a1510', border:`1px solid ${C.borderM}`, width:'100%', borderRadius:24, padding:'28px 22px 24px', boxShadow:'0 8px 40px rgba(0,0,0,.6)' }}>
+            <div style={{ fontSize:32, textAlign:'center', marginBottom:14 }}>🌡️</div>
+            <div style={{ fontSize:16, fontWeight:800, color:C.text, textAlign:'center', marginBottom:10 }}>Pridať nové zariadenie?</div>
+            <div style={{ fontSize:13, color:C.sub, textAlign:'center', marginBottom:24, lineHeight:1.6 }}>
+              Chcete pridať nové zariadenie do teplotnej kontroly?
+            </div>
+            <div style={{ display:'flex', gap:10 }}>
+              <button onMouseDown={() => setConfirmAddTemp(false)} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>Zrušiť</button>
+              <button onMouseDown={() => { setConfirmAddTemp(false); setShowAddTemp(true); }} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:800, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>Áno, pridať</button>
             </div>
           </div>
         </div>
