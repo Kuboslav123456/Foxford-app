@@ -19,7 +19,7 @@ const C = {
   errDim:   'rgba(232,114,114,0.12)',
 };
 
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwNoAbWkmhH8Q8AfqccnJinIl38zlsthJbglZRMp6HUshiI-DE2oe2YMAjPlzAZQukX/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz8hPYERqRh-sUw-fHkwYlJAqlBal9_d97JNn9XLApsRBh5K4dp-1Hl5SBSPgh43Jcm/exec';
 const MONTHS = ['Január','Február','Marec','Apríl','Máj','Jún','Júl','August','September','Október','November','December'];
 
 const INIT_TASKS = {
@@ -110,7 +110,6 @@ export default function App() {
 
   const timerRef = useRef(null);
   const longPress  = useRef(false);
-  const sendTimers = useRef({});
   const inspRef  = useRef(null);
   const nameRef  = useRef(null);
   const touchX   = useRef(null);
@@ -169,12 +168,14 @@ export default function App() {
     localStorage.setItem('foxford-notes',           JSON.stringify(notes));
   }, [tasks, batchTime, invData, invQty, invNotes, notes]);
 
-  const push = (zariadenie, teplota, poznamka = '', podpis = '') => {
+  const sendToSheets = (type, payload) => {
     if (!navigator.onLine) return;
-    const sig  = podpis || controllerName || 'Anonym';
-    const note = `${poznamka} (Kontroloval: ${sig})`;
-    const url  = `${SCRIPT_URL}?zariadenie=${encodeURIComponent(zariadenie)}&teplota=${encodeURIComponent(teplota)}&poznamka=${encodeURIComponent(note)}&podpis=${encodeURIComponent(sig)}`;
-    fetch(url, { method: 'GET', mode: 'no-cors' }).catch(console.error);
+    fetch(SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, ...payload }),
+    }).catch(console.error);
   };
 
   const doShake = (setter, ref) => {
@@ -205,10 +206,7 @@ export default function App() {
   };
 
   const uncheckedTask = (t) => {
-    clearTimeout(sendTimers.current[t.id]);
-    delete sendTimers.current[t.id];
     setTasks({ ...tasks, [subTab]: tasks[subTab].map(x => x.id === t.id ? { ...x, done: false, time: null, issue: null } : x) });
-    if (online) push(`Úloha: ${t.text}`, 'ZRUŠENÉ', `Kat: ${subTab}`, inspectors[subTab]);
     setConfirmUndo(null);
   };
 
@@ -219,13 +217,6 @@ export default function App() {
     const time = new Date().toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' });
     const updated = tasks[subTab].map(x => x.id === t.id ? { ...x, done: true, time, issue: null } : x);
     setTasks({ ...tasks, [subTab]: updated });
-    if (online) {
-      clearTimeout(sendTimers.current[t.id]);
-      sendTimers.current[t.id] = setTimeout(() => {
-        push(`Úloha: ${t.text}`, 'Splnené', `Kat: ${subTab}`, inspectors[subTab]);
-        delete sendTimers.current[t.id];
-      }, 60000);
-    }
     if (updated.every(x => x.done)) setTimeout(() => setCelebrate(true), 300);
   };
 
@@ -239,13 +230,21 @@ export default function App() {
     if (e) { e.preventDefault(); e.stopPropagation(); }
     if (!needInsp()) { setQuickTask(null); return; }
     setTasks({ ...tasks, [subTab]: tasks[subTab].map(x => x.id === quickTask.id ? { ...x, done: false, time: null, issue: reason } : x) });
-    if (online) push(`PROBLÉM: ${quickTask.text}`, 'NESPLNENÉ', `Dôvod: ${reason}`, inspectors[subTab]);
     setQuickTask(null);
   };
 
   const resetList = () => setConfirmReset(true);
 
   const doReset = () => {
+    const taskList = tasks[subTab] || [];
+    if (taskList.length > 0) {
+      sendToSheets('tasks_summary', {
+        date: new Date().toLocaleDateString('sk-SK'),
+        category: subTab,
+        inspector: inspectors[subTab] || 'Anonym',
+        tasks: taskList.map(t => ({ text: t.text, done: t.done })),
+      });
+    }
     setTasks({ ...tasks, [subTab]: tasks[subTab].map(t => ({ ...t, done: false, time: null, issue: null })) });
     setInspectors({ ...inspectors, [subTab]: '' });
     if (subTab === 'denné') setBatchTime(null);
@@ -472,7 +471,13 @@ export default function App() {
               <button disabled={sending} onClick={() => {
                 if (!needName()) return;
                 setSending(true);
-                push('HACCP', `V:${temps.vitrina} C:${temps.chladnicka} S:${temps.sklad}`);
+                sendToSheets('haccp', {
+                  date: new Date().toLocaleDateString('sk-SK'),
+                  vitrina: temps.vitrina,
+                  chladnicka: temps.chladnicka,
+                  sklad: temps.sklad,
+                  podpis: controllerName || 'Anonym',
+                });
                 setTimeout(() => {
                   setSending(false); setSuccess(true); setTemps({ vitrina:'', chladnicka:'', sklad:'' });
                   const today = new Date().toDateString();
@@ -543,12 +548,16 @@ export default function App() {
                     <div style={{ padding:'10px 12px' }}>
                       {items.map((item, idx) => (
                         <div key={item.id} style={{ paddingBottom:10, marginBottom:10, borderBottom: idx<items.length-1 ? `1px solid ${C.border}` : 'none' }}>
-                          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:7 }}>
+                          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:7 }}>
                             <span style={{ fontSize:13, fontWeight:600, color:C.text }}>{item.name}</span>
-                            <span style={{ fontSize:10, color:C.gold, fontWeight:700, padding:'2px 7px', border:`1px solid ${C.goldLine}`, borderRadius:8 }}>{item.unit}</span>
+                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                              <span style={{ fontSize:10, color:C.gold, fontWeight:700, padding:'2px 7px', border:`1px solid ${C.goldLine}`, borderRadius:8 }}>{item.unit}</span>
+                              <span onClick={() => { if(window.confirm(`Zmazať "${item.name}"?`)) setInvData(invData.map(g => g.category===group.category ? {...g, items: g.items.filter(i=>i.id!==item.id)} : g)); }}
+                                style={{ color:C.muted, fontSize:12, cursor:'pointer', lineHeight:1 }}>✕</span>
+                            </div>
                           </div>
                           <div style={{ display:'flex', gap:7 }}>
-                            <Inp type="text" placeholder="qty" value={invQty[item.id]||''}
+                            <Inp type="text" placeholder={item.unit||'qty'} value={invQty[item.id]||''}
                               onChange={e => setInvQty({...invQty,[item.id]:e.target.value})}
                               style={{ flex:'0 0 70px', padding:'9px 8px', textAlign:'center', fontWeight:700, fontSize:14 }} />
                             <Inp type="text" placeholder="Poznámka…" value={invNotes[item.id]||''}
@@ -575,11 +584,18 @@ export default function App() {
 
             <button onClick={() => {
               if (!needName()) return;
-              const data = Object.entries(invQty).map(([id,val]) => {
-                const item = invData.flatMap(g=>g.items).find(i=>i.id===id);
-                return `${item?.name}: ${val} ${item?.unit} (${invNotes[id]||'–'})`;
-              }).join(' | ');
-              push(`INVENTÚRA ${selectedMonth}`, 'Report', data);
+              const allItems = invData.flatMap(g => g.items).filter(item => invQty[item.id]);
+              sendToSheets('inventory', {
+                date: new Date().toLocaleDateString('sk-SK'),
+                month: selectedMonth,
+                inspector: controllerName || 'Anonym',
+                items: allItems.map(item => ({
+                  name: item.name,
+                  unit: item.unit,
+                  qty: invQty[item.id],
+                  note: invNotes[item.id] || '',
+                })),
+              });
               setInvQty({});
               setInvNotes({});
               setSuccess(true);
