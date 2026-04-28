@@ -30,7 +30,6 @@ const INIT_TASKS = {
   ],
   víkendové: [{ id: 201, text: 'Odvápnenie kanvice',     done: false, time: null, issue: null }],
   mesačné:   [{ id: 301, text: 'Sanitácia mrazničky',    done: false, time: null, issue: null }],
-  ročné:     [{ id: 401, text: 'Veľká revízia kávovaru', done: false, time: null, issue: null }],
 };
 
 const INIT_INV = [
@@ -130,7 +129,7 @@ export default function App() {
     return parsed;
   });
 
-  const [inspectors, setInspectors] = useState({ denné: '', víkendové: '', mesačné: '', ročné: '' });
+  const [inspectors, setInspectors] = useState({ denné: '', víkendové: '', mesačné: '' });
   const [batchTime, setBatchTime]   = useState(localStorage.getItem('foxford-batch') || null);
   const [newTask, setNewTask]       = useState('');
   const [temps, setTemps]           = useState({ vitrina: '', chladnicka: '', sklad: '' });
@@ -330,7 +329,7 @@ export default function App() {
 
             {/* Sub-tab switcher */}
             <div style={{ display:'flex', gap:6, marginBottom:10 }}>
-              {['denné','víkendové','mesačné','ročné'].map(id => (
+              {['denné','víkendové','mesačné'].map(id => (
                 <button key={id} onClick={() => setSubTab(id)} style={{
                   flex:1, padding:'9px 4px', borderRadius:12, border:`1px solid ${subTab===id ? C.goldLine : C.border}`,
                   background: subTab===id ? C.goldDim : 'transparent',
