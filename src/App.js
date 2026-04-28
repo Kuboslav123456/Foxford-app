@@ -247,6 +247,7 @@ export default function App() {
       });
     }
     setTasks({ ...tasks, [subTab]: tasks[subTab].map(t => ({ ...t, done: false, time: null, issue: null })) });
+    setInspectors(prev => ({ ...prev, [subTab]: '' }));
     if (subTab === 'denné') setBatchTime(null);
     setConfirmReset(false);
   };
