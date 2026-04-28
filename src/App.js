@@ -129,7 +129,7 @@ export default function App() {
     return parsed;
   });
 
-  const [inspectors, setInspectors] = useState({ denné: '', víkendové: '', mesačné: '' });
+  const [inspectors, setInspectors] = useState(() => JSON.parse(localStorage.getItem('foxford-inspectors')) || { denné: '', víkendové: '', mesačné: '' });
   const [batchTime, setBatchTime]   = useState(localStorage.getItem('foxford-batch') || null);
   const [newTask, setNewTask]       = useState('');
   const [temps, setTemps]           = useState({ vitrina: '', chladnicka: '', sklad: '' });
@@ -161,11 +161,12 @@ export default function App() {
     localStorage.setItem('foxford-tasks',           JSON.stringify(tasks));
     localStorage.setItem('foxford-batch',           batchTime || '');
     localStorage.setItem('foxford-last-reset-date', new Date().toDateString());
+    localStorage.setItem('foxford-inspectors',      JSON.stringify(inspectors));
     localStorage.setItem('foxford-inventory-data',  JSON.stringify(invData));
     localStorage.setItem('foxford-inventory',       JSON.stringify(invQty));
     localStorage.setItem('foxford-inventory-notes', JSON.stringify(invNotes));
     localStorage.setItem('foxford-notes',           JSON.stringify(notes));
-  }, [tasks, batchTime, invData, invQty, invNotes, notes]);
+  }, [tasks, batchTime, inspectors, invData, invQty, invNotes, notes]);
 
   const sendToSheets = (type, payload) => {
     if (!navigator.onLine) return;
@@ -322,7 +323,7 @@ export default function App() {
               <Tag text={`Kontroluje — ${subTab}`} />
               <Inp ref={inspRef} type="text" placeholder="Meno baristu…"
                 value={inspectors[subTab]}
-                onChange={e => setInspectors({ ...inspectors, [subTab]: e.target.value })}
+                onChange={e => { const v = e.target.value; setInspectors(prev => ({ ...prev, [subTab]: v })); }}
                 shake={shakeInsp}
                 style={{ marginTop:7, borderColor: inspectors[subTab] ? C.ok : C.err + '88' }} />
             </Glass>
