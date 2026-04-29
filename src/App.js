@@ -151,6 +151,7 @@ export default function App() {
   const [addingTo, setAddingTo] = useState(null);
   const [newItemName, setNewItemName] = useState('');
   const [newItemUnit, setNewItemUnit] = useState('');
+  const [newItemCode, setNewItemCode] = useState('');
   const [notes, setNotes]   = useState(() => JSON.parse(localStorage.getItem('foxford-notes')) || []);
   const [newNote, setNewNote] = useState('');
   const [noteAuthor, setNoteAuthor] = useState('');
@@ -205,6 +206,25 @@ export default function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type, ...payload }),
     }).catch(console.error);
+  };
+
+  const exportPortos = () => {
+    const lines = [];
+    invData.forEach(group => {
+      group.items.forEach(item => {
+        const code = (item.portosCode || '').trim();
+        const qty  = (invQty[item.id] || '').toString().trim();
+        if (code && qty) lines.push(`${code};${qty}`);
+      });
+    });
+    if (lines.length === 0) { alert('Žiadne položky s PORTOS kódom a vyplneným množstvom.'); return; }
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = `inventura_${new Date().toLocaleDateString('sk-SK').replace(/\./g, '-')}.csv`;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
   };
 
   const doShake = (setter, ref) => {
@@ -660,9 +680,12 @@ export default function App() {
                             </div>
                           </div>
                           <div style={{ display:'flex', gap:7 }}>
+                            <Inp type="text" placeholder="Kód" value={item.portosCode||''}
+                              onChange={e => setInvData(invData.map(g => g.category===group.category ? {...g, items: g.items.map(i => i.id===item.id ? {...i, portosCode: e.target.value} : i)} : g))}
+                              style={{ flex:'0 0 52px', padding:'9px 6px', textAlign:'center', fontSize:12, color:C.sub, borderColor: item.portosCode ? C.goldLine : C.border }} />
                             <Inp type="text" placeholder={item.unit||'qty'} value={invQty[item.id]||''}
                               onChange={e => setInvQty({...invQty,[item.id]:e.target.value})}
-                              style={{ flex:'0 0 70px', padding:'9px 8px', textAlign:'center', fontWeight:700, fontSize:14 }} />
+                              style={{ flex:'0 0 64px', padding:'9px 8px', textAlign:'center', fontWeight:700, fontSize:14 }} />
                             <Inp type="text" placeholder="Poznámka…" value={invNotes[item.id]||''}
                               onChange={e => setInvNotes({...invNotes,[item.id]:e.target.value})}
                               style={{ flex:1, padding:'9px 10px', fontSize:12, borderStyle:'dashed' }} />
@@ -700,6 +723,15 @@ export default function App() {
               cursor:'pointer', fontFamily:'inherit',
             }}>
               Odoslať inventúru
+            </button>
+
+            <button onClick={exportPortos} style={{
+              width:'100%', padding:'14px', marginBottom:8, borderRadius:14,
+              background:'transparent', border:`1px solid ${C.border}`,
+              color:C.sub, fontWeight:700, fontSize:13, letterSpacing:.5,
+              cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+            }}>
+              <span style={{ fontSize:15 }}>⬇</span> Exportovať pre PORTOS
             </button>
 
             {/* Add category */}
@@ -1015,13 +1047,14 @@ export default function App() {
               Pridať do: <span style={{ color:C.gold }}>{addingTo}</span>
             </div>
             <Inp placeholder="Názov položky…" value={newItemName} onChange={e => setNewItemName(e.target.value)} style={{ marginBottom:10 }} />
-            <Inp placeholder="Jednotka (ks, kg, bal…)" value={newItemUnit} onChange={e => setNewItemUnit(e.target.value)} style={{ marginBottom:20 }} />
+            <Inp placeholder="Jednotka (ks, kg, bal…)" value={newItemUnit} onChange={e => setNewItemUnit(e.target.value)} style={{ marginBottom:10 }} />
+            <Inp placeholder="PORTOS kód (napr. 7)" value={newItemCode} onChange={e => setNewItemCode(e.target.value)} style={{ marginBottom:20, fontSize:13 }} />
             <div style={{ display:'flex', gap:10 }}>
               <button onClick={() => setAddingTo(null)} style={{ flex:1, padding:'13px', borderRadius:12, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, cursor:'pointer', fontFamily:'inherit', fontSize:13 }}>Zrušiť</button>
               <button onClick={() => {
                 if(newItemName.trim()){
-                  setInvData(invData.map(g=>g.category===addingTo?{...g,items:[...g.items,{id:`c-${Date.now()}`,name:newItemName,unit:newItemUnit||'ks'}]}:g));
-                  setNewItemName(''); setNewItemUnit(''); setAddingTo(null);
+                  setInvData(invData.map(g=>g.category===addingTo?{...g,items:[...g.items,{id:`c-${Date.now()}`,name:newItemName,unit:newItemUnit||'ks',portosCode:newItemCode.trim()}]}:g));
+                  setNewItemName(''); setNewItemUnit(''); setNewItemCode(''); setAddingTo(null);
                 }
               }} style={{ flex:2, padding:'13px', borderRadius:12, background:C.goldDim, border:`1px solid ${C.goldLine}`, color:C.gold, fontWeight:800, cursor:'pointer', fontFamily:'inherit', fontSize:13 }}>
                 Pridať položku
