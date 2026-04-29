@@ -23,7 +23,7 @@ const BRANCH_PIN = '1234';
 
 const BRANCHES = [
   { name: 'Obchodná', url: 'https://script.google.com/macros/s/AKfycbxy-PDCqL9LDecVwWJFKY0JwjvXi38Y1vSImcyXVY3y-rmF14_3Q0kE8nGVf7rfEsah/exec' },
-  { name: 'Nivy',     url: 'https://script.google.com/macros/s/AKfycbyahJZmwNBX8_qmQGNanwdbTwnurDt2U3CFV8wEx_PJPCVn_k2W5S4CZg9xlyRWNuIV/exec' },
+  { name: 'Nivy',     url: 'https://script.google.com/macros/s/AKfycbwXWxgtsrJFEb6s9cEP_sPZujYLYjicaiL881vrroLxlf335Rll9nHkwW1bqWFa_sM4/exec' },
   { name: 'Cubicon',  url: 'URL_POBOCKA_3' },
   { name: 'Levice',   url: 'URL_POBOCKA_4' },
   { name: 'Martin',   url: 'URL_POBOCKA_5' },
