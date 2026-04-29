@@ -713,8 +713,6 @@ export default function App() {
                   note: invNotes[item.id] || '',
                 })),
               });
-              setInvQty({});
-              setInvNotes({});
               setSuccess(true);
             }} style={{
               width:'100%', padding:'16px', marginBottom:8, borderRadius:14,
