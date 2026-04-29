@@ -19,7 +19,7 @@ const C = {
   errDim:   'rgba(232,114,114,0.12)',
 };
 
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwBnzlcUZqAsACCPapIt5vw4InA3ETk50LMrxmbEAlnPuE0XwrBqqdsV0XSeF8iR7i_/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyDefCKjHsc97R7yIQzsahiva_NV3kvdTg6nkI2Vxi0HdTJd-vkdM-3Kg0-gxranlw/exec';
 const MONTHS = ['Január','Február','Marec','Apríl','Máj','Jún','Júl','August','September','Október','November','December'];
 
 const INIT_TASKS = {
@@ -160,6 +160,7 @@ export default function App() {
   const [confirmResetHaccp, setConfirmResetHaccp] = useState(false);
   const [sending, setSending]   = useState(false);
   const [success, setSuccess]   = useState(false);
+  const [missingWarning, setMissingWarning] = useState([]);
   const [shakeName, setShakeName] = useState(false);
   const [shakeInsp, setShakeInsp] = useState(false);
 
@@ -679,16 +680,26 @@ export default function App() {
                                 style={{ color:C.muted, fontSize:12, cursor:'pointer', lineHeight:1 }}>✕</span>
                             </div>
                           </div>
-                          <div style={{ display:'flex', gap:7 }}>
-                            <Inp type="text" placeholder="Kód" value={item.portosCode||''}
-                              onChange={e => setInvData(invData.map(g => g.category===group.category ? {...g, items: g.items.map(i => i.id===item.id ? {...i, portosCode: e.target.value} : i)} : g))}
-                              style={{ flex:'0 0 52px', padding:'9px 6px', textAlign:'center', fontSize:12, color:C.sub, borderColor: item.portosCode ? C.goldLine : C.border }} />
-                            <Inp type="text" placeholder={item.unit||'qty'} value={invQty[item.id]||''}
-                              onChange={e => setInvQty({...invQty,[item.id]:e.target.value})}
-                              style={{ flex:'0 0 64px', padding:'9px 8px', textAlign:'center', fontWeight:700, fontSize:14 }} />
-                            <Inp type="text" placeholder="Poznámka…" value={invNotes[item.id]||''}
-                              onChange={e => setInvNotes({...invNotes,[item.id]:e.target.value})}
-                              style={{ flex:1, padding:'9px 10px', fontSize:12, borderStyle:'dashed' }} />
+                          <div style={{ display:'flex', gap:7, alignItems:'flex-start' }}>
+                            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
+                              <Inp type="text" placeholder="Kód" value={item.portosCode||''}
+                                readOnly={!!item.portosCode}
+                                onChange={e => !item.portosCode && setInvData(invData.map(g => g.category===group.category ? {...g, items: g.items.map(i => i.id===item.id ? {...i, portosCode: e.target.value} : i)} : g))}
+                                style={{ width:60, padding:'9px 6px', textAlign:'center', fontSize:12, color:C.sub, borderColor: item.portosCode ? C.goldLine : C.border, cursor: item.portosCode ? 'not-allowed' : 'text', opacity: item.portosCode ? 0.7 : 1 }} />
+                              <span style={{ fontSize:9, color:C.muted, whiteSpace:'nowrap' }}>portos kód</span>
+                            </div>
+                            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
+                              <Inp type="text" placeholder={item.unit||'qty'} value={invQty[item.id]||''}
+                                onChange={e => setInvQty({...invQty,[item.id]:e.target.value})}
+                                style={{ width:60, padding:'9px 8px', textAlign:'center', fontWeight:700, fontSize:12 }} />
+                              <span style={{ fontSize:9, color:C.muted, whiteSpace:'nowrap' }}>množstvo</span>
+                            </div>
+                            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2, flex:1 }}>
+                              <Inp type="text" placeholder="Poznámka…" value={invNotes[item.id]||''}
+                                onChange={e => setInvNotes({...invNotes,[item.id]:e.target.value})}
+                                style={{ width:'100%', padding:'9px 10px', fontSize:12, borderStyle:'dashed' }} />
+                              <span style={{ fontSize:9, color:C.muted, whiteSpace:'nowrap' }}>&nbsp;</span>
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -701,10 +712,12 @@ export default function App() {
 
             <button onClick={() => {
               if (!needName()) return;
+              const missing = invData.flatMap(g => g.items).filter(item => !invQty[item.id]);
+              if (missing.length > 0) { setMissingWarning(missing); return; }
               const allItems = invData.flatMap(g => g.items).filter(item => invQty[item.id]);
               sendToSheets('inventory', {
                 date: new Date().toLocaleDateString('sk-SK'),
-                month: selectedMonth,
+                month: `${selectedMonth} ${new Date().getFullYear()}`,
                 inspector: controllerName || 'Anonym',
                 items: allItems.map(item => ({
                   name: item.name,
@@ -730,6 +743,21 @@ export default function App() {
               cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:8,
             }}>
               <span style={{ fontSize:15 }}>⬇</span> Exportovať pre PORTOS
+            </button>
+
+            <button onClick={() => {
+              if(window.confirm('Naozaj chceš začať novú inventúru? Vymažú sa množstvá, poznámky a meno.')) {
+                setInvQty({});
+                setInvNotes({});
+                setControllerName('');
+              }
+            }} style={{
+              width:'100%', padding:'14px', marginBottom:8, borderRadius:14,
+              background:'transparent', border:`1px solid rgba(220,60,60,0.4)`,
+              color:'rgba(220,100,100,0.9)', fontWeight:700, fontSize:13, letterSpacing:.5,
+              cursor:'pointer', fontFamily:'inherit',
+            }}>
+              ↺ Nová inventúra
             </button>
 
             {/* Add category */}
@@ -1047,13 +1075,22 @@ export default function App() {
             <Inp placeholder="Názov položky…" value={newItemName} onChange={e => setNewItemName(e.target.value)} style={{ marginBottom:10 }} />
             <Inp placeholder="Jednotka (ks, kg, bal…)" value={newItemUnit} onChange={e => setNewItemUnit(e.target.value)} style={{ marginBottom:10 }} />
             <Inp placeholder="PORTOS kód (napr. 7)" value={newItemCode} onChange={e => setNewItemCode(e.target.value)} style={{ marginBottom:20, fontSize:13 }} />
-            <div style={{ display:'flex', gap:10 }}>
+            <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
               <button onClick={() => setAddingTo(null)} style={{ flex:1, padding:'13px', borderRadius:12, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, cursor:'pointer', fontFamily:'inherit', fontSize:13 }}>Zrušiť</button>
               <button onClick={() => {
                 if(newItemName.trim()){
                   setInvData(invData.map(g=>g.category===addingTo?{...g,items:[...g.items,{id:`c-${Date.now()}`,name:newItemName,unit:newItemUnit||'ks',portosCode:newItemCode.trim()}]}:g));
-                  setNewItemName(''); setNewItemUnit(''); setNewItemCode(''); setAddingTo(null);
+                  setNewItemName(''); setNewItemUnit(''); setNewItemCode('');
                 }
+              }} style={{ flex:1, padding:'13px', borderRadius:12, background:'transparent', border:`1px solid ${C.goldLine}`, color:C.gold, fontWeight:700, cursor:'pointer', fontFamily:'inherit', fontSize:13 }}>
+                + Ďalšia
+              </button>
+              <button onClick={() => {
+                if(newItemName.trim()){
+                  setInvData(invData.map(g=>g.category===addingTo?{...g,items:[...g.items,{id:`c-${Date.now()}`,name:newItemName,unit:newItemUnit||'ks',portosCode:newItemCode.trim()}]}:g));
+                  setNewItemName(''); setNewItemUnit(''); setNewItemCode('');
+                }
+                setAddingTo(null);
               }} style={{ flex:2, padding:'13px', borderRadius:12, background:C.goldDim, border:`1px solid ${C.goldLine}`, color:C.gold, fontWeight:800, cursor:'pointer', fontFamily:'inherit', fontSize:13 }}>
                 Pridať položku
               </button>
@@ -1062,12 +1099,74 @@ export default function App() {
         </div>
       )}
 
+      {/* ── MISSING QTY WARNING ───────────────────────────────────────────────── */}
+      {missingWarning.length > 0 && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(6,4,2,.92)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2500, padding:20 }}>
+          <div style={{ background:'#1a1510', border:`1px solid ${C.errDim}`, width:'100%', borderRadius:24, padding:'24px 20px' }}>
+            <div style={{ fontSize:18, marginBottom:8 }}>⚠️</div>
+            <div style={{ fontSize:15, fontWeight:800, color:C.text, marginBottom:6 }}>Chýbajú množstvá</div>
+            <div style={{ fontSize:12, color:C.sub, marginBottom:14 }}>Tieto položky nemajú vyplnené množstvo:</div>
+            <div style={{ marginBottom:18, maxHeight:160, overflowY:'auto' }}>
+              {missingWarning.map(item => (
+                <div key={item.id} style={{ fontSize:12, color:C.err, padding:'4px 0', borderBottom:`1px solid ${C.border}` }}>• {item.name}</div>
+              ))}
+            </div>
+            <div style={{ display:'flex', gap:10 }}>
+              <button onClick={() => setMissingWarning([])} style={{ flex:1, padding:'13px', borderRadius:12, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, cursor:'pointer', fontFamily:'inherit', fontSize:13 }}>Späť</button>
+              <button onClick={() => {
+                setMissingWarning([]);
+                const allItems = invData.flatMap(g => g.items).filter(item => invQty[item.id]);
+                sendToSheets('inventory', {
+                  date: new Date().toLocaleDateString('sk-SK'),
+                  month: `${selectedMonth} ${new Date().getFullYear()}`,
+                  inspector: controllerName || 'Anonym',
+                  items: allItems.map(item => ({ name: item.name, unit: item.unit, qty: invQty[item.id], note: invNotes[item.id] || '' })),
+                });
+                setSuccess(true);
+              }} style={{ flex:2, padding:'13px', borderRadius:12, background:C.goldDim, border:`1px solid ${C.goldLine}`, color:C.gold, fontWeight:800, cursor:'pointer', fontFamily:'inherit', fontSize:13 }}>
+                Odoslať aj tak
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── SUCCESS ───────────────────────────────────────────────────────────── */}
       {success && (
-        <div onClick={() => setSuccess(false)} style={{ position:'fixed', inset:0, background:'rgba(6,4,2,.97)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', zIndex:3000, cursor:'pointer' }}>
-          <div style={{ width:80, height:80, borderRadius:'50%', background:C.okDim, border:`2px solid ${C.ok}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:36, marginBottom:20, boxShadow:`0 0 30px ${C.ok}55` }}>✓</div>
-          <div style={{ fontSize:20, fontWeight:900, color:C.text, letterSpacing:3 }}>ODOSLANÉ</div>
-          <div style={{ marginTop:8, color:C.muted, fontSize:12 }}>Dáta boli uložené.</div>
+        <div onClick={() => setSuccess(false)} style={{ position:'fixed', inset:0, background:'rgba(6,4,2,.97)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', zIndex:3000, cursor:'pointer', overflow:'hidden' }}>
+          {/* confetti particles */}
+          {Array.from({length:30}).map((_,i) => (
+            <div key={i} style={{
+              position:'absolute',
+              left: `${Math.random()*100}%`,
+              top: '-20px',
+              width: 8, height: 8,
+              borderRadius: i%3===0 ? '50%' : 2,
+              background: ['#e0a03a','#4caf50','#2196f3','#e91e63','#ff9800'][i%5],
+              animation: `confettiFall ${1.5+Math.random()*2}s ${Math.random()*1}s ease-in forwards`,
+              transform: `rotate(${Math.random()*360}deg)`,
+            }} />
+          ))}
+          <style>{`
+            @keyframes confettiFall {
+              0%   { transform: translateY(0) rotate(0deg); opacity:1; }
+              100% { transform: translateY(110vh) rotate(720deg); opacity:0; }
+            }
+            @keyframes popIn {
+              0%   { transform: scale(0.3); opacity:0; }
+              70%  { transform: scale(1.15); }
+              100% { transform: scale(1); opacity:1; }
+            }
+          `}</style>
+          <div style={{ animation:'popIn 0.5s ease forwards', display:'flex', flexDirection:'column', alignItems:'center' }}>
+            <div style={{ fontSize:60, marginBottom:10 }}>🎉</div>
+            <div style={{ width:80, height:80, borderRadius:'50%', background:C.okDim, border:`2px solid ${C.ok}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:36, marginBottom:20, boxShadow:`0 0 30px ${C.ok}55` }}>✓</div>
+            <div style={{ fontSize:22, fontWeight:900, color:C.text, letterSpacing:3 }}>INVENTÚRA ODOSLANÁ!</div>
+            <div style={{ marginTop:12, color:C.sub, fontSize:13, textAlign:'center', maxWidth:260, lineHeight:1.6 }}>
+              Údaje zostávajú zapísané až do začatia novej inventúry.
+            </div>
+            <div style={{ marginTop:24, color:C.muted, fontSize:11 }}>klikni kdekoľvek pre zatvorenie</div>
+          </div>
         </div>
       )}
     </div>

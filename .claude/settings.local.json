@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git fetch *)",
+      "Bash(gh repo *)",
+      "PowerShell(gh repo view Kuboslav123456/Foxford-app --json url,homepageUrl)",
+      "Bash(npm run *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(npx gh-pages *)"
+    ]
+  }
+}
