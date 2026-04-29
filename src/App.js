@@ -19,7 +19,20 @@ const C = {
   errDim:   'rgba(232,114,114,0.12)',
 };
 
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxy-PDCqL9LDecVwWJFKY0JwjvXi38Y1vSImcyXVY3y-rmF14_3Q0kE8nGVf7rfEsah/exec';
+const BRANCH_PIN = '1234';
+
+const BRANCHES = [
+  { name: 'Obchodná', url: 'https://script.google.com/macros/s/AKfycbxy-PDCqL9LDecVwWJFKY0JwjvXi38Y1vSImcyXVY3y-rmF14_3Q0kE8nGVf7rfEsah/exec' },
+  { name: 'Nivy',     url: 'URL_POBOCKA_2' },
+  { name: 'Cubicon',  url: 'URL_POBOCKA_3' },
+  { name: 'Levice',   url: 'URL_POBOCKA_4' },
+  { name: 'Martin',   url: 'URL_POBOCKA_5' },
+  { name: 'Žilina',   url: 'URL_POBOCKA_6' },
+  { name: 'Poprad',   url: 'URL_POBOCKA_7' },
+  { name: 'Prešov',   url: 'URL_POBOCKA_8' },
+  { name: 'Košice',   url: 'URL_POBOCKA_9' },
+];
+
 const MONTHS = ['Január','Február','Marec','Apríl','Máj','Jún','Júl','August','September','Október','November','December'];
 
 const INIT_TASKS = {
@@ -161,6 +174,12 @@ export default function App() {
   const [sending, setSending]   = useState(false);
   const [success, setSuccess]   = useState(false);
   const [missingWarning, setMissingWarning] = useState([]);
+  const [savedAt, setSavedAt] = useState(null);
+  const [branch, setBranch] = useState(() => localStorage.getItem('foxford-branch') || null);
+  const [showBranchSelect, setShowBranchSelect] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState(false);
+  const [pinStep, setPinStep] = useState(false);
   const [shakeName, setShakeName] = useState(false);
   const [shakeInsp, setShakeInsp] = useState(false);
 
@@ -197,11 +216,14 @@ export default function App() {
     localStorage.setItem('foxford-inventory',       JSON.stringify(invQty));
     localStorage.setItem('foxford-inventory-notes', JSON.stringify(invNotes));
     localStorage.setItem('foxford-notes',           JSON.stringify(notes));
+    setSavedAt(new Date().toLocaleTimeString('sk-SK', { hour:'2-digit', minute:'2-digit' }));
   }, [tasks, batchTime, inspectors, tempFields, invData, invQty, invNotes, notes]);
+
+  const scriptUrl = BRANCHES.find(b => b.name === branch)?.url || BRANCHES[0].url;
 
   const sendToSheets = (type, payload) => {
     if (!navigator.onLine) return;
-    fetch(SCRIPT_URL, {
+    fetch(scriptUrl, {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
@@ -358,6 +380,23 @@ export default function App() {
     );
   }
 
+  // ── BRANCH SELECTION ──────────────────────────────────────────────────────
+  if (!branch) {
+    return (
+      <div style={{ maxWidth:500, margin:'0 auto', minHeight:'100vh', fontFamily:'-apple-system,sans-serif', color:C.text, background:C.bg, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'0 24px' }}>
+        <Logo size={64} />
+        <div style={{ marginTop:20, fontSize:22, fontWeight:900, letterSpacing:3 }}>FOXFORD</div>
+        <div style={{ fontSize:9, color:C.gold, letterSpacing:2.5, fontWeight:700, textTransform:'uppercase', marginTop:2, marginBottom:32, opacity:.75 }}>Vyber prevádzku</div>
+        {BRANCHES.map(b => (
+          <button key={b.name} onClick={() => { localStorage.setItem('foxford-branch', b.name); setBranch(b.name); }}
+            style={{ width:'100%', padding:'16px', marginBottom:10, borderRadius:14, border:`1px solid ${C.border}`, background:C.panel, color:C.text, fontSize:15, fontWeight:600, cursor:'pointer', fontFamily:'inherit', textAlign:'left' }}>
+            🏪 {b.name}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
   // ── MAIN ──────────────────────────────────────────────────────────────────
   return (
     <div style={{ maxWidth:500, margin:'0 auto', minHeight:'100vh', fontFamily:'-apple-system,sans-serif', color:C.text, paddingBottom:110, overflowX:'hidden', background:`radial-gradient(ellipse at 15% 0%, rgba(224,160,58,.07) 0%, transparent 55%), radial-gradient(ellipse at 85% 90%, rgba(26,60,94,.15) 0%, transparent 55%), ${C.bg}` }}>
@@ -373,6 +412,11 @@ export default function App() {
         {!online && (
           <div style={{ fontSize:9, fontWeight:800, color:C.err, border:`1px solid ${C.err}`, padding:'3px 9px', borderRadius:20, letterSpacing:.5 }}>OFFLINE</div>
         )}
+        <div onClick={() => { setPinInput(''); setPinError(false); setPinStep(true); }}
+          style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', cursor:'pointer', opacity:.6 }}>
+          <span style={{ fontSize:16 }}>🏪</span>
+          <span style={{ fontSize:8, color:C.gold, fontWeight:700, letterSpacing:.5, maxWidth:80, textAlign:'right', lineHeight:1.2, marginTop:1 }}>{branch}</span>
+        </div>
       </header>
 
       {/* thin gold rule */}
@@ -635,6 +679,12 @@ export default function App() {
                 {MONTHS.map(m => <option key={m} style={{ background:'#1a1510' }}>{m}</option>)}
               </select>
             </Glass>
+
+            {savedAt && (
+              <div style={{ textAlign:'right', fontSize:10, color:C.muted, marginBottom:4 }}>
+                💾 Automaticky uložené o {savedAt}
+              </div>
+            )}
 
             {/* Search */}
             <Glass style={{ padding:'10px 14px', display:'flex', alignItems:'center', gap:8 }}>
@@ -1042,7 +1092,7 @@ export default function App() {
             <div style={{ height:1, background:C.border, margin:'4px 0 10px' }} />
             <div style={{ fontSize:10, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:'uppercase', marginBottom:8 }}>Nahlásiť problém</div>
 
-            {['Chýba tovar / pomôcky','Pokazené zariadenie','Nedostatok času','Iný dôvod'].map(r => (
+            {['Chýba tovar / pomôcky','Pokazené zariadenie','Nedostatok času'].map(r => (
               <button key={r} onMouseDown={e => reportIssue(r,e)} style={{
                 display:'block', width:'100%', padding:'13px 16px', marginBottom:6,
                 borderRadius:14, border:`1px solid ${C.border}`, background:C.panel,
@@ -1050,6 +1100,21 @@ export default function App() {
                 cursor:'pointer', fontFamily:'inherit',
               }}>{r}</button>
             ))}
+            <div onMouseDown={e => e.stopPropagation()} style={{ marginBottom:6 }}>
+              <Inp
+                placeholder="Iný dôvod — napíš popis…"
+                style={{ fontSize:13, marginBottom:6 }}
+                onKeyDown={e => { if(e.key==='Enter' && e.target.value.trim()) reportIssue(e.target.value.trim()); }}
+              />
+              <button onMouseDown={e => {
+                const inp = e.currentTarget.previousSibling;
+                if(inp && inp.value.trim()) reportIssue(inp.value.trim(), e);
+              }} style={{
+                width:'100%', padding:'11px', borderRadius:12, border:`1px solid ${C.border}`,
+                background:C.panel, textAlign:'left', fontSize:13, fontWeight:600,
+                color:C.sub, cursor:'pointer', fontFamily:'inherit',
+              }}>Potvrdiť vlastný dôvod</button>
+            </div>
 
             {/* Delete */}
             <button onMouseDown={e => {
@@ -1095,6 +1160,53 @@ export default function App() {
                 Pridať položku
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── PIN MODAL ─────────────────────────────────────────────────────────── */}
+      {pinStep && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(6,4,2,.92)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:4000, padding:24 }}>
+          <div style={{ background:'#1a1510', border:`1px solid ${C.borderM}`, width:'100%', borderRadius:24, padding:'28px 20px', textAlign:'center' }}>
+            <div style={{ fontSize:20, marginBottom:8 }}>🔒</div>
+            <div style={{ fontSize:15, fontWeight:800, color:C.text, marginBottom:4 }}>Zadaj PIN</div>
+            <div style={{ fontSize:12, color:C.sub, marginBottom:20 }}>Pre zmenu prevádzky je potrebný manažérsky PIN.</div>
+            <input type="password" inputMode="numeric" maxLength={4} value={pinInput}
+              onChange={e => { setPinInput(e.target.value); setPinError(false); }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  if (pinInput === BRANCH_PIN) { setPinStep(false); setShowBranchSelect(true); setPinInput(''); }
+                  else { setPinError(true); setPinInput(''); }
+                }
+              }}
+              autoFocus
+              style={{ width:'100%', padding:'14px', borderRadius:12, border:`1px solid ${pinError ? C.err : C.border}`, background:'rgba(255,245,225,.04)', color:C.text, fontSize:22, outline:'none', fontFamily:'inherit', textAlign:'center', letterSpacing:8, boxSizing:'border-box' }}
+              placeholder="••••" />
+            {pinError && <div style={{ fontSize:12, color:C.err, marginTop:8 }}>Nesprávny PIN</div>}
+            <div style={{ display:'flex', gap:10, marginTop:16 }}>
+              <button onClick={() => { setPinStep(false); setPinInput(''); }} style={{ flex:1, padding:'13px', borderRadius:12, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, cursor:'pointer', fontFamily:'inherit', fontSize:13 }}>Zrušiť</button>
+              <button onClick={() => {
+                if (pinInput === BRANCH_PIN) { setPinStep(false); setShowBranchSelect(true); setPinInput(''); }
+                else { setPinError(true); setPinInput(''); }
+              }} style={{ flex:2, padding:'13px', borderRadius:12, background:C.goldDim, border:`1px solid ${C.goldLine}`, color:C.gold, fontWeight:800, cursor:'pointer', fontFamily:'inherit', fontSize:13 }}>Potvrdiť</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── BRANCH SELECT MODAL ───────────────────────────────────────────────── */}
+      {showBranchSelect && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(6,4,2,.95)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', zIndex:4000, padding:24 }}>
+          <div style={{ width:'100%', maxWidth:460 }}>
+            <div style={{ fontSize:15, fontWeight:800, color:C.text, marginBottom:4, textAlign:'center' }}>Vyber prevádzku</div>
+            <div style={{ fontSize:12, color:C.sub, marginBottom:20, textAlign:'center' }}>Aktuálna: <span style={{ color:C.gold }}>{branch}</span></div>
+            {BRANCHES.map(b => (
+              <button key={b.name} onClick={() => { localStorage.setItem('foxford-branch', b.name); setBranch(b.name); setShowBranchSelect(false); }}
+                style={{ width:'100%', padding:'15px 16px', marginBottom:8, borderRadius:14, border:`1px solid ${b.name === branch ? C.goldLine : C.border}`, background: b.name === branch ? C.goldDim : C.panel, color: b.name === branch ? C.gold : C.text, fontSize:14, fontWeight: b.name === branch ? 700 : 500, cursor:'pointer', fontFamily:'inherit', textAlign:'left' }}>
+                🏪 {b.name}
+              </button>
+            ))}
+            <button onClick={() => setShowBranchSelect(false)} style={{ width:'100%', padding:'13px', marginTop:4, borderRadius:12, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, cursor:'pointer', fontFamily:'inherit', fontSize:13 }}>Zrušiť</button>
           </div>
         </div>
       )}
