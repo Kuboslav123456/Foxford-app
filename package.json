@@ -2,6 +2,7 @@
   "name": "kaviaren-app",
   "version": "0.1.0",
   "private": true,
+  "homepage": "https://kuboslav123456.github.io/Foxford-app",
   "dependencies": {
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
