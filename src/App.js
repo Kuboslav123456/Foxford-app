@@ -676,15 +676,6 @@ export default function App() {
               );
             })}
 
-            {/* Add category */}
-            <Glass style={{ padding:'14px 16px', border:`1px dashed ${C.goldLine}` }}>
-              <Inp placeholder="Nová kategória…" value={newCat} onChange={e => setNewCat(e.target.value)} style={{ marginBottom:9 }} />
-              <button onClick={() => { if(newCat.trim()){setInvData([...invData,{category:newCat,items:[]}]);setNewCat('');} }}
-                style={{ width:'100%', padding:'11px', background:C.panel, border:`1px solid ${C.border}`, color:C.text, borderRadius:12, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
-                + Pridať kategóriu
-              </button>
-            </Glass>
-
             <button onClick={() => {
               if (!needName()) return;
               const allItems = invData.flatMap(g => g.items).filter(item => invQty[item.id]);
@@ -710,6 +701,15 @@ export default function App() {
             }}>
               Odoslať inventúru
             </button>
+
+            {/* Add category */}
+            <Glass style={{ padding:'14px 16px', border:`1px dashed ${C.goldLine}` }}>
+              <Inp placeholder="Nová kategória…" value={newCat} onChange={e => setNewCat(e.target.value)} style={{ marginBottom:9 }} />
+              <button onClick={() => { if(newCat.trim()){setInvData([...invData,{category:newCat,items:[]}]);setNewCat('');} }}
+                style={{ width:'100%', padding:'11px', background:C.panel, border:`1px solid ${C.border}`, color:C.text, borderRadius:12, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                + Pridať kategóriu
+              </button>
+            </Glass>
           </>
         )}
 
