@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git fetch *)",
+      "Bash(gh repo *)",
+      "PowerShell(gh repo view Kuboslav123456/Foxford-app --json url,homepageUrl)",
+      "Bash(npm run *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(npx gh-pages *)",
+      "PowerShell(Get-Command node, npm, npx -ErrorAction SilentlyContinue)",
+      "PowerShell(Test-Path \"C:\\\\Program Files\\\\nodejs\\\\npm.cmd\"; Test-Path \"C:\\\\Program Files\\\\nodejs\\\\node.exe\"; Test-Path \"$env:APPDATA\\\\npm\\\\npm.cmd\"; Test-Path \"$env:NVM_HOME\")",
+      "Bash(npm install *)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;\" + $env:PATH; Set-Location \"C:\\\\Users\\\\jakub.hrebenar\\\\Desktop\\\\FXF APP\\\\Foxford-app-master\\\\Foxford-app-master\"; & \"C:\\\\Program Files\\\\nodejs\\\\npm.cmd\" install)",
+      "mcp__Claude_Preview__preview_start"
+    ]
+  }
+}
