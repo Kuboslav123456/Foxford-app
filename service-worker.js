@@ -30,3 +30,14 @@ self.addEventListener('fetch', e => {
     })
   );
 });
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      const existing = list.find(c => c.url && c.focus);
+      if (existing) return existing.focus();
+      return clients.openWindow('/');
+    })
+  );
+});
