@@ -1250,9 +1250,10 @@ export default function App() {
               const missing = invData.flatMap(g => g.items).filter(item => !(invQty[item.id]||[]).some(r => r.qty));
               if (missing.length > 0) { setMissingWarning(missing); return; }
               const allItems = invData.flatMap(g => g.items).filter(item => (invQty[item.id]||[]).some(r => r.qty));
+              const _invTabName = `${selectedMonth} ${new Date().getFullYear()} — ${new Date().toLocaleTimeString('sk-SK', { hour:'2-digit', minute:'2-digit' })}`;
               sendToSheets('inventory', {
                 date: new Date().toLocaleDateString('sk-SK'),
-                month: `${selectedMonth} ${new Date().getFullYear()}`,
+                month: _invTabName,
                 inspector: controllerName || 'Anonym',
                 items: allItems.map(item => {
                   const rows = (invQty[item.id]||[]).filter(r => r.qty);
@@ -1863,9 +1864,10 @@ export default function App() {
               <button onClick={() => {
                 setMissingWarning([]);
                 const allItems = invData.flatMap(g => g.items).filter(item => invQty[item.id]);
+                const _invTabName2 = `${selectedMonth} ${new Date().getFullYear()} — ${new Date().toLocaleTimeString('sk-SK', { hour:'2-digit', minute:'2-digit' })}`;
                 sendToSheets('inventory', {
                   date: new Date().toLocaleDateString('sk-SK'),
-                  month: `${selectedMonth} ${new Date().getFullYear()}`,
+                  month: _invTabName2,
                   inspector: controllerName || 'Anonym',
                   items: allItems.map(item => {
                     const rows = (invQty[item.id]||[]).filter(r => r.qty);
