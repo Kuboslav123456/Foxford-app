@@ -644,6 +644,8 @@ export default function App() {
 
   // ── MULTI-QTY HELPERS ────────────────────────────────────────────────────────
   const [focusNewRow, setFocusNewRow] = useState(null);
+  const [focusLabelRow, setFocusLabelRow] = useState(null);
+  const [activeInvField, setActiveInvField] = useState(null); // { itemId, rowId, field: 'qty'|'label'|'note' }
   const addQtyRow = (itemId) => {
     const newId = 'r' + Date.now();
     setInvQty(q => ({ ...q, [itemId]: [...(q[itemId]||[]), { id: newId, label:'', qty:'' }] }));
@@ -1211,25 +1213,44 @@ export default function App() {
                             {/* Multi-qty + note */}
                             <div style={{ flex:1, display:'flex', flexDirection:'column', gap:5 }}>
                               {(invQty[item.id]||[]).map(row => (
-                                <div key={row.id} style={{ display:'flex', gap:5, alignItems:'center' }}>
-                                  <Inp type="text" inputMode="decimal" placeholder="0" value={row.qty}
-                                    ref={focusNewRow?.itemId === item.id && focusNewRow?.rowId === row.id
-                                      ? el => { if (el) { el.focus(); el.scrollIntoView({ behavior:'smooth', block:'center' }); setFocusNewRow(null); } }
-                                      : null}
-                                    onChange={e => updateQtyRow(item.id, row.id, 'qty', e.target.value)}
-                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
-                                    onKeyUp={e => { if (e.key === 'Enter') e.target.blur(); }}
-                                    enterKeyHint="done"
-                                    style={{ width:70, padding:'8px 8px', textAlign:'center', fontWeight:800, fontSize:14 }} />
-                                  <span style={{ fontSize:11, color:C.muted, flexShrink:0 }}>{item.unit}</span>
-                                  <Inp placeholder="Miesto (napr. Bar)" value={row.label}
-                                    onChange={e => updateQtyRow(item.id, row.id, 'label', e.target.value)}
-                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
-                                    onKeyUp={e => { if (e.key === 'Enter') e.target.blur(); }}
-                                    enterKeyHint="done"
-                                    style={{ flex:1, padding:'8px 10px', fontSize:12 }} />
-                                  <span onClick={() => removeQtyRow(item.id, row.id)}
-                                    style={{ color:C.muted, fontSize:14, cursor:'pointer', lineHeight:1, padding:'0 2px', flexShrink:0 }}>✕</span>
+                                <div key={row.id}>
+                                  <div style={{ display:'flex', gap:5, alignItems:'center' }}>
+                                    <Inp type="text" inputMode="decimal" placeholder="0" value={row.qty}
+                                      ref={focusNewRow?.itemId === item.id && focusNewRow?.rowId === row.id
+                                        ? el => { if (el) { el.focus(); el.scrollIntoView({ behavior:'smooth', block:'center' }); setFocusNewRow(null); } }
+                                        : null}
+                                      onChange={e => updateQtyRow(item.id, row.id, 'qty', e.target.value)}
+                                      onFocus={() => setActiveInvField({ itemId: item.id, rowId: row.id, field: 'qty' })}
+                                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); setFocusLabelRow({ itemId: item.id, rowId: row.id }); } }}
+                                      enterKeyHint="next"
+                                      style={{ width:70, padding:'8px 8px', textAlign:'center', fontWeight:800, fontSize:14 }} />
+                                    <span style={{ fontSize:11, color:C.muted, flexShrink:0 }}>{item.unit}</span>
+                                    <Inp placeholder="Miesto (napr. Bar)" value={row.label}
+                                      ref={focusLabelRow?.itemId === item.id && focusLabelRow?.rowId === row.id
+                                        ? el => { if (el) { el.focus(); setFocusLabelRow(null); } }
+                                        : null}
+                                      onChange={e => updateQtyRow(item.id, row.id, 'label', e.target.value)}
+                                      onFocus={() => setActiveInvField({ itemId: item.id, rowId: row.id, field: 'label' })}
+                                      onBlur={() => setActiveInvField(null)}
+                                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
+                                      enterKeyHint="done"
+                                      style={{ flex:1, padding:'8px 10px', fontSize:12 }} />
+                                    <span onClick={() => removeQtyRow(item.id, row.id)}
+                                      style={{ color:C.muted, fontSize:14, cursor:'pointer', lineHeight:1, padding:'0 2px', flexShrink:0 }}>✕</span>
+                                  </div>
+                                  {/* Action strip pre label pole */}
+                                  {activeInvField?.itemId === item.id && activeInvField?.rowId === row.id && activeInvField?.field === 'label' && (
+                                    <div style={{ display:'flex', gap:6, marginTop:4 }}>
+                                      <button onMouseDown={e => { e.preventDefault(); updateQtyRow(item.id, row.id, 'label', ''); document.activeElement?.blur(); setActiveInvField(null); }}
+                                        style={{ flex:1, padding:'6px', borderRadius:8, border:`1px solid ${C.border}`, background:'transparent', color:C.muted, fontWeight:700, fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>
+                                        Zrušiť
+                                      </button>
+                                      <button onMouseDown={e => { e.preventDefault(); document.activeElement?.blur(); setActiveInvField(null); }}
+                                        style={{ flex:2, padding:'6px', borderRadius:8, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:700, fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>
+                                        OK ✓
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                               <button onClick={() => addQtyRow(item.id)} style={{
@@ -1245,7 +1266,23 @@ export default function App() {
                               )}
                               <Inp type="text" placeholder="Poznámka…" value={invNotes[item.id]||''}
                                 onChange={e => setInvNotes({...invNotes,[item.id]:e.target.value})}
+                                onFocus={() => setActiveInvField({ itemId: item.id, rowId: 'note', field: 'note' })}
+                                onBlur={() => setActiveInvField(null)}
+                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
+                                enterKeyHint="done"
                                 style={{ width:'100%', padding:'8px 10px', fontSize:12, borderStyle:'dashed' }} />
+                              {activeInvField?.itemId === item.id && activeInvField?.field === 'note' && (
+                                <div style={{ display:'flex', gap:6, marginTop:4 }}>
+                                  <button onMouseDown={e => { e.preventDefault(); setInvNotes({...invNotes,[item.id]:''}); document.activeElement?.blur(); setActiveInvField(null); }}
+                                    style={{ flex:1, padding:'6px', borderRadius:8, border:`1px solid ${C.border}`, background:'transparent', color:C.muted, fontWeight:700, fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>
+                                    Zrušiť
+                                  </button>
+                                  <button onMouseDown={e => { e.preventDefault(); document.activeElement?.blur(); setActiveInvField(null); }}
+                                    style={{ flex:2, padding:'6px', borderRadius:8, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:700, fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>
+                                    OK ✓
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
