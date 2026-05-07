@@ -451,6 +451,7 @@ export default function App() {
       setBatchTime(null);
       setLastHaccpDate('');
       setTemps(prev => Object.keys(prev).reduce((a, k) => ({ ...a, [k]: '' }), {}));
+      setControllerName('');
       localStorage.setItem('foxford-last-reset-date', new Date().toDateString());
       localStorage.setItem('foxford-haccp-date', '');
     }, ms);
@@ -1448,6 +1449,7 @@ export default function App() {
               <button onMouseDown={() => {
                 setLastHaccpDate('');
                 setTemps(tempFields.reduce((a, f) => ({ ...a, [f.key]: '' }), {}));
+                setControllerName('');
                 localStorage.setItem('foxford-haccp-date', '');
                 setConfirmResetHaccp(false);
               }} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.err}44`, background:C.errDim, color:C.err, fontWeight:800, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>Áno, resetovať</button>
