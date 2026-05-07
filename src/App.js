@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 // ── LIGHT WARM PALETTE ───────────────────────────────────────────────────────
-const C = {
+const BASE_C = {
   bg:       '#f2ede4',
   panel:    'rgba(255,255,255,0.80)',
   panelHov: 'rgba(255,255,255,0.97)',
@@ -20,10 +20,30 @@ const C = {
   errDim:   'rgba(208,48,48,0.10)',
 };
 
+// Farba akcentu podľa pobočky
+const BRANCH_COLORS = {
+  'Obchodná': '#b87020',
+  'Nivy':     '#1a6fa8',
+  'Cubicon':  '#2a8a4a',
+  'Levice':   '#7a4ab0',
+  'Martin':   '#b04040',
+  'Žilina':   '#1a8080',
+  'Poprad':   '#7a6020',
+  'Prešov':   '#b85828',
+  'Košice':   '#2a7860',
+};
+
+const hexToRgba = (hex, a) => {
+  const [r,g,b] = [hex.slice(1,3),hex.slice(3,5),hex.slice(5,7)].map(s=>parseInt(s,16));
+  return `rgba(${r},${g},${b},${a})`;
+};
+
 const BRANCH_PIN = '1234';
+// Zvýš toto číslo keď zmeníš INIT_INV — všetky pobočky dostanú nový základ
+const INV_DATA_VERSION = '2';
 
 const BRANCHES = [
-  { name: 'Obchodná', url: 'https://script.google.com/macros/s/AKfycbxy-PDCqL9LDecVwWJFKY0JwjvXi38Y1vSImcyXVY3y-rmF14_3Q0kE8nGVf7rfEsah/exec' },
+  { name: 'Obchodná', url: 'https://script.google.com/macros/s/AKfycbzlcPT4Yu8Pk-Y_5-9-oOHag0oVsFVS-gAtwujfDqn0yjXwEiKcfKbcVwmoW1UF5te9rA/exec' },
   { name: 'Nivy',     url: 'https://script.google.com/macros/s/AKfycbwXWxgtsrJFEb6s9cEP_sPZujYLYjicaiL881vrroLxlf335Rll9nHkwW1bqWFa_sM4/exec' },
   { name: 'Cubicon',  url: 'URL_POBOCKA_3' },
   { name: 'Levice',   url: 'URL_POBOCKA_4' },
@@ -254,12 +274,12 @@ const Logo = ({ size = 40 }) => (
   <div style={{
     width: size, height: size, borderRadius: Math.round(size * 0.26),
     background: 'linear-gradient(145deg, #2e1f0e, #4a3218)',
-    border: `1.5px solid ${C.goldLine}`,
+    border: `1.5px solid ${BASE_C.goldLine}`,
     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
     boxShadow: `0 0 20px rgba(224,160,58,0.15), 0 4px 12px rgba(0,0,0,0.5)`,
   }}>
     <svg width={size} height={size} viewBox="0 0 60 60" fill="none">
-      <path d="M30 3L57 18.5V41.5L30 57L3 41.5V18.5Z" fill={C.gold} opacity="0.95" />
+      <path d="M30 3L57 18.5V41.5L30 57L3 41.5V18.5Z" fill={BASE_C.gold} opacity="0.95" />
       <path d="M30 15L46 24.5V40.5L30 50L14 40.5V24.5Z" fill="rgba(0,0,0,0.5)" />
       <text x="30" y="37" textAnchor="middle" fill="white" fontSize="20" fontWeight="800" fontFamily="-apple-system,sans-serif">F</text>
     </svg>
@@ -269,8 +289,8 @@ const Logo = ({ size = 40 }) => (
 // ── GLASS CARD ────────────────────────────────────────────────────────────────
 const Glass = ({ children, style, accent }) => (
   <div style={{
-    background: C.panel,
-    border: `1px solid ${accent ? C.borderM : C.border}`,
+    background: BASE_C.panel,
+    border: `1px solid ${accent ? BASE_C.borderM : BASE_C.border}`,
     borderRadius: 20,
     backdropFilter: 'blur(12px)',
     WebkitBackdropFilter: 'blur(12px)',
@@ -283,16 +303,16 @@ const Glass = ({ children, style, accent }) => (
 
 // ── PILL LABEL ────────────────────────────────────────────────────────────────
 const Tag = ({ text }) => (
-  <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.2, color: C.sub }}>{text}</span>
+  <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.2, color: BASE_C.sub }}>{text}</span>
 );
 
 // ── INPUT ─────────────────────────────────────────────────────────────────────
 const Inp = React.forwardRef(({ style, shake, ...props }, ref) => (
   <input ref={ref} {...props} className={shake ? 'shake' : ''} style={{
     width: '100%', padding: '12px 14px', borderRadius: 12,
-    border: `1px solid ${C.border}`, fontSize: 15, outline: 'none',
+    border: `1px solid ${BASE_C.border}`, fontSize: 15, outline: 'none',
     boxSizing: 'border-box', background: 'rgba(255,255,255,0.85)',
-    color: C.text, fontFamily: 'inherit',
+    color: BASE_C.text, fontFamily: 'inherit',
     transition: 'border-color 0.2s',
     ...style,
   }} />
@@ -348,8 +368,31 @@ export default function App() {
   const [confirmAddTemp, setConfirmAddTemp] = useState(false);
   const [controllerName, setControllerName] = useState('');
   const [selectedMonth, setSelectedMonth]   = useState(MONTHS[new Date().getMonth()]);
-  const [invData, setInvData]   = useState(() => JSON.parse(localStorage.getItem('foxford-inventory-data')) || INIT_INV);
-  const [invQty, setInvQty]     = useState(() => JSON.parse(localStorage.getItem('foxford-inventory'))       || {});
+  const [invData, setInvData]   = useState(() => {
+    const savedVer  = localStorage.getItem('foxford-inv-version');
+    const savedData = localStorage.getItem('foxford-inventory-data');
+    // Verzia sedí a dáta existujú → použi lokálne (vrátane úprav pobočky)
+    if (savedVer === INV_DATA_VERSION && savedData) return JSON.parse(savedData);
+    // Nová verzia kódu → štart od INIT_INV, ale zachovaj vlastné pridané položky
+    const customItems = JSON.parse(localStorage.getItem('foxford-custom-items')) || [];
+    if (customItems.length === 0) return INIT_INV;
+    const merged = INIT_INV.map(g => ({ ...g, items: [...g.items] }));
+    customItems.forEach(({ category, item }) => {
+      const group = merged.find(g => g.category === category);
+      if (group) group.items.push(item);
+      else merged.push({ category, items: [item] });
+    });
+    return merged;
+  });
+  const [invQty, setInvQty]     = useState(() => {
+    const saved = JSON.parse(localStorage.getItem('foxford-inventory')) || {};
+    // migrate old string format → new array-of-rows format
+    const out = {};
+    for (const [key, val] of Object.entries(saved)) {
+      out[key] = typeof val === 'string' ? (val ? [{ id: 'r0', label: '', qty: val }] : []) : (Array.isArray(val) ? val : []);
+    }
+    return out;
+  });
   const [invNotes, setInvNotes] = useState(() => JSON.parse(localStorage.getItem('foxford-inventory-notes')) || {});
   const [newCat, setNewCat]     = useState('');
   const [addingTo, setAddingTo] = useState(null);
@@ -373,6 +416,21 @@ export default function App() {
   const [pinStep, setPinStep] = useState(false);
   const [shakeName, setShakeName] = useState(false);
   const [shakeInsp, setShakeInsp] = useState(false);
+  const [notifPermission, setNotifPermission] = useState(() => 'Notification' in window ? Notification.permission : 'unsupported');
+  const [notifSettings, setNotifSettings] = useState(() => JSON.parse(localStorage.getItem('foxford-notif-settings')) || { enabled: false, time: '09:00' });
+  const [showNotifModal, setShowNotifModal] = useState(false);
+  const [offlineQueue, setOfflineQueue] = useState(() => JSON.parse(localStorage.getItem('foxford-offline-queue')) || []);
+  const [offlineFlushed, setOfflineFlushed] = useState(0);
+  const [batchElapsedMins, setBatchElapsedMins] = useState(null);
+
+  // ── DYNAMICKÁ FARBA POBOČKY ───────────────────────────────────────────────
+  const branchGold = (branch && BRANCH_COLORS[branch]) || BASE_C.gold;
+  const C = {
+    ...BASE_C,
+    gold:     branchGold,
+    goldDim:  hexToRgba(branchGold, 0.12),
+    goldLine: hexToRgba(branchGold, 0.45),
+  };
 
   useEffect(() => { const t = setTimeout(() => setLoading(false), 500); return () => clearTimeout(t); }, []);
   useEffect(() => {
@@ -403,32 +461,136 @@ export default function App() {
     localStorage.setItem('foxford-last-reset-date', new Date().toDateString());
     localStorage.setItem('foxford-inspectors',      JSON.stringify(inspectors));
     localStorage.setItem('foxford-temp-fields',     JSON.stringify(tempFields));
-    localStorage.setItem('foxford-inventory-data',  JSON.stringify(invData));
+    // Uložiť celý katalóg (vrátane lokálnych úprav)
+    localStorage.setItem('foxford-inventory-data', JSON.stringify(invData));
+    localStorage.setItem('foxford-inv-version',    INV_DATA_VERSION);
+    // Záloha vlastných položiek pre migráciu pri budúcom navýšení verzie
+    const initIds = new Set(INIT_INV.flatMap(g => g.items.map(i => i.id)));
+    const customItems = [];
+    invData.forEach(g => g.items.forEach(item => {
+      if (!initIds.has(item.id)) customItems.push({ category: g.category, item });
+    }));
+    localStorage.setItem('foxford-custom-items', JSON.stringify(customItems));
     localStorage.setItem('foxford-inventory',       JSON.stringify(invQty));
     localStorage.setItem('foxford-inventory-notes', JSON.stringify(invNotes));
     localStorage.setItem('foxford-notes',           JSON.stringify(notes));
+    localStorage.setItem('foxford-notif-settings',  JSON.stringify(notifSettings));
     setSavedAt(new Date().toLocaleTimeString('sk-SK', { hour:'2-digit', minute:'2-digit' }));
-  }, [tasks, batchTime, inspectors, tempFields, invData, invQty, invNotes, notes]);
+  }, [tasks, batchTime, inspectors, tempFields, invData, invQty, invNotes, notes, notifSettings]);
 
   const scriptUrl = BRANCHES.find(b => b.name === branch)?.url || BRANCHES[0].url;
 
-  const sendToSheets = (type, payload) => {
-    if (!navigator.onLine) return;
-    fetch(scriptUrl, {
-      method: 'POST',
-      mode: 'no-cors',
+  const doFetch = (url, type, payload) => {
+    fetch(url, {
+      method: 'POST', mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, ...payload }),
+      body: JSON.stringify({ type, ...payload, _token: process.env.REACT_APP_GAS_TOKEN }),
     }).catch(console.error);
   };
+
+  const sendToSheets = (type, payload) => {
+    if (!navigator.onLine) {
+      // Uložiť do fronty na neskôr (aj s URL pobočky)
+      const q = [...offlineQueue, { type, payload, url: scriptUrl, ts: Date.now() }];
+      setOfflineQueue(q);
+      localStorage.setItem('foxford-offline-queue', JSON.stringify(q));
+      return;
+    }
+    doFetch(scriptUrl, type, payload);
+  };
+
+  // Odošli frontu keď príde konektivita
+  useEffect(() => {
+    if (!online || offlineQueue.length === 0) return;
+    offlineQueue.forEach(item => doFetch(item.url, item.type, item.payload));
+    const count = offlineQueue.length;
+    setOfflineQueue([]);
+    localStorage.removeItem('foxford-offline-queue');
+    setOfflineFlushed(count);
+    setTimeout(() => setOfflineFlushed(0), 4000);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online]);
+
+  // Batch timer — aktualizácia každú minútu
+  useEffect(() => {
+    const calc = () => {
+      if (!batchTime) { setBatchElapsedMins(null); return; }
+      const [hh, mm] = batchTime.split(':').map(Number);
+      const now = new Date();
+      const batch = new Date(); batch.setHours(hh, mm, 0, 0);
+      const diff = Math.floor((now - batch) / 60000);
+      setBatchElapsedMins(diff < 0 ? null : diff);
+    };
+    calc();
+    const iv = setInterval(calc, 60000);
+    return () => clearInterval(iv);
+  }, [batchTime]);
+
+  // ── NOTIFICATIONS ─────────────────────────────────────────────────────────
+  const showNotification = (title, body) => {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    navigator.serviceWorker?.ready.then(reg => {
+      reg.showNotification(title, {
+        body,
+        icon: `${process.env.PUBLIC_URL}/foxford-logo.png.png`,
+        badge: `${process.env.PUBLIC_URL}/foxford-logo.png.png`,
+        vibrate: [100, 50, 100],
+        tag: 'foxford-reminder',
+        renotify: true,
+      });
+    }).catch(() => new Notification(title, { body, icon: `${process.env.PUBLIC_URL}/foxford-logo.png.png` }));
+  };
+
+  const requestNotifPermission = async () => {
+    if (!('Notification' in window)) return;
+    const perm = await Notification.requestPermission();
+    setNotifPermission(perm);
+    if (perm === 'granted') {
+      setNotifSettings(prev => ({ ...prev, enabled: true }));
+      setTimeout(() => showNotification('Foxford ☕', 'Notifikácie sú zapnuté! Budeš dostávať denné pripomienky.'), 500);
+    }
+  };
+
+  // Schedule daily notification
+  useEffect(() => {
+    if (!notifSettings.enabled || notifPermission !== 'granted') return;
+    const [h, m] = notifSettings.time.split(':').map(Number);
+    const now = new Date();
+    const target = new Date(); target.setHours(h, m, 0, 0);
+    if (target <= now) target.setDate(target.getDate() + 1);
+    const ms = target - now;
+    const timer = setTimeout(() => {
+      const done = tasks.denné.filter(t => t.done || t.issue).length;
+      const total = tasks.denné.length;
+      if (done < total) showNotification('Foxford ☕', `Nezabudni na denné úlohy! (${done}/${total} hotovo)`);
+    }, ms);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notifSettings.enabled, notifSettings.time, notifPermission]);
+
+  // On-open check: if past reminder time and tasks not done, nudge
+  useEffect(() => {
+    if (!notifSettings.enabled || notifPermission !== 'granted') return;
+    const [h, m] = notifSettings.time.split(':').map(Number);
+    const now = new Date();
+    const reminder = new Date(); reminder.setHours(h, m, 0, 0);
+    if (now < reminder) return;
+    const done = tasks.denné.filter(t => t.done || t.issue).length;
+    const total = tasks.denné.length;
+    if (done < total) {
+      const t = setTimeout(() => showNotification('Foxford ☕', `Nezabudni na denné úlohy! (${done}/${total} hotovo)`), 4000);
+      return () => clearTimeout(t);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const exportPortos = () => {
     const lines = [];
     invData.forEach(group => {
       group.items.forEach(item => {
-        const code = (item.portosCode || '').trim();
-        const qty  = (invQty[item.id] || '').toString().trim();
-        if (code && qty) lines.push(`${code};${qty}`);
+        const code  = (item.portosCode || '').trim();
+        const total = qtyTotal(item.id);
+        if (code && total > 0) lines.push(`${code};${total}`);
       });
     });
     if (lines.length === 0) { alert('Žiadne položky s PORTOS kódom a vyplneným množstvom.'); return; }
@@ -449,6 +611,12 @@ export default function App() {
   };
 
   const needName = () => { if (!controllerName.trim()) { doShake(setShakeName, nameRef); return false; } return true; };
+
+  // ── MULTI-QTY HELPERS ────────────────────────────────────────────────────────
+  const addQtyRow    = (itemId) => setInvQty(q => ({ ...q, [itemId]: [...(q[itemId]||[]), { id: 'r'+Date.now(), label:'', qty:'' }] }));
+  const removeQtyRow = (itemId, rowId) => setInvQty(q => ({ ...q, [itemId]: (q[itemId]||[]).filter(r => r.id !== rowId) }));
+  const updateQtyRow = (itemId, rowId, field, val) => setInvQty(q => ({ ...q, [itemId]: (q[itemId]||[]).map(r => r.id === rowId ? { ...r, [field]: val } : r) }));
+  const qtyTotal     = (itemId) => (invQty[itemId]||[]).reduce((s, r) => s + (parseFloat(r.qty)||0), 0);
   const needInsp = () => { if (!inspectors[subTab].trim()) { doShake(setShakeInsp, inspRef); return false; } return true; };
 
   const pct = () => {
@@ -603,11 +771,25 @@ export default function App() {
       }}>
         <div style={{ flex:1, display:'flex', justifyContent:'flex-start' }}>
           {!online && (
-            <div style={{ fontSize:9, fontWeight:800, color:C.err, border:`1px solid ${C.err}`, padding:'3px 9px', borderRadius:20, letterSpacing:.5 }}>OFFLINE</div>
+            <div style={{ fontSize:9, fontWeight:800, color:C.err, border:`1px solid ${C.err}`, padding:'3px 9px', borderRadius:20, letterSpacing:.5 }}>
+              OFFLINE{offlineQueue.length > 0 ? ` (${offlineQueue.length})` : ''}
+            </div>
+          )}
+          {online && offlineFlushed > 0 && (
+            <div style={{ fontSize:9, fontWeight:800, color:C.ok, border:`1px solid ${C.ok}`, padding:'3px 9px', borderRadius:20, letterSpacing:.5 }}>
+              ✓ {offlineFlushed} odoslaných
+            </div>
           )}
         </div>
         <img src={`${process.env.PUBLIC_URL}/foxford-logo.png.png`} alt="Foxford" style={{ height:44, objectFit:'contain' }} />
-        <div style={{ flex:1, display:'flex', justifyContent:'flex-end' }}>
+        <div style={{ flex:1, display:'flex', justifyContent:'flex-end', alignItems:'center', gap:14 }}>
+          {/* Bell notification icon */}
+          <div onClick={() => setShowNotifModal(true)} style={{ cursor:'pointer', position:'relative', display:'flex', flexDirection:'column', alignItems:'center', opacity: notifSettings.enabled && notifPermission === 'granted' ? 0.85 : 0.45 }}>
+            <span style={{ fontSize:18 }}>🔔</span>
+            {notifSettings.enabled && notifPermission === 'granted' && (
+              <div style={{ position:'absolute', top:-2, right:-3, width:7, height:7, borderRadius:'50%', background:C.ok, boxShadow:`0 0 5px ${C.ok}` }} />
+            )}
+          </div>
           <div onClick={() => { setPinInput(''); setPinError(false); setPinStep(true); }}
             style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', cursor:'pointer', opacity:.6 }}>
             <span style={{ fontSize:16 }}>🏪</span>
@@ -620,19 +802,33 @@ export default function App() {
       <div style={{ height:1, background:`linear-gradient(to right, transparent, ${C.goldLine}, transparent)`, margin:'0 20px 12px' }} />
 
       {/* ── GLOBAL BATCH BANNER ─────────────────────────────────────────────── */}
-      <div style={{ margin:'0 14px 14px', padding:'11px 16px', borderRadius:16, background:C.panel, border:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-          <span style={{ fontSize:18 }}>☕</span>
-          <div>
-            <div style={{ fontSize:9, fontWeight:800, letterSpacing:1.2, color:C.muted, textTransform:'uppercase' }}>Aktuálny batch</div>
-            <div style={{ fontSize:16, fontWeight:800, color: batchTime ? C.gold : C.muted, letterSpacing:.5, marginTop:1 }}>{batchTime || '—'}</div>
+      {(() => {
+        const elColor = batchElapsedMins === null ? C.muted
+          : batchElapsedMins < 120 ? C.ok
+          : batchElapsedMins < 240 ? '#d07010'
+          : C.err;
+        const elStr = batchElapsedMins === null ? null
+          : batchElapsedMins < 60 ? `${batchElapsedMins} min`
+          : `${Math.floor(batchElapsedMins/60)}h ${batchElapsedMins%60}m`;
+        return (
+          <div style={{ margin:'0 14px 14px', padding:'11px 16px', borderRadius:16, background:C.panel, border:`1px solid ${batchElapsedMins >= 240 ? C.err+'55' : C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+              <span style={{ fontSize:18 }}>☕</span>
+              <div>
+                <div style={{ fontSize:9, fontWeight:800, letterSpacing:1.2, color:C.muted, textTransform:'uppercase' }}>Aktuálny batch</div>
+                <div style={{ display:'flex', alignItems:'baseline', gap:8, marginTop:1 }}>
+                  <span style={{ fontSize:16, fontWeight:800, color: batchTime ? C.gold : C.muted, letterSpacing:.5 }}>{batchTime || '—'}</span>
+                  {elStr && <span style={{ fontSize:11, fontWeight:700, color:elColor }}>pred {elStr}</span>}
+                </div>
+              </div>
+            </div>
+            <button onClick={() => setBatchTime(new Date().toLocaleTimeString('sk-SK',{hour:'2-digit',minute:'2-digit'}))}
+              style={{ background:C.goldDim, border:`1px solid ${C.goldLine}`, color:C.gold, padding:'7px 14px', borderRadius:10, fontWeight:800, fontSize:10, letterSpacing:.8, cursor:'pointer', fontFamily:'inherit' }}>
+              NOVÝ
+            </button>
           </div>
-        </div>
-        <button onClick={() => setBatchTime(new Date().toLocaleTimeString('sk-SK',{hour:'2-digit',minute:'2-digit'}))}
-          style={{ background:C.goldDim, border:`1px solid ${C.goldLine}`, color:C.gold, padding:'7px 14px', borderRadius:10, fontWeight:800, fontSize:10, letterSpacing:.8, cursor:'pointer', fontFamily:'inherit' }}>
-          NOVÝ
-        </button>
-      </div>
+        );
+      })()}
 
       <div style={{ padding:'0 14px' }}>
 
@@ -892,6 +1088,24 @@ export default function App() {
               {invSearch && <span onClick={() => setInvSearch('')} style={{ color:C.muted, fontSize:14, cursor:'pointer' }}>✕</span>}
             </Glass>
 
+            {/* Inventory progress */}
+            {(() => {
+              const total  = invData.reduce((s,g) => s + g.items.length, 0);
+              const filled = invData.reduce((s,g) => s + g.items.filter(i => (invQty[i.id]||[]).some(r => r.qty)).length, 0);
+              const pctInv = total === 0 ? 0 : Math.round(filled / total * 100);
+              return (
+                <div style={{ marginBottom:10, padding:'12px 16px', borderRadius:16, background:C.panel, border:`1px solid ${C.border}` }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+                    <span style={{ fontSize:11, fontWeight:700, color:C.sub, letterSpacing:.3 }}>Postup inventúry</span>
+                    <span style={{ fontSize:13, fontWeight:800, color: pctInv===100 ? C.ok : C.gold }}>{filled} / {total}</span>
+                  </div>
+                  <div style={{ height:5, background:C.border, borderRadius:4, overflow:'hidden' }}>
+                    <div style={{ height:'100%', width:`${pctInv}%`, background: pctInv===100 ? C.ok : C.gold, borderRadius:4, transition:'width .4s ease', boxShadow: pctInv>0 ? `0 0 8px ${pctInv===100 ? C.ok : C.gold}55` : 'none' }} />
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Categories */}
             {invData.map(group => {
               const s = strip(invSearch);
@@ -929,24 +1143,43 @@ export default function App() {
                             </div>
                           </div>
                           <div style={{ display:'flex', gap:7, alignItems:'flex-start' }}>
-                            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
+                            {/* Portos kód */}
+                            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2, flexShrink:0 }}>
                               <Inp type="text" placeholder="Kód" value={item.portosCode||''}
                                 readOnly={!!item.portosCode}
                                 onChange={e => !item.portosCode && setInvData(invData.map(g => g.category===group.category ? {...g, items: g.items.map(i => i.id===item.id ? {...i, portosCode: e.target.value} : i)} : g))}
                                 style={{ width:60, padding:'9px 6px', textAlign:'center', fontSize:12, color:C.sub, borderColor: item.portosCode ? C.goldLine : C.border, cursor: item.portosCode ? 'not-allowed' : 'text', opacity: item.portosCode ? 0.7 : 1 }} />
                               <span style={{ fontSize:9, color:C.muted, whiteSpace:'nowrap' }}>portos kód</span>
                             </div>
-                            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
-                              <Inp type="text" placeholder={item.unit||'qty'} value={invQty[item.id]||''}
-                                onChange={e => setInvQty({...invQty,[item.id]:e.target.value})}
-                                style={{ width:60, padding:'9px 8px', textAlign:'center', fontWeight:700, fontSize:12 }} />
-                              <span style={{ fontSize:9, color:C.muted, whiteSpace:'nowrap' }}>množstvo</span>
-                            </div>
-                            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2, flex:1 }}>
+                            {/* Multi-qty + note */}
+                            <div style={{ flex:1, display:'flex', flexDirection:'column', gap:5 }}>
+                              {(invQty[item.id]||[]).map(row => (
+                                <div key={row.id} style={{ display:'flex', gap:5, alignItems:'center' }}>
+                                  <Inp type="number" placeholder="0" value={row.qty}
+                                    onChange={e => updateQtyRow(item.id, row.id, 'qty', e.target.value)}
+                                    style={{ width:70, padding:'8px 8px', textAlign:'center', fontWeight:800, fontSize:14 }} />
+                                  <span style={{ fontSize:11, color:C.muted, flexShrink:0 }}>{item.unit}</span>
+                                  <Inp placeholder="Miesto (napr. Bar)" value={row.label}
+                                    onChange={e => updateQtyRow(item.id, row.id, 'label', e.target.value)}
+                                    style={{ flex:1, padding:'8px 10px', fontSize:12 }} />
+                                  <span onClick={() => removeQtyRow(item.id, row.id)}
+                                    style={{ color:C.muted, fontSize:14, cursor:'pointer', lineHeight:1, padding:'0 2px', flexShrink:0 }}>✕</span>
+                                </div>
+                              ))}
+                              <button onClick={() => addQtyRow(item.id)} style={{
+                                alignSelf:'flex-start', background:'none',
+                                border:`1px dashed ${C.goldLine}`, color:C.gold,
+                                fontSize:11, fontWeight:600, padding:'5px 10px',
+                                borderRadius:8, cursor:'pointer', fontFamily:'inherit',
+                              }}>+ Pridať množstvo</button>
+                              {(invQty[item.id]||[]).length > 1 && (
+                                <div style={{ fontSize:11, fontWeight:700, color:C.gold, paddingLeft:2 }}>
+                                  Spolu: {qtyTotal(item.id)} {item.unit}
+                                </div>
+                              )}
                               <Inp type="text" placeholder="Poznámka…" value={invNotes[item.id]||''}
                                 onChange={e => setInvNotes({...invNotes,[item.id]:e.target.value})}
-                                style={{ width:'100%', padding:'9px 10px', fontSize:12, borderStyle:'dashed' }} />
-                              <span style={{ fontSize:9, color:C.muted, whiteSpace:'nowrap' }}>&nbsp;</span>
+                                style={{ width:'100%', padding:'8px 10px', fontSize:12, borderStyle:'dashed' }} />
                             </div>
                           </div>
                         </div>
@@ -960,19 +1193,18 @@ export default function App() {
 
             <button onClick={() => {
               if (!needName()) return;
-              const missing = invData.flatMap(g => g.items).filter(item => !invQty[item.id]);
+              const missing = invData.flatMap(g => g.items).filter(item => !(invQty[item.id]||[]).some(r => r.qty));
               if (missing.length > 0) { setMissingWarning(missing); return; }
-              const allItems = invData.flatMap(g => g.items).filter(item => invQty[item.id]);
+              const allItems = invData.flatMap(g => g.items).filter(item => (invQty[item.id]||[]).some(r => r.qty));
               sendToSheets('inventory', {
                 date: new Date().toLocaleDateString('sk-SK'),
                 month: `${selectedMonth} ${new Date().getFullYear()}`,
                 inspector: controllerName || 'Anonym',
-                items: allItems.map(item => ({
-                  name: item.name,
-                  unit: item.unit,
-                  qty: invQty[item.id],
-                  note: invNotes[item.id] || '',
-                })),
+                items: allItems.map(item => {
+                  const rows = (invQty[item.id]||[]).filter(r => r.qty);
+                  const breakdown = rows.map(r => r.label ? `${r.label}: ${r.qty}` : r.qty).join(' + ');
+                  return { name: item.name, unit: item.unit, qty: qtyTotal(item.id), breakdown, note: invNotes[item.id] || '' };
+                }),
               });
               setSuccess(true);
             }} style={{
@@ -1364,6 +1596,80 @@ export default function App() {
         </div>
       )}
 
+      {/* ── NOTIFICATION SETTINGS MODAL ─────────────────────────────────────── */}
+      {showNotifModal && (
+        <div onMouseDown={() => setShowNotifModal(false)} style={{ position:'fixed', inset:0, background:'rgba(30,22,8,.55)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2000, padding:24 }}>
+          <div onMouseDown={e => e.stopPropagation()} style={{ background:C.modal, border:`1px solid ${C.borderM}`, width:'100%', borderRadius:24, padding:'28px 22px 24px', boxShadow:'0 8px 40px rgba(0,0,0,.12)' }}>
+            <div style={{ fontSize:30, textAlign:'center', marginBottom:10 }}>🔔</div>
+            <div style={{ fontSize:16, fontWeight:800, color:C.text, textAlign:'center', marginBottom:4 }}>Notifikácie</div>
+            <div style={{ fontSize:12, color:C.sub, textAlign:'center', marginBottom:22, lineHeight:1.5 }}>Pripomienky na denné úlohy</div>
+
+            {notifPermission === 'unsupported' && (
+              <div style={{ padding:'12px 14px', borderRadius:12, background:C.errDim, border:`1px solid ${C.err}33`, fontSize:12, color:C.err, marginBottom:16, textAlign:'center', lineHeight:1.5 }}>
+                Tvoj prehliadač nepodporuje notifikácie.
+              </div>
+            )}
+
+            {notifPermission === 'denied' && (
+              <div style={{ padding:'12px 14px', borderRadius:12, background:C.errDim, border:`1px solid ${C.err}33`, fontSize:12, color:C.err, marginBottom:16, textAlign:'center', lineHeight:1.6 }}>
+                Notifikácie sú zablokované v prehliadači.<br />
+                <span style={{ color:C.muted }}>Odblokuj ich manuálne v nastaveniach zariadenia.</span>
+              </div>
+            )}
+
+            {notifPermission === 'default' && (
+              <button onClick={requestNotifPermission} style={{ width:'100%', padding:'14px', borderRadius:14, background:C.goldDim, border:`1px solid ${C.goldLine}`, color:C.gold, fontWeight:800, fontSize:14, cursor:'pointer', fontFamily:'inherit', marginBottom:16, letterSpacing:.3 }}>
+                🔔 Povoliť notifikácie
+              </button>
+            )}
+
+            {notifPermission === 'granted' && (
+              <>
+                {/* Toggle */}
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'14px 16px', borderRadius:14, border:`1px solid ${C.border}`, background:C.panel, marginBottom:10 }}>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:700, color:C.text }}>Zapnúť pripomienky</div>
+                    <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>Denné úlohy a HACCP kontrola</div>
+                  </div>
+                  <div onClick={() => setNotifSettings(prev => ({ ...prev, enabled: !prev.enabled }))}
+                    style={{ width:46, height:26, borderRadius:13, background: notifSettings.enabled ? C.ok : 'rgba(150,120,80,0.25)', position:'relative', cursor:'pointer', transition:'background .2s', flexShrink:0 }}>
+                    <div style={{ position:'absolute', top:3, left: notifSettings.enabled ? 23 : 3, width:20, height:20, borderRadius:'50%', background:'white', boxShadow:'0 1px 4px rgba(0,0,0,0.2)', transition:'left .2s' }} />
+                  </div>
+                </div>
+
+                {/* Time picker */}
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'14px 16px', borderRadius:14, border:`1px solid ${C.border}`, background:C.panel, marginBottom:10, opacity: notifSettings.enabled ? 1 : 0.45, transition:'opacity .2s' }}>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:700, color:C.text }}>Čas pripomienky</div>
+                    <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>Každý deň o tomto čase</div>
+                  </div>
+                  <input type="time" value={notifSettings.time} disabled={!notifSettings.enabled}
+                    onChange={e => setNotifSettings(prev => ({ ...prev, time: e.target.value }))}
+                    style={{ fontSize:16, fontWeight:800, color:C.gold, background:'transparent', border:'none', outline:'none', cursor: notifSettings.enabled ? 'pointer' : 'default', fontFamily:'inherit', padding:0 }} />
+                </div>
+
+                {/* Info */}
+                <div style={{ padding:'11px 14px', borderRadius:12, background:C.goldDim, border:`1px solid ${C.goldLine}`, fontSize:11, color:C.sub, lineHeight:1.6, marginBottom:14 }}>
+                  💡 Notifikácia sa zobrazí ak nie sú splnené všetky denné úlohy. Funguje keď je aplikácia otvorená v prehliadači.
+                </div>
+
+                {/* Test */}
+                {notifSettings.enabled && (
+                  <button onClick={() => { showNotification('Foxford ☕', 'Toto je testovacia notifikácia. Všetko funguje! 🎉'); }}
+                    style={{ width:'100%', padding:'12px', borderRadius:12, background:'transparent', border:`1px solid ${C.border}`, color:C.sub, fontWeight:600, fontSize:13, cursor:'pointer', fontFamily:'inherit', marginBottom:10 }}>
+                    🧪 Otestovať notifikáciu
+                  </button>
+                )}
+              </>
+            )}
+
+            <button onClick={() => setShowNotifModal(false)} style={{ width:'100%', padding:'13px', borderRadius:14, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit', marginTop:4 }}>
+              Zavrieť
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── PIN MODAL ─────────────────────────────────────────────────────────── */}
       {pinStep && (
         <div style={{ position:'fixed', inset:0, background:'rgba(6,4,2,.92)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:4000, padding:24 }}>
@@ -1432,7 +1738,11 @@ export default function App() {
                   date: new Date().toLocaleDateString('sk-SK'),
                   month: `${selectedMonth} ${new Date().getFullYear()}`,
                   inspector: controllerName || 'Anonym',
-                  items: allItems.map(item => ({ name: item.name, unit: item.unit, qty: invQty[item.id], note: invNotes[item.id] || '' })),
+                  items: allItems.map(item => {
+                    const rows = (invQty[item.id]||[]).filter(r => r.qty);
+                    const breakdown = rows.map(r => r.label ? `${r.label}: ${r.qty}` : r.qty).join(' + ');
+                    return { name: item.name, unit: item.unit, qty: qtyTotal(item.id), breakdown, note: invNotes[item.id] || '' };
+                  }),
                 });
                 setSuccess(true);
               }} style={{ flex:2, padding:'13px', borderRadius:12, background:C.goldDim, border:`1px solid ${C.goldLine}`, color:C.gold, fontWeight:800, cursor:'pointer', fontFamily:'inherit', fontSize:13 }}>
