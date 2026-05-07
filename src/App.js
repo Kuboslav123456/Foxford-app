@@ -423,6 +423,7 @@ export default function App() {
   const [offlineFlushed, setOfflineFlushed] = useState(0);
   const [batchElapsedMins, setBatchElapsedMins] = useState(null);
   const [now, setNow] = useState(new Date());
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
   // ── DYNAMICKÁ FARBA POBOČKY ───────────────────────────────────────────────
   const branchGold = (branch && BRANCH_COLORS[branch]) || BASE_C.gold;
@@ -518,6 +519,16 @@ export default function App() {
     const iv = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(iv);
   }, []);
+
+  // Responzívna šírka okna
+  useEffect(() => {
+    const handler = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+
+  const isTablet  = windowWidth >= 768;
+  const isDesktop = windowWidth >= 1024;
 
   // Batch timer — aktualizácia každú minútu
   useEffect(() => {
@@ -771,12 +782,12 @@ export default function App() {
 
   // ── MAIN ──────────────────────────────────────────────────────────────────
   return (
-    <div style={{ maxWidth:500, margin:'0 auto', minHeight:'100vh', fontFamily:'-apple-system,sans-serif', color:C.text, paddingBottom:110, overflowX:'hidden', background:`radial-gradient(ellipse at 15% 0%, rgba(224,160,58,.08) 0%, transparent 55%), radial-gradient(ellipse at 85% 90%, rgba(184,112,32,.06) 0%, transparent 55%), ${C.bg}` }}>
+    <div style={{ maxWidth: isDesktop ? 1100 : isTablet ? 860 : 500, margin:'0 auto', minHeight:'100vh', fontFamily:'-apple-system,sans-serif', color:C.text, paddingBottom: isTablet ? 120 : 110, overflowX:'hidden', background:`radial-gradient(ellipse at 15% 0%, rgba(224,160,58,.08) 0%, transparent 55%), radial-gradient(ellipse at 85% 90%, rgba(184,112,32,.06) 0%, transparent 55%), ${C.bg}` }}>
       <style>{`.shake{animation:shake .4s ease-in-out;border-color:${C.err}!important;} @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}`}</style>
 
       {/* HEADER */}
       <header style={{
-        padding:'18px 20px 14px', display:'flex', alignItems:'center',
+        padding: isTablet ? '18px 36px 14px' : '18px 20px 14px', display:'flex', alignItems:'center',
         position:'sticky', top:0, zIndex:50,
         background:'rgba(242,237,228,0.93)',
         backdropFilter:'blur(18px)', WebkitBackdropFilter:'blur(18px)',
@@ -812,14 +823,14 @@ export default function App() {
       </header>
 
       {/* thin gold rule */}
-      <div style={{ height:1, background:`linear-gradient(to right, transparent, ${C.goldLine}, transparent)`, margin:'0 20px 12px' }} />
+      <div style={{ height:1, background:`linear-gradient(to right, transparent, ${C.goldLine}, transparent)`, margin: isTablet ? '0 36px 12px' : '0 20px 12px' }} />
 
       {/* ── DATETIME BAR ────────────────────────────────────────────────────── */}
-      <div style={{ margin:'0 14px 8px', display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 16px', borderRadius:12, background:C.panel, border:`1px solid ${C.border}` }}>
-        <span style={{ fontSize:12, fontWeight:600, color:C.sub }}>
+      <div style={{ margin: isTablet ? '0 24px 8px' : '0 14px 8px', display:'flex', justifyContent:'space-between', alignItems:'center', padding: isTablet ? '10px 22px' : '8px 16px', borderRadius:12, background:C.panel, border:`1px solid ${C.border}` }}>
+        <span style={{ fontSize: isTablet ? 14 : 12, fontWeight:600, color:C.sub }}>
           {now.toLocaleDateString('sk-SK', { weekday:'long', day:'numeric', month:'long' })}
         </span>
-        <span style={{ fontSize:16, fontWeight:800, color:C.gold, letterSpacing:1, fontVariantNumeric:'tabular-nums' }}>
+        <span style={{ fontSize: isTablet ? 18 : 16, fontWeight:800, color:C.gold, letterSpacing:1, fontVariantNumeric:'tabular-nums' }}>
           {now.toLocaleTimeString('sk-SK', { hour:'2-digit', minute:'2-digit', second:'2-digit' })}
         </span>
       </div>
@@ -834,7 +845,7 @@ export default function App() {
           : batchElapsedMins < 60 ? `${batchElapsedMins} min`
           : `${Math.floor(batchElapsedMins/60)}h ${batchElapsedMins%60}m`;
         return (
-          <div style={{ margin:'0 14px 14px', padding:'11px 16px', borderRadius:16, background:C.panel, border:`1px solid ${batchElapsedMins >= 240 ? C.err+'55' : C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div style={{ margin: isTablet ? '0 24px 14px' : '0 14px 14px', padding: isTablet ? '14px 22px' : '11px 16px', borderRadius:16, background:C.panel, border:`1px solid ${batchElapsedMins >= 240 ? C.err+'55' : C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
             <div style={{ display:'flex', alignItems:'center', gap:10 }}>
               <span style={{ fontSize:18 }}>☕</span>
               <div>
@@ -853,11 +864,26 @@ export default function App() {
         );
       })()}
 
-      <div style={{ padding:'0 14px' }}>
+      <div style={{ padding: isTablet ? '0 24px' : '0 14px' }}>
 
         {/* ── TASKS ────────────────────────────────────────────────────────── */}
         {tab === 'tasks' && (
           <>
+            {/* Sub-tab switcher — full width */}
+            <div style={{ display:'flex', gap:6, marginBottom:10 }}>
+              {['denné','víkendové','mesačné'].map(id => (
+                <button key={id} onClick={() => setSubTab(id)} style={{
+                  flex:1, padding: isTablet ? '11px 4px' : '9px 4px', borderRadius:12, border:`1px solid ${subTab===id ? C.goldLine : C.border}`,
+                  background: subTab===id ? C.goldDim : 'transparent',
+                  color: subTab===id ? C.gold : C.sub,
+                  fontWeight:700, fontSize: isTablet ? 11 : 9, letterSpacing:.8, textTransform:'uppercase',
+                  cursor:'pointer', fontFamily:'inherit',
+                }}>{id}</button>
+              ))}
+            </div>
+
+            {/* Top row: inspector + progress side-by-side on tablet */}
+            <div style={{ display: isTablet ? 'grid' : 'block', gridTemplateColumns: '1fr 1fr', gap: 10, alignItems: 'start', marginBottom: isTablet ? 0 : 0 }}>
             {/* Inspector */}
             <Glass accent style={{ padding:'14px 16px' }}>
               <Tag text={`Kontroluje — ${subTab}`} />
@@ -867,19 +893,6 @@ export default function App() {
                 shake={shakeInsp}
                 style={{ marginTop:7, borderColor: inspectors[subTab] ? C.ok : C.err + '88' }} />
             </Glass>
-
-            {/* Sub-tab switcher */}
-            <div style={{ display:'flex', gap:6, marginBottom:10 }}>
-              {['denné','víkendové','mesačné'].map(id => (
-                <button key={id} onClick={() => setSubTab(id)} style={{
-                  flex:1, padding:'9px 4px', borderRadius:12, border:`1px solid ${subTab===id ? C.goldLine : C.border}`,
-                  background: subTab===id ? C.goldDim : 'transparent',
-                  color: subTab===id ? C.gold : C.sub,
-                  fontWeight:700, fontSize:9, letterSpacing:.8, textTransform:'uppercase',
-                  cursor:'pointer', fontFamily:'inherit',
-                }}>{id}</button>
-              ))}
-            </div>
 
             {/* Progress */}
             <Glass style={{ padding:'14px 16px' }}>
@@ -893,7 +906,7 @@ export default function App() {
                 <div style={{ height:'100%', width:`${pct()}%`, background: pct()===100 ? C.ok : C.gold, borderRadius:4, transition:'width .35s ease', boxShadow: pct()>0 ? `0 0 8px ${pct()===100 ? C.ok : C.gold}` : 'none' }} />
               </div>
             </Glass>
-
+            </div>
 
             {/* Task list */}
             <Glass style={{ padding:'10px 10px' }}>
@@ -1004,12 +1017,13 @@ export default function App() {
                 }} style={{ padding:'9px 16px', borderRadius:12, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:700, fontSize:13, cursor:'pointer', flexShrink:0, letterSpacing:.5 }}>Pridať</button>
               </div>}
 
+              <div style={{ display: isTablet ? 'grid' : 'block', gridTemplateColumns: isDesktop ? '1fr 1fr 1fr' : '1fr 1fr', gap: 10 }}>
               {tempFields.map((field) => {
                 const val = temps[field.key] || '';
                 const status = tempColor(field, val);
                 const accentColor = status === 'ok' ? C.ok : status === 'err' ? C.err : C.border;
                 return (
-                  <div key={field.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+                  <div key={field.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom: isTablet ? 0 : 10 }}>
                     <div style={{ flex:1 }}>
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
                         <span style={{ fontSize:11, fontWeight:700, letterSpacing:.5, color: status ? accentColor : C.sub, textTransform:'uppercase' }}>{field.label}</span>
@@ -1042,6 +1056,7 @@ export default function App() {
                   </div>
                 );
               })}
+              </div>
 
               {lastHaccpDate === new Date().toDateString() ? (
                 <div style={{ textAlign:'center', padding:'12px 0 4px', color:C.ok, fontSize:13, fontWeight:600 }}>
@@ -1130,6 +1145,7 @@ export default function App() {
             })()}
 
             {/* Categories */}
+            <div style={{ display: isTablet && !invSearch ? 'grid' : 'block', gridTemplateColumns: isDesktop ? '1fr 1fr 1fr' : '1fr 1fr', gap: 8 }}>
             {invData.map(group => {
               const s = strip(invSearch);
               const catMatch = strip(group.category).includes(s);
@@ -1216,6 +1232,7 @@ export default function App() {
                 </Glass>
               );
             })}
+            </div>
 
             <button onClick={() => {
               if (!needName()) return;
@@ -1313,8 +1330,9 @@ export default function App() {
               <div style={{ textAlign:'center', color:C.muted, fontSize:13, paddingTop:50 }}>Žiadne správy</div>
             )}
 
+            <div style={{ display: isTablet && notes.length > 1 ? 'grid' : 'block', gridTemplateColumns: isDesktop ? '1fr 1fr 1fr' : '1fr 1fr', gap: 8 }}>
             {notes.map(n => (
-              <Glass key={n.id} style={{ padding:'14px 16px', borderLeft:`2px solid ${C.goldLine}`, marginBottom:8 }}>
+              <Glass key={n.id} style={{ padding:'14px 16px', borderLeft:`2px solid ${C.goldLine}`, marginBottom: isTablet ? 0 : 8 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
                   <div style={{ fontSize:14, color:C.text, lineHeight:1.6, flex:1 }}>{n.text}</div>
                   <button onClick={() => setNotes(notes.filter(x => x.id !== n.id))}
@@ -1326,18 +1344,19 @@ export default function App() {
                 </div>
               </Glass>
             ))}
+            </div>
           </>
         )}
       </div>
 
       {/* ── FLOATING NAV ──────────────────────────────────────────────────────── */}
       <nav style={{
-        position:'fixed', bottom:18, left:'50%', transform:'translateX(-50%)',
-        width:'88%', maxWidth:390,
+        position:'fixed', bottom: isTablet ? 24 : 18, left:'50%', transform:'translateX(-50%)',
+        width: isTablet ? '70%' : '88%', maxWidth: isTablet ? 560 : 390,
         background:'rgba(255,255,255,0.92)',
         backdropFilter:'blur(24px)', WebkitBackdropFilter:'blur(24px)',
         border:`1px solid ${C.border}`,
-        borderRadius:50, height:62,
+        borderRadius:50, height: isTablet ? 70 : 62,
         display:'flex', alignItems:'center',
         boxShadow:'0 8px 32px rgba(0,0,0,.10), 0 0 0 1px rgba(150,120,80,.12)',
         zIndex:100,
@@ -1358,11 +1377,11 @@ export default function App() {
               {active && (
                 <div style={{ position:'absolute', inset:'4px 6px', background:C.goldDim, borderRadius:12 }} />
               )}
-              <div style={{ position:'relative', fontSize:20, zIndex:1, transition:'transform .15s', transform: active ? 'scale(1.12)' : 'scale(1)' }}>
+              <div style={{ position:'relative', fontSize: isTablet ? 24 : 20, zIndex:1, transition:'transform .15s', transform: active ? 'scale(1.12)' : 'scale(1)' }}>
                 {emoji}
                 {hasAlert && <div style={{ position:'absolute', top:-2, right:-4, width:7, height:7, borderRadius:'50%', background:C.err, boxShadow:`0 0 6px ${C.err}` }} />}
               </div>
-              <div style={{ fontSize:9, fontWeight: active ? 700 : 500, letterSpacing:.3, color: active ? C.gold : C.muted, transition:'color .15s', zIndex:1 }}>{label}</div>
+              <div style={{ fontSize: isTablet ? 11 : 9, fontWeight: active ? 700 : 500, letterSpacing:.3, color: active ? C.gold : C.muted, transition:'color .15s', zIndex:1 }}>{label}</div>
             </div>
           );
         })}
