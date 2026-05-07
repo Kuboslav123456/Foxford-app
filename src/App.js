@@ -996,7 +996,7 @@ export default function App() {
                         </div>
                       </div>
                       <div style={{ position:'relative' }}>
-                        <input type="text" placeholder="0.0" value={val}
+                        <input type="text" inputMode="decimal" placeholder="0.0" value={val}
                           onChange={e => { if (lastHaccpDate === new Date().toDateString()) return; setTemps(prev => ({ ...prev, [field.key]: e.target.value })); }}
                           readOnly={lastHaccpDate === new Date().toDateString()}
                           style={{
