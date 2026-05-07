@@ -419,6 +419,10 @@ export default function App() {
   const [notifPermission, setNotifPermission] = useState(() => 'Notification' in window ? Notification.permission : 'unsupported');
   const [notifSettings, setNotifSettings] = useState(() => JSON.parse(localStorage.getItem('foxford-notif-settings')) || { enabled: false, time: '09:00' });
   const [showNotifModal, setShowNotifModal] = useState(false);
+  const [showBugModal, setShowBugModal] = useState(false);
+  const [bugText, setBugText] = useState('');
+  const [bugAuthor, setBugAuthor] = useState('');
+  const [bugSent, setBugSent] = useState(false);
   const [offlineQueue, setOfflineQueue] = useState(() => JSON.parse(localStorage.getItem('foxford-offline-queue')) || []);
   const [offlineFlushed, setOfflineFlushed] = useState(0);
   const [batchElapsedMins, setBatchElapsedMins] = useState(null);
@@ -793,7 +797,14 @@ export default function App() {
         backdropFilter:'blur(18px)', WebkitBackdropFilter:'blur(18px)',
         boxShadow:'0 1px 0 rgba(150,120,80,0.13)',
       }}>
-        <div style={{ flex:1, display:'flex', justifyContent:'flex-start' }}>
+        <div style={{ flex:1, display:'flex', justifyContent:'flex-start', alignItems:'center', gap:8 }}>
+          {/* Bug report button */}
+          <div onClick={() => { setShowBugModal(true); setBugSent(false); setBugText(''); }}
+            style={{ display:'flex', flexDirection:'column', alignItems:'center', cursor:'pointer', opacity:.55, transition:'opacity .15s' }}
+            title="Nahlásiť chybu">
+            <span style={{ fontSize: isTablet ? 20 : 17 }}>🐛</span>
+            <span style={{ fontSize:7, color:C.sub, fontWeight:700, letterSpacing:.3, marginTop:1, lineHeight:1 }}>CHYBA</span>
+          </div>
           {!online && (
             <div style={{ fontSize:9, fontWeight:800, color:C.err, border:`1px solid ${C.err}`, padding:'3px 9px', borderRadius:20, letterSpacing:.5 }}>
               OFFLINE{offlineQueue.length > 0 ? ` (${offlineQueue.length})` : ''}
@@ -1712,6 +1723,78 @@ export default function App() {
             <button onClick={() => setShowNotifModal(false)} style={{ width:'100%', padding:'13px', borderRadius:14, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit', marginTop:4 }}>
               Zavrieť
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── BUG REPORT MODAL ─────────────────────────────────────────────────── */}
+      {showBugModal && (
+        <div onMouseDown={() => setShowBugModal(false)} style={{ position:'fixed', inset:0, background:'rgba(30,22,8,.55)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2000, padding:24 }}>
+          <div onMouseDown={e => e.stopPropagation()} style={{ background:C.modal, border:`1px solid ${C.borderM}`, width:'100%', maxWidth:460, borderRadius:24, padding:'28px 22px 24px', boxShadow:'0 8px 40px rgba(0,0,0,.12)' }}>
+            {bugSent ? (
+              <>
+                <div style={{ fontSize:40, textAlign:'center', marginBottom:14 }}>✅</div>
+                <div style={{ fontSize:17, fontWeight:900, color:C.text, textAlign:'center', marginBottom:8 }}>Ďakujeme!</div>
+                <div style={{ fontSize:13, color:C.sub, textAlign:'center', marginBottom:24, lineHeight:1.6 }}>
+                  Chyba bola odoslaná. Pozrieme sa na to čo najskôr.
+                </div>
+                <button onClick={() => setShowBugModal(false)} style={{ width:'100%', padding:'13px', borderRadius:14, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                  Zavrieť
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize:30, textAlign:'center', marginBottom:10 }}>🐛</div>
+                <div style={{ fontSize:16, fontWeight:800, color:C.text, textAlign:'center', marginBottom:4 }}>Nahlásiť chybu</div>
+                <div style={{ fontSize:12, color:C.sub, textAlign:'center', marginBottom:20, lineHeight:1.5 }}>
+                  Niečo nefunguje? Popíš problém a my sa na to pozrieme.
+                </div>
+
+                <div style={{ fontSize:11, fontWeight:700, color:C.sub, letterSpacing:.5, textTransform:'uppercase', marginBottom:6 }}>Tvoje meno (voliteľné)</div>
+                <Inp placeholder="Meno alebo prezývka…" value={bugAuthor} onChange={e => setBugAuthor(e.target.value)}
+                  style={{ marginBottom:14 }} />
+
+                <div style={{ fontSize:11, fontWeight:700, color:C.sub, letterSpacing:.5, textTransform:'uppercase', marginBottom:6 }}>Popis problému</div>
+                <textarea
+                  placeholder="Čo sa stalo? Kde v appke? Ako to reprodukovať…"
+                  value={bugText}
+                  onChange={e => setBugText(e.target.value)}
+                  rows={5}
+                  style={{
+                    width:'100%', padding:'12px 14px', borderRadius:12,
+                    border:`1px solid ${bugText.trim() ? C.goldLine : C.border}`,
+                    background:'rgba(255,255,255,0.85)', color:C.text,
+                    fontSize:13, lineHeight:1.6, fontFamily:'inherit',
+                    outline:'none', resize:'vertical', boxSizing:'border-box',
+                    marginBottom:20,
+                  }} />
+
+                <div style={{ display:'flex', gap:10 }}>
+                  <button onClick={() => setShowBugModal(false)} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                    Zrušiť
+                  </button>
+                  <button onClick={() => {
+                    if (!bugText.trim()) return;
+                    sendToSheets('bug_report', {
+                      date: new Date().toLocaleString('sk-SK'),
+                      author: bugAuthor.trim() || 'Anonym',
+                      branch: branch || '—',
+                      description: bugText.trim(),
+                      userAgent: navigator.userAgent,
+                    });
+                    setBugSent(true);
+                  }} style={{
+                    flex:2, padding:'13px', borderRadius:14,
+                    border:`1px solid ${C.goldLine}`, background: bugText.trim() ? C.gold : C.goldDim,
+                    color: bugText.trim() ? '#fff' : C.gold,
+                    fontWeight:800, fontSize:13, cursor: bugText.trim() ? 'pointer' : 'default',
+                    fontFamily:'inherit', transition:'all .2s',
+                  }}>
+                    Odoslať
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
