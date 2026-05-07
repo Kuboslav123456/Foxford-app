@@ -552,16 +552,23 @@ export default function App() {
   // ── NOTIFICATIONS ─────────────────────────────────────────────────────────
   const showNotification = (title, body) => {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
-    navigator.serviceWorker?.ready.then(reg => {
-      reg.showNotification(title, {
-        body,
-        icon: `${process.env.PUBLIC_URL}/foxford-logo.png.png`,
-        badge: `${process.env.PUBLIC_URL}/foxford-logo.png.png`,
-        vibrate: [100, 50, 100],
-        tag: 'foxford-reminder',
-        renotify: true,
-      });
-    }).catch(() => new Notification(title, { body, icon: `${process.env.PUBLIC_URL}/foxford-logo.png.png` }));
+    const icon = `${process.env.PUBLIC_URL}/foxford-logo.png.png`;
+    const opts = { body, icon, badge: icon, vibrate: [100, 50, 100], tag: 'foxford-reminder', renotify: true };
+
+    // Skús SW notifikáciu s timeoutom 2s, potom fallback na priamu notifikáciu
+    let done = false;
+    const fallback = setTimeout(() => {
+      if (!done) { done = true; try { new Notification(title, { body, icon }); } catch (_) {} }
+    }, 2000);
+
+    if (navigator.serviceWorker?.controller) {
+      navigator.serviceWorker.ready
+        .then(reg => { clearTimeout(fallback); done = true; reg.showNotification(title, opts); })
+        .catch(() => { clearTimeout(fallback); done = true; try { new Notification(title, { body, icon }); } catch (_) {} });
+    } else {
+      clearTimeout(fallback);
+      try { new Notification(title, { body, icon }); } catch (_) {}
+    }
   };
 
   const requestNotifPermission = async () => {
