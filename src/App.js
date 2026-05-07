@@ -422,6 +422,7 @@ export default function App() {
   const [offlineQueue, setOfflineQueue] = useState(() => JSON.parse(localStorage.getItem('foxford-offline-queue')) || []);
   const [offlineFlushed, setOfflineFlushed] = useState(0);
   const [batchElapsedMins, setBatchElapsedMins] = useState(null);
+  const [now, setNow] = useState(new Date());
 
   // ── DYNAMICKÁ FARBA POBOČKY ───────────────────────────────────────────────
   const branchGold = (branch && BRANCH_COLORS[branch]) || BASE_C.gold;
@@ -510,6 +511,12 @@ export default function App() {
     setTimeout(() => setOfflineFlushed(0), 4000);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online]);
+
+  // Live hodiny — aktualizácia každú sekundu
+  useEffect(() => {
+    const iv = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(iv);
+  }, []);
 
   // Batch timer — aktualizácia každú minútu
   useEffect(() => {
@@ -800,6 +807,16 @@ export default function App() {
 
       {/* thin gold rule */}
       <div style={{ height:1, background:`linear-gradient(to right, transparent, ${C.goldLine}, transparent)`, margin:'0 20px 12px' }} />
+
+      {/* ── DATETIME BAR ────────────────────────────────────────────────────── */}
+      <div style={{ margin:'0 14px 8px', display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 16px', borderRadius:12, background:C.panel, border:`1px solid ${C.border}` }}>
+        <span style={{ fontSize:12, fontWeight:600, color:C.sub }}>
+          {now.toLocaleDateString('sk-SK', { weekday:'long', day:'numeric', month:'long' })}
+        </span>
+        <span style={{ fontSize:16, fontWeight:800, color:C.gold, letterSpacing:1, fontVariantNumeric:'tabular-nums' }}>
+          {now.toLocaleTimeString('sk-SK', { hour:'2-digit', minute:'2-digit', second:'2-digit' })}
+        </span>
+      </div>
 
       {/* ── GLOBAL BATCH BANNER ─────────────────────────────────────────────── */}
       {(() => {
