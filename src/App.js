@@ -1117,7 +1117,7 @@ export default function App() {
 
         {/* ── INVENTORY ────────────────────────────────────────────────────── */}
         {tab === 'inventory' && (
-          <>
+          <div onPointerDown={e => { if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'SELECT') { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } }}>
             <Glass accent style={{ padding:'14px 16px' }}>
               <Tag text="Tvoje meno" />
               <Inp ref={nameRef} type="text" placeholder="Zadaj meno…" value={controllerName}
@@ -1212,18 +1212,20 @@ export default function App() {
                             <div style={{ flex:1, display:'flex', flexDirection:'column', gap:5 }}>
                               {(invQty[item.id]||[]).map(row => (
                                 <div key={row.id} style={{ display:'flex', gap:5, alignItems:'center' }}>
-                                  <Inp type="number" placeholder="0" value={row.qty}
+                                  <Inp type="text" inputMode="decimal" placeholder="0" value={row.qty}
                                     ref={focusNewRow?.itemId === item.id && focusNewRow?.rowId === row.id
                                       ? el => { if (el) { el.focus(); el.scrollIntoView({ behavior:'smooth', block:'center' }); setFocusNewRow(null); } }
                                       : null}
                                     onChange={e => updateQtyRow(item.id, row.id, 'qty', e.target.value)}
-                                    onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
+                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
+                                    onKeyUp={e => { if (e.key === 'Enter') e.target.blur(); }}
                                     enterKeyHint="done"
                                     style={{ width:70, padding:'8px 8px', textAlign:'center', fontWeight:800, fontSize:14 }} />
                                   <span style={{ fontSize:11, color:C.muted, flexShrink:0 }}>{item.unit}</span>
                                   <Inp placeholder="Miesto (napr. Bar)" value={row.label}
                                     onChange={e => updateQtyRow(item.id, row.id, 'label', e.target.value)}
-                                    onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
+                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
+                                    onKeyUp={e => { if (e.key === 'Enter') e.target.blur(); }}
                                     enterKeyHint="done"
                                     style={{ flex:1, padding:'8px 10px', fontSize:12 }} />
                                   <span onClick={() => removeQtyRow(item.id, row.id)}
@@ -1315,7 +1317,7 @@ export default function App() {
                 + Pridať kategóriu
               </button>
             </Glass>
-          </>
+          </div>
         )}
 
         {/* ── NOTES ────────────────────────────────────────────────────────── */}
