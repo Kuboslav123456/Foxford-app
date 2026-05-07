@@ -1145,7 +1145,7 @@ export default function App() {
             })()}
 
             {/* Categories */}
-            <div style={{ display: isTablet && !invSearch ? 'grid' : 'block', gridTemplateColumns: isDesktop ? '1fr 1fr 1fr' : '1fr 1fr', gap: 8 }}>
+            <div>
             {invData.map(group => {
               const s = strip(invSearch);
               const catMatch = strip(group.category).includes(s);
