@@ -621,7 +621,12 @@ export default function App() {
   const needName = () => { if (!controllerName.trim()) { doShake(setShakeName, nameRef); return false; } return true; };
 
   // ── MULTI-QTY HELPERS ────────────────────────────────────────────────────────
-  const addQtyRow    = (itemId) => setInvQty(q => ({ ...q, [itemId]: [...(q[itemId]||[]), { id: 'r'+Date.now(), label:'', qty:'' }] }));
+  const [focusNewRow, setFocusNewRow] = useState(null);
+  const addQtyRow = (itemId) => {
+    const newId = 'r' + Date.now();
+    setInvQty(q => ({ ...q, [itemId]: [...(q[itemId]||[]), { id: newId, label:'', qty:'' }] }));
+    setFocusNewRow({ itemId, rowId: newId });
+  };
   const removeQtyRow = (itemId, rowId) => setInvQty(q => ({ ...q, [itemId]: (q[itemId]||[]).filter(r => r.id !== rowId) }));
   const updateQtyRow = (itemId, rowId, field, val) => setInvQty(q => ({ ...q, [itemId]: (q[itemId]||[]).map(r => r.id === rowId ? { ...r, [field]: val } : r) }));
   const qtyTotal     = (itemId) => (invQty[itemId]||[]).reduce((s, r) => s + (parseFloat(r.qty)||0), 0);
@@ -1174,6 +1179,9 @@ export default function App() {
                               {(invQty[item.id]||[]).map(row => (
                                 <div key={row.id} style={{ display:'flex', gap:5, alignItems:'center' }}>
                                   <Inp type="number" placeholder="0" value={row.qty}
+                                    ref={focusNewRow?.itemId === item.id && focusNewRow?.rowId === row.id
+                                      ? el => { if (el) { el.focus(); el.scrollIntoView({ behavior:'smooth', block:'center' }); setFocusNewRow(null); } }
+                                      : null}
                                     onChange={e => updateQtyRow(item.id, row.id, 'qty', e.target.value)}
                                     style={{ width:70, padding:'8px 8px', textAlign:'center', fontWeight:800, fontSize:14 }} />
                                   <span style={{ fontSize:11, color:C.muted, flexShrink:0 }}>{item.unit}</span>
