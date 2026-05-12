@@ -657,7 +657,7 @@ export default function App() {
   };
   const removeQtyRow = (itemId, rowId) => setInvQty(q => ({ ...q, [itemId]: (q[itemId]||[]).filter(r => r.id !== rowId) }));
   const updateQtyRow = (itemId, rowId, field, val) => setInvQty(q => ({ ...q, [itemId]: (q[itemId]||[]).map(r => r.id === rowId ? { ...r, [field]: val } : r) }));
-  const qtyTotal     = (itemId) => (invQty[itemId]||[]).reduce((s, r) => s + (parseFloat(r.qty)||0), 0);
+  const qtyTotal     = (itemId) => (invQty[itemId]||[]).reduce((s, r) => s + (parseFloat((r.qty||'').toString().replace(',','.'))||0), 0);
   const needInsp = () => { if (!inspectors[subTab].trim()) { doShake(setShakeInsp, inspRef); return false; } return true; };
 
   // ── ODPISY HELPERS ───────────────────────────────────────────────────────
@@ -674,15 +674,18 @@ export default function App() {
   const updateOdpisQty = (dayKey, id, qty) => setOdpisy(prev => ({ ...prev, [dayKey]: (prev[dayKey]||[]).map(e => e.id === id ? { ...e, qty } : e) }));
   const removeOdpis   = (dayKey, id)  => setOdpisy(prev => ({ ...prev, [dayKey]: (prev[dayKey]||[]).filter(e => e.id !== id) }));
 
+  const parseQty = (val) => parseFloat((val || '').toString().replace(',', '.')) || 0;
+
   const getMonthSummary = (year, month) => {
     const prefix = `${year}-${String(month + 1).padStart(2, '0')}`;
     const map = {};
     Object.entries(odpisy).forEach(([date, entries]) => {
       if (!date.startsWith(prefix)) return;
       entries.forEach(e => {
-        if (!e.qty || parseFloat(e.qty) === 0) return;
+        const num = parseQty(e.qty);
+        if (!e.qty || num === 0) return;
         if (!map[e.itemId]) map[e.itemId] = { name: e.name, unit: e.unit, total: 0 };
-        map[e.itemId].total = Math.round((map[e.itemId].total + (parseFloat(e.qty) || 0)) * 1000) / 1000;
+        map[e.itemId].total = Math.round((map[e.itemId].total + num) * 1000) / 1000;
       });
     });
     return Object.values(map).filter(x => x.total > 0).sort((a, b) => a.name.localeCompare(b.name));
