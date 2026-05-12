@@ -431,6 +431,7 @@ export default function App() {
   const [odpisy, setOdpisy] = useState(() => JSON.parse(localStorage.getItem('foxford-odpisy')) || {});
   const [odpisySearch, setOdpisySearch] = useState('');
   const [odpisySummaryDate, setOdpisySummaryDate] = useState(() => { const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() }; });
+  const [odpisyAuthor, setOdpisyAuthor] = useState(() => localStorage.getItem('foxford-odpisy-author') || '');
 
   // ── DYNAMICKÁ FARBA POBOČKY ───────────────────────────────────────────────
   const branchGold = (branch && BRANCH_COLORS[branch]) || BASE_C.gold;
@@ -486,8 +487,9 @@ export default function App() {
     localStorage.setItem('foxford-notes',           JSON.stringify(notes));
     localStorage.setItem('foxford-notif-settings',  JSON.stringify(notifSettings));
     localStorage.setItem('foxford-odpisy',          JSON.stringify(odpisy));
+    localStorage.setItem('foxford-odpisy-author',   odpisyAuthor);
     setSavedAt(new Date().toLocaleTimeString('sk-SK', { hour:'2-digit', minute:'2-digit' }));
-  }, [tasks, batchTime, inspectors, tempFields, invData, invQty, invNotes, notes, notifSettings, odpisy]);
+  }, [tasks, batchTime, inspectors, tempFields, invData, invQty, invNotes, notes, notifSettings, odpisy, odpisyAuthor]);
 
   const scriptUrl = BRANCHES.find(b => b.name === branch)?.url || BRANCHES[0].url;
 
@@ -661,26 +663,34 @@ export default function App() {
   const needInsp = () => { if (!inspectors[subTab].trim()) { doShake(setShakeInsp, inspRef); return false; } return true; };
 
   // ── ODPISY HELPERS ───────────────────────────────────────────────────────
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const ODPISOVY_DOVODY = ['Spotreba', 'Pokazené', 'Rozbité', 'Ochutnávka'];
+  const todayKey     = new Date().toISOString().slice(0, 10);
+  const yesterdayKey = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
+  // backward compat: starý formát bol pole, nový je { entries, note }
+  const getDayData = (key) => { const d = odpisy[key]; if (!d) return { entries: [], note: '' }; if (Array.isArray(d)) return { entries: d, note: '' }; return { entries: d.entries || [], note: d.note || '' }; };
+  const setDayNote = (key, note) => setOdpisy(prev => { const d = getDayData(key); return { ...prev, [key]: { entries: d.entries, note } }; });
 
   const addOdpis = (item) => {
     setOdpisy(prev => {
-      const today = prev[todayKey] || [];
-      if (today.find(e => e.itemId === item.id)) return prev; // už existuje
-      return { ...prev, [todayKey]: [...today, { id: 'o' + Date.now(), itemId: item.id, name: item.name, unit: item.unit, qty: '' }] };
+      const d = getDayData(todayKey);
+      if (d.entries.find(e => e.itemId === item.id)) return prev;
+      return { ...prev, [todayKey]: { entries: [...d.entries, { id: 'o' + Date.now(), itemId: item.id, name: item.name, unit: item.unit, qty: '', reason: 'Spotreba' }], note: d.note } };
     });
     setOdpisySearch('');
   };
-  const updateOdpisQty = (dayKey, id, qty) => setOdpisy(prev => ({ ...prev, [dayKey]: (prev[dayKey]||[]).map(e => e.id === id ? { ...e, qty } : e) }));
-  const removeOdpis   = (dayKey, id)  => setOdpisy(prev => ({ ...prev, [dayKey]: (prev[dayKey]||[]).filter(e => e.id !== id) }));
+  const updateOdpisQty    = (key, id, qty)    => setOdpisy(prev => { const d = getDayData(key); return { ...prev, [key]: { ...d, entries: d.entries.map(e => e.id === id ? { ...e, qty }    : e) } }; });
+  const updateOdpisReason = (key, id, reason) => setOdpisy(prev => { const d = getDayData(key); return { ...prev, [key]: { ...d, entries: d.entries.map(e => e.id === id ? { ...e, reason } : e) } }; });
+  const removeOdpis       = (key, id)         => setOdpisy(prev => { const d = getDayData(key); return { ...prev, [key]: { ...d, entries: d.entries.filter(e => e.id !== id) } }; });
 
   const parseQty = (val) => parseFloat((val || '').toString().replace(',', '.')) || 0;
 
   const getMonthSummary = (year, month) => {
     const prefix = `${year}-${String(month + 1).padStart(2, '0')}`;
     const map = {};
-    Object.entries(odpisy).forEach(([date, entries]) => {
+    Object.entries(odpisy).forEach(([date, day]) => {
       if (!date.startsWith(prefix)) return;
+      const entries = Array.isArray(day) ? day : (day.entries || []);
       entries.forEach(e => {
         const num = parseQty(e.qty);
         if (!e.qty || num === 0) return;
@@ -705,17 +715,16 @@ export default function App() {
       table{width:100%;border-collapse:collapse;font-size:14px}
       th{background:#f3e8d0;padding:10px 12px;text-align:left;border-bottom:2px solid #d4a060;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
       td{padding:10px 12px;border-bottom:1px solid #f0ebe3}
-      tr:last-child td{border-bottom:2px solid #d4a060;font-weight:bold}
       .footer{margin-top:24px;font-size:11px;color:#a09080}
       @media print{body{padding:16px}button{display:none}}
     </style></head><body>
     <h1>Odpisy — ${mName} ${year}</h1>
-    <div class="meta">Pobočka: <strong>${branch}</strong> &nbsp;|&nbsp; Vygenerované: ${new Date().toLocaleDateString('sk-SK', { day:'2-digit', month:'long', year:'numeric' })}</div>
+    <div class="meta">Pobočka: <strong>${branch}</strong> &nbsp;|&nbsp; Zodpovedný: <strong>${odpisyAuthor || 'Neuvedené'}</strong> &nbsp;|&nbsp; Vygenerované: ${new Date().toLocaleDateString('sk-SK', { day:'2-digit', month:'long', year:'numeric' })}</div>
     <table>
       <tr><th>#</th><th>Produkt</th><th style="text-align:right">Množstvo</th><th>Jednotka</th></tr>
       ${rows}
-      <tr><td colspan="2" style="text-align:right;color:#6b5d4f;font-size:12px">SPOLU POLOŽIEK: ${summary.length}</td><td></td><td></td></tr>
     </table>
+    <div style="margin-top:12px;text-align:right;font-size:12px;color:#6b5d4f">Spolu položiek: <strong>${summary.length}</strong></div>
     <div class="footer">Foxford — automaticky vygenerované z aplikácie</div>
     <script>window.onload=()=>setTimeout(()=>window.print(),300)</script>
     </body></html>`;
@@ -1480,17 +1489,39 @@ export default function App() {
 
         {/* ── ODPISY ───────────────────────────────────────────────────────── */}
         {tab === 'odpisy' && (() => {
-          const todayEntries = odpisy[todayKey] || [];
+          const todayData    = getDayData(todayKey);
+          const todayEntries = todayData.entries;
+          const yesterdayData = getDayData(yesterdayKey);
           const allItems = invData.flatMap(g => g.items);
           const searchResults = odpisySearch.trim()
             ? allItems.filter(i => strip(i.name).includes(strip(odpisySearch)) && !todayEntries.find(e => e.itemId === i.id)).slice(0, 8)
             : [];
           const { year, month } = odpisySummaryDate;
           const summary = getMonthSummary(year, month);
+          const dovorColors = { 'Spotreba': C.ok, 'Pokazené': C.err, 'Rozbité': '#d07010', 'Ochutnávka': '#7a60b0' };
           return (
             <>
-              {/* Dnešné odpisy */}
+              {/* Meno zodpovedného */}
               <Glass accent style={{ padding:'14px 16px' }}>
+                <Tag text="Zodpovedná osoba" />
+                <Inp type="text" placeholder="Tvoje meno…" value={odpisyAuthor}
+                  onChange={e => setOdpisyAuthor(e.target.value)}
+                  style={{ marginTop:7, borderColor: odpisyAuthor ? C.ok : C.border }} />
+              </Glass>
+
+              {/* Odkaz od kolegu včera */}
+              {yesterdayData.note && (
+                <div style={{ margin:'0 0 8px', padding:'12px 16px', borderRadius:14, background:`${C.goldDim}`, border:`1px solid ${C.goldLine}`, display:'flex', gap:10, alignItems:'flex-start' }}>
+                  <span style={{ fontSize:16, flexShrink:0 }}>💬</span>
+                  <div>
+                    <div style={{ fontSize:10, fontWeight:700, color:C.gold, letterSpacing:.5, textTransform:'uppercase', marginBottom:3 }}>Odkaz od včera</div>
+                    <div style={{ fontSize:13, color:C.text, lineHeight:1.5 }}>{yesterdayData.note}</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Dnešné odpisy */}
+              <Glass style={{ padding:'14px 16px' }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
                   <Tag text="Dnešné odpisy" />
                   <span style={{ fontSize:11, color:C.muted }}>
@@ -1502,12 +1533,9 @@ export default function App() {
                 <div style={{ position:'relative', marginBottom:10 }}>
                   <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', borderRadius:12, border:`1px solid ${C.goldLine}`, background:'rgba(255,255,255,0.85)' }}>
                     <span style={{ color:C.muted, fontSize:14 }}>⌕</span>
-                    <input
-                      placeholder="Hľadať a pridať produkt…"
-                      value={odpisySearch}
+                    <input placeholder="Hľadať a pridať produkt…" value={odpisySearch}
                       onChange={e => setOdpisySearch(e.target.value)}
-                      style={{ flex:1, border:'none', outline:'none', background:'transparent', fontSize:14, color:C.text, fontFamily:'inherit' }}
-                    />
+                      style={{ flex:1, border:'none', outline:'none', background:'transparent', fontSize:14, color:C.text, fontFamily:'inherit' }} />
                     {odpisySearch && <span onClick={() => setOdpisySearch('')} style={{ color:C.muted, fontSize:14, cursor:'pointer' }}>✕</span>}
                   </div>
                   {searchResults.length > 0 && (
@@ -1528,9 +1556,10 @@ export default function App() {
                   <div style={{ textAlign:'center', color:C.muted, fontSize:13, padding:'16px 0' }}>
                     Zatiaľ žiadne odpisy na dnes — vyhľadaj produkt vyššie
                   </div>
-                ) : (
-                  todayEntries.map(entry => (
-                    <div key={entry.id} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+                ) : todayEntries.map(entry => (
+                  <div key={entry.id} style={{ marginBottom:10, paddingBottom:10, borderBottom:`1px solid ${C.border}` }}>
+                    {/* Riadok: názov + qty + jednotka + zmazať */}
+                    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
                       <div style={{ flex:1, fontSize:13, fontWeight:600, color:C.text, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{entry.name}</div>
                       <Inp type="text" inputMode="decimal" placeholder="0"
                         value={entry.qty}
@@ -1541,8 +1570,41 @@ export default function App() {
                       <span style={{ fontSize:11, fontWeight:700, color:C.gold, border:`1px solid ${C.goldLine}`, padding:'3px 8px', borderRadius:8, flexShrink:0 }}>{entry.unit}</span>
                       <span onClick={() => removeOdpis(todayKey, entry.id)} style={{ color:C.muted, fontSize:16, cursor:'pointer', flexShrink:0, lineHeight:1 }}>✕</span>
                     </div>
-                  ))
-                )}
+                    {/* Dôvod odpisu — chips */}
+                    <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
+                      {ODPISOVY_DOVODY.map(d => {
+                        const active = (entry.reason || 'Spotreba') === d;
+                        const col = dovorColors[d];
+                        return (
+                          <button key={d} onClick={() => updateOdpisReason(todayKey, entry.id, d)} style={{
+                            padding:'3px 10px', borderRadius:20, border:`1px solid ${active ? col : C.border}`,
+                            background: active ? hexToRgba(col, 0.12) : 'transparent',
+                            color: active ? col : C.muted,
+                            fontSize:10, fontWeight: active ? 700 : 500, cursor:'pointer', fontFamily:'inherit',
+                            transition:'all .15s',
+                          }}>{d}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Odkaz kolegovi */}
+                <div style={{ marginTop: todayEntries.length > 0 ? 10 : 4 }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:C.sub, letterSpacing:.5, textTransform:'uppercase', marginBottom:6 }}>💬 Odkaz kolegovi</div>
+                  <textarea
+                    placeholder="Zanechaj odkaz pre ďalšiu smenu…"
+                    value={todayData.note}
+                    onChange={e => setDayNote(todayKey, e.target.value)}
+                    rows={2}
+                    style={{
+                      width:'100%', padding:'10px 12px', borderRadius:12,
+                      border:`1px solid ${todayData.note ? C.goldLine : C.border}`,
+                      background:'rgba(255,255,255,0.85)', color:C.text,
+                      fontSize:13, lineHeight:1.5, fontFamily:'inherit',
+                      outline:'none', resize:'none', boxSizing:'border-box',
+                    }} />
+                </div>
               </Glass>
 
               {/* Mesačný súhrn */}
