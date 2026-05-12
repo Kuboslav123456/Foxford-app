@@ -1605,6 +1605,31 @@ export default function App() {
                       outline:'none', resize:'none', boxSizing:'border-box',
                     }} />
                 </div>
+
+                {/* Odoslať do tabuľky */}
+                {todayEntries.length > 0 && (
+                  <button onClick={() => {
+                    if (!odpisyAuthor.trim()) { alert('Zadaj najprv meno zodpovednej osoby.'); return; }
+                    const filled = todayEntries.filter(e => e.qty);
+                    if (filled.length === 0) { alert('Žiadne položky s vyplneným množstvom.'); return; }
+                    sendToSheets('odpis_daily', {
+                      date: now.toLocaleDateString('sk-SK'),
+                      author: odpisyAuthor,
+                      note: todayData.note || '',
+                      entries: filled.map(e => ({ name: e.name, qty: parseQty(e.qty), unit: e.unit, reason: e.reason || 'Spotreba' })),
+                    });
+                    alert('✓ Odoslané do tabuľky!');
+                  }} style={{
+                    width:'100%', marginTop:14, padding:'13px', borderRadius:14,
+                    background:C.gold, border:'none', color:'#fff',
+                    fontWeight:800, fontSize:14, letterSpacing:.5,
+                    cursor:'pointer', fontFamily:'inherit',
+                    display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+                    boxShadow:`0 4px 18px rgba(184,112,32,0.35)`,
+                  }}>
+                    <span>📤</span> Odoslať do tabuľky
+                  </button>
+                )}
               </Glass>
 
               {/* Mesačný súhrn */}
