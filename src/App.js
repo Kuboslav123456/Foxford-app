@@ -701,7 +701,6 @@ export default function App() {
   const addOdpis = (item) => {
     setOdpisy(prev => {
       const d = getDayData(todayKey);
-      if (d.entries.find(e => e.itemId === item.id)) return prev;
       return { ...prev, [todayKey]: { entries: [...d.entries, { id: 'o' + Date.now(), itemId: item.id, name: item.name, unit: item.unit, qty: '', reason: 'Spotreba' }], note: d.note } };
     });
     setOdpisySearch('');
