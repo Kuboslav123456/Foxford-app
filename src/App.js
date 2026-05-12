@@ -1520,7 +1520,7 @@ export default function App() {
           const yesterdayData = getDayData(yesterdayKey);
           const allItems = invData.flatMap(g => g.items);
           const searchResults = odpisySearch.trim()
-            ? allItems.filter(i => strip(i.name).includes(strip(odpisySearch)) && !todayEntries.find(e => e.itemId === i.id)).slice(0, 8)
+            ? allItems.filter(i => strip(i.name).includes(strip(odpisySearch))).slice(0, 8)
             : [];
           const { year, month } = odpisySummaryDate;
           const summary = getMonthSummary(year, month);
