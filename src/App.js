@@ -449,12 +449,14 @@ export default function App() {
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
   }, []);
 
-  // ── MIDNIGHT AUTO-RESET for denné ──────────────────────────────────────────
+  // ── MIDNIGHT AUTO-RESET + AUTO-SEND ODPISOV ───────────────────────────────
   useEffect(() => {
     const now = new Date();
+    const endingDayKey = now.toISOString().slice(0, 10); // deň ktorý sa o polnoci ukončí
     const midnight = new Date(); midnight.setHours(24, 0, 0, 0);
     const ms = midnight - now;
     const timer = setTimeout(() => {
+      // Reset denných úloh
       setTasks(prev => ({ ...prev, denné: prev.denné.map(t => ({ ...t, done: false, time: null, issue: null })) }));
       setInspectors(prev => ({ ...prev, denné: '' }));
       setBatchTime(null);
@@ -463,6 +465,31 @@ export default function App() {
       setControllerName('');
       localStorage.setItem('foxford-last-reset-date', new Date().toDateString());
       localStorage.setItem('foxford-haccp-date', '');
+
+      // Auto-odoslanie odpisov za končiaci deň
+      try {
+        const savedOdpisy = JSON.parse(localStorage.getItem('foxford-odpisy')) || {};
+        const rawDay = savedOdpisy[endingDayKey];
+        const dayData = !rawDay ? null : Array.isArray(rawDay) ? { entries: rawDay, note: '' } : rawDay;
+        const filled = (dayData?.entries || []).filter(e => e.qty);
+        if (filled.length > 0) {
+          const savedBranch = localStorage.getItem('foxford-branch') || '';
+          const savedAuthor = localStorage.getItem('foxford-odpisy-author') || '';
+          const url = BRANCHES.find(b => b.name === savedBranch)?.url || BRANCHES[0].url;
+          fetch(url, {
+            method: 'POST', mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'odpis_daily',
+              date: new Date(endingDayKey).toLocaleDateString('sk-SK'),
+              author: savedAuthor,
+              note: dayData.note || '',
+              entries: filled.map(e => ({ name: e.name, qty: parseFloat((e.qty||'').toString().replace(',','.')) || 0, unit: e.unit, reason: e.reason || 'Spotreba' })),
+              _token: process.env.REACT_APP_GAS_TOKEN,
+            }),
+          }).catch(() => {});
+        }
+      } catch (_) {}
     }, ms);
     return () => clearTimeout(timer);
   }, []);
@@ -1606,29 +1633,12 @@ export default function App() {
                     }} />
                 </div>
 
-                {/* Odoslať do tabuľky */}
+                {/* Info o auto-odoslaní */}
                 {todayEntries.length > 0 && (
-                  <button onClick={() => {
-                    if (!odpisyAuthor.trim()) { alert('Zadaj najprv meno zodpovednej osoby.'); return; }
-                    const filled = todayEntries.filter(e => e.qty);
-                    if (filled.length === 0) { alert('Žiadne položky s vyplneným množstvom.'); return; }
-                    sendToSheets('odpis_daily', {
-                      date: now.toLocaleDateString('sk-SK'),
-                      author: odpisyAuthor,
-                      note: todayData.note || '',
-                      entries: filled.map(e => ({ name: e.name, qty: parseQty(e.qty), unit: e.unit, reason: e.reason || 'Spotreba' })),
-                    });
-                    alert('✓ Odoslané do tabuľky!');
-                  }} style={{
-                    width:'100%', marginTop:14, padding:'13px', borderRadius:14,
-                    background:C.gold, border:'none', color:'#fff',
-                    fontWeight:800, fontSize:14, letterSpacing:.5,
-                    cursor:'pointer', fontFamily:'inherit',
-                    display:'flex', alignItems:'center', justifyContent:'center', gap:8,
-                    boxShadow:`0 4px 18px rgba(184,112,32,0.35)`,
-                  }}>
-                    <span>📤</span> Odoslať do tabuľky
-                  </button>
+                  <div style={{ marginTop:14, padding:'10px 14px', borderRadius:12, background:C.okDim, border:`1px solid ${C.ok}44`, display:'flex', alignItems:'center', gap:8 }}>
+                    <span style={{ fontSize:14 }}>🌙</span>
+                    <span style={{ fontSize:11, color:C.ok, fontWeight:600, lineHeight:1.4 }}>Odpisy sa automaticky odošlú do tabuľky o polnoci</span>
+                  </div>
                 )}
               </Glass>
 
