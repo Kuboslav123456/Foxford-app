@@ -428,6 +428,9 @@ export default function App() {
   const [batchElapsedMins, setBatchElapsedMins] = useState(null);
   const [now, setNow] = useState(new Date());
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const [odpisy, setOdpisy] = useState(() => JSON.parse(localStorage.getItem('foxford-odpisy')) || {});
+  const [odpisySearch, setOdpisySearch] = useState('');
+  const [odpisySummaryDate, setOdpisySummaryDate] = useState(() => { const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() }; });
 
   // ── DYNAMICKÁ FARBA POBOČKY ───────────────────────────────────────────────
   const branchGold = (branch && BRANCH_COLORS[branch]) || BASE_C.gold;
@@ -482,8 +485,9 @@ export default function App() {
     localStorage.setItem('foxford-inventory-notes', JSON.stringify(invNotes));
     localStorage.setItem('foxford-notes',           JSON.stringify(notes));
     localStorage.setItem('foxford-notif-settings',  JSON.stringify(notifSettings));
+    localStorage.setItem('foxford-odpisy',          JSON.stringify(odpisy));
     setSavedAt(new Date().toLocaleTimeString('sk-SK', { hour:'2-digit', minute:'2-digit' }));
-  }, [tasks, batchTime, inspectors, tempFields, invData, invQty, invNotes, notes, notifSettings]);
+  }, [tasks, batchTime, inspectors, tempFields, invData, invQty, invNotes, notes, notifSettings, odpisy]);
 
   const scriptUrl = BRANCHES.find(b => b.name === branch)?.url || BRANCHES[0].url;
 
@@ -655,6 +659,66 @@ export default function App() {
   const updateQtyRow = (itemId, rowId, field, val) => setInvQty(q => ({ ...q, [itemId]: (q[itemId]||[]).map(r => r.id === rowId ? { ...r, [field]: val } : r) }));
   const qtyTotal     = (itemId) => (invQty[itemId]||[]).reduce((s, r) => s + (parseFloat(r.qty)||0), 0);
   const needInsp = () => { if (!inspectors[subTab].trim()) { doShake(setShakeInsp, inspRef); return false; } return true; };
+
+  // ── ODPISY HELPERS ───────────────────────────────────────────────────────
+  const todayKey = new Date().toISOString().slice(0, 10);
+
+  const addOdpis = (item) => {
+    setOdpisy(prev => {
+      const today = prev[todayKey] || [];
+      if (today.find(e => e.itemId === item.id)) return prev; // už existuje
+      return { ...prev, [todayKey]: [...today, { id: 'o' + Date.now(), itemId: item.id, name: item.name, unit: item.unit, qty: '' }] };
+    });
+    setOdpisySearch('');
+  };
+  const updateOdpisQty = (dayKey, id, qty) => setOdpisy(prev => ({ ...prev, [dayKey]: (prev[dayKey]||[]).map(e => e.id === id ? { ...e, qty } : e) }));
+  const removeOdpis   = (dayKey, id)  => setOdpisy(prev => ({ ...prev, [dayKey]: (prev[dayKey]||[]).filter(e => e.id !== id) }));
+
+  const getMonthSummary = (year, month) => {
+    const prefix = `${year}-${String(month + 1).padStart(2, '0')}`;
+    const map = {};
+    Object.entries(odpisy).forEach(([date, entries]) => {
+      if (!date.startsWith(prefix)) return;
+      entries.forEach(e => {
+        if (!e.qty || parseFloat(e.qty) === 0) return;
+        if (!map[e.itemId]) map[e.itemId] = { name: e.name, unit: e.unit, total: 0 };
+        map[e.itemId].total = Math.round((map[e.itemId].total + (parseFloat(e.qty) || 0)) * 1000) / 1000;
+      });
+    });
+    return Object.values(map).filter(x => x.total > 0).sort((a, b) => a.name.localeCompare(b.name));
+  };
+
+  const exportOdpisyPDF = () => {
+    const { year, month } = odpisySummaryDate;
+    const summary = getMonthSummary(year, month);
+    const mName = MONTHS[month];
+    if (summary.length === 0) { alert('Žiadne odpisy pre ' + mName + ' ' + year); return; }
+    const rows = summary.map((r, i) => `<tr><td style="color:#a09080;text-align:center">${i + 1}</td><td>${r.name}</td><td style="font-weight:700;text-align:right">${r.total}</td><td style="color:#6b5d4f">${r.unit}</td></tr>`).join('');
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Odpisy ${mName} ${year}</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:32px;color:#1e1608;max-width:700px;margin:0 auto}
+      h1{font-size:22px;margin-bottom:4px;color:#b87020}
+      .meta{font-size:12px;color:#6b5d4f;margin-bottom:28px;border-bottom:1px solid #e8e0d4;padding-bottom:12px}
+      table{width:100%;border-collapse:collapse;font-size:14px}
+      th{background:#f3e8d0;padding:10px 12px;text-align:left;border-bottom:2px solid #d4a060;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+      td{padding:10px 12px;border-bottom:1px solid #f0ebe3}
+      tr:last-child td{border-bottom:2px solid #d4a060;font-weight:bold}
+      .footer{margin-top:24px;font-size:11px;color:#a09080}
+      @media print{body{padding:16px}button{display:none}}
+    </style></head><body>
+    <h1>Odpisy — ${mName} ${year}</h1>
+    <div class="meta">Pobočka: <strong>${branch}</strong> &nbsp;|&nbsp; Vygenerované: ${new Date().toLocaleDateString('sk-SK', { day:'2-digit', month:'long', year:'numeric' })}</div>
+    <table>
+      <tr><th>#</th><th>Produkt</th><th style="text-align:right">Množstvo</th><th>Jednotka</th></tr>
+      ${rows}
+      <tr><td colspan="2" style="text-align:right;color:#6b5d4f;font-size:12px">SPOLU POLOŽIEK: ${summary.length}</td><td></td><td></td></tr>
+    </table>
+    <div class="footer">Foxford — automaticky vygenerované z aplikácie</div>
+    <script>window.onload=()=>setTimeout(()=>window.print(),300)</script>
+    </body></html>`;
+    const w = window.open('', '_blank');
+    if (w) { w.document.write(html); w.document.close(); }
+  };
 
   const pct = () => {
     const t = tasks[subTab] || [];
@@ -1394,6 +1458,7 @@ export default function App() {
 
             <div style={{ display: isTablet && notes.length > 1 ? 'grid' : 'block', gridTemplateColumns: isDesktop ? '1fr 1fr 1fr' : '1fr 1fr', gap: 8 }}>
             {notes.map(n => (
+
               <Glass key={n.id} style={{ padding:'14px 16px', borderLeft:`2px solid ${C.goldLine}`, marginBottom: isTablet ? 0 : 8 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
                   <div style={{ fontSize:14, color:C.text, lineHeight:1.6, flex:1 }}>{n.text}</div>
@@ -1409,6 +1474,128 @@ export default function App() {
             </div>
           </>
         )}
+
+        {/* ── ODPISY ───────────────────────────────────────────────────────── */}
+        {tab === 'odpisy' && (() => {
+          const todayEntries = odpisy[todayKey] || [];
+          const allItems = invData.flatMap(g => g.items);
+          const searchResults = odpisySearch.trim()
+            ? allItems.filter(i => strip(i.name).includes(strip(odpisySearch)) && !todayEntries.find(e => e.itemId === i.id)).slice(0, 8)
+            : [];
+          const { year, month } = odpisySummaryDate;
+          const summary = getMonthSummary(year, month);
+          return (
+            <>
+              {/* Dnešné odpisy */}
+              <Glass accent style={{ padding:'14px 16px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+                  <Tag text="Dnešné odpisy" />
+                  <span style={{ fontSize:11, color:C.muted }}>
+                    {now.toLocaleDateString('sk-SK', { weekday:'long', day:'numeric', month:'long' })}
+                  </span>
+                </div>
+
+                {/* Vyhľadávanie produktu */}
+                <div style={{ position:'relative', marginBottom:10 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', borderRadius:12, border:`1px solid ${C.goldLine}`, background:'rgba(255,255,255,0.85)' }}>
+                    <span style={{ color:C.muted, fontSize:14 }}>⌕</span>
+                    <input
+                      placeholder="Hľadať a pridať produkt…"
+                      value={odpisySearch}
+                      onChange={e => setOdpisySearch(e.target.value)}
+                      style={{ flex:1, border:'none', outline:'none', background:'transparent', fontSize:14, color:C.text, fontFamily:'inherit' }}
+                    />
+                    {odpisySearch && <span onClick={() => setOdpisySearch('')} style={{ color:C.muted, fontSize:14, cursor:'pointer' }}>✕</span>}
+                  </div>
+                  {searchResults.length > 0 && (
+                    <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:20, background:C.modal, border:`1px solid ${C.border}`, borderRadius:12, boxShadow:'0 8px 24px rgba(0,0,0,0.12)', marginTop:4, overflow:'hidden' }}>
+                      {searchResults.map(item => (
+                        <div key={item.id} onClick={() => addOdpis(item)}
+                          style={{ padding:'12px 16px', display:'flex', justifyContent:'space-between', alignItems:'center', cursor:'pointer', borderBottom:`1px solid ${C.border}` }}>
+                          <span style={{ fontSize:14, color:C.text }}>{item.name}</span>
+                          <span style={{ fontSize:11, color:C.gold, fontWeight:700, padding:'2px 8px', border:`1px solid ${C.goldLine}`, borderRadius:8 }}>{item.unit}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Zoznam dnešných odpisov */}
+                {todayEntries.length === 0 ? (
+                  <div style={{ textAlign:'center', color:C.muted, fontSize:13, padding:'16px 0' }}>
+                    Zatiaľ žiadne odpisy na dnes — vyhľadaj produkt vyššie
+                  </div>
+                ) : (
+                  todayEntries.map(entry => (
+                    <div key={entry.id} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+                      <div style={{ flex:1, fontSize:13, fontWeight:600, color:C.text, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{entry.name}</div>
+                      <Inp type="text" inputMode="decimal" placeholder="0"
+                        value={entry.qty}
+                        onChange={e => updateOdpisQty(todayKey, entry.id, e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
+                        enterKeyHint="done"
+                        style={{ width:70, padding:'8px', textAlign:'center', fontWeight:800, fontSize:14, flexShrink:0 }} />
+                      <span style={{ fontSize:11, fontWeight:700, color:C.gold, border:`1px solid ${C.goldLine}`, padding:'3px 8px', borderRadius:8, flexShrink:0 }}>{entry.unit}</span>
+                      <span onClick={() => removeOdpis(todayKey, entry.id)} style={{ color:C.muted, fontSize:16, cursor:'pointer', flexShrink:0, lineHeight:1 }}>✕</span>
+                    </div>
+                  ))
+                )}
+              </Glass>
+
+              {/* Mesačný súhrn */}
+              <Glass style={{ padding:'14px 16px', marginTop:8 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+                  <Tag text="Mesačný súhrn" />
+                  <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <span onClick={() => setOdpisySummaryDate(prev => {
+                      const m = prev.month === 0 ? 11 : prev.month - 1;
+                      const y = prev.month === 0 ? prev.year - 1 : prev.year;
+                      return { year: y, month: m };
+                    })} style={{ color:C.gold, cursor:'pointer', fontSize:16, padding:'0 4px' }}>◀</span>
+                    <span style={{ fontSize:12, fontWeight:700, color:C.sub, minWidth:90, textAlign:'center' }}>{MONTHS[month]} {year}</span>
+                    <span onClick={() => setOdpisySummaryDate(prev => {
+                      const m = prev.month === 11 ? 0 : prev.month + 1;
+                      const y = prev.month === 11 ? prev.year + 1 : prev.year;
+                      return { year: y, month: m };
+                    })} style={{ color:C.gold, cursor:'pointer', fontSize:16, padding:'0 4px' }}>▶</span>
+                  </div>
+                </div>
+
+                {summary.length === 0 ? (
+                  <div style={{ textAlign:'center', color:C.muted, fontSize:13, padding:'16px 0' }}>
+                    Žiadne odpisy pre {MONTHS[month]} {year}
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display:'grid', gridTemplateColumns: isTablet ? '1fr 1fr' : '1fr', gap: isTablet ? '0 24px' : 0 }}>
+                      {summary.map((row, i) => (
+                        <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 0', borderBottom:`1px solid ${C.border}` }}>
+                          <span style={{ fontSize:13, color:C.text, flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginRight:8 }}>{row.name}</span>
+                          <div style={{ display:'flex', alignItems:'baseline', gap:5, flexShrink:0 }}>
+                            <span style={{ fontSize:15, fontWeight:800, color:C.gold }}>{row.total}</span>
+                            <span style={{ fontSize:11, color:C.muted }}>{row.unit}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ marginTop:8, padding:'8px 0', borderTop:`1px solid ${C.border}`, fontSize:11, color:C.muted, textAlign:'right' }}>
+                      {summary.length} položiek
+                    </div>
+                    <button onClick={exportOdpisyPDF} style={{
+                      width:'100%', marginTop:10, padding:'13px', borderRadius:14,
+                      background:C.gold, border:'none', color:'#fff',
+                      fontWeight:800, fontSize:14, letterSpacing:.5, cursor:'pointer', fontFamily:'inherit',
+                      display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+                      boxShadow:`0 4px 18px rgba(184,112,32,0.35)`,
+                    }}>
+                      <span>📄</span> Exportovať do PDF
+                    </button>
+                  </>
+                )}
+              </Glass>
+            </>
+          );
+        })()}
       </div>
 
       {/* ── FLOATING NAV ──────────────────────────────────────────────────────── */}
@@ -1427,6 +1614,7 @@ export default function App() {
           { id:'tasks',     emoji:'✅',  label:'Úlohy' },
           { id:'temps',     emoji:'🌡️',  label:'Teploty' },
           { id:'inventory', emoji:'📦',  label:'Sklad' },
+          { id:'odpisy',    emoji:'📝',  label:'Odpisy' },
           { id:'notes',     emoji:'💬',  label:'Správy' },
         ].map(({ id, emoji, label }) => {
           const hasAlert = id === 'temps' && lastHaccpDate !== new Date().toDateString();
