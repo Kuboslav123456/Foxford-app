@@ -329,6 +329,12 @@ export default function App() {
   const [confirmUndo, setConfirmUndo] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [lastHaccpDate, setLastHaccpDate] = useState(localStorage.getItem('foxford-haccp-date') || '');
+  const [lastHaccpDateVecerne, setLastHaccpDateVecerne] = useState(localStorage.getItem('foxford-haccp-date-vecerne') || '');
+  const [haccpShift, setHaccpShift] = useState('ranné');
+  const [tempsVecerne, setTempsVecerne] = useState(() => {
+    const fields = JSON.parse(localStorage.getItem('foxford-temp-fields')) || INIT_TEMP_FIELDS;
+    return fields.reduce((a, f) => ({ ...a, [f.key]: '' }), {});
+  });
   const [invSearch, setInvSearch] = useState('');
 
   const timerRef = useRef(null);
@@ -461,10 +467,13 @@ export default function App() {
       setInspectors(prev => ({ ...prev, denné: '' }));
       setBatchTime(null);
       setLastHaccpDate('');
+      setLastHaccpDateVecerne('');
       setTemps(prev => Object.keys(prev).reduce((a, k) => ({ ...a, [k]: '' }), {}));
+      setTempsVecerne(prev => Object.keys(prev).reduce((a, k) => ({ ...a, [k]: '' }), {}));
       setControllerName('');
       localStorage.setItem('foxford-last-reset-date', new Date().toDateString());
       localStorage.setItem('foxford-haccp-date', '');
+      localStorage.setItem('foxford-haccp-date-vecerne', '');
 
       // Auto-odoslanie odpisov za končiaci deň
       try {
@@ -1099,7 +1108,11 @@ export default function App() {
         )}
 
         {/* ── TEMPS ────────────────────────────────────────────────────────── */}
-        {tab === 'temps' && (
+        {tab === 'temps' && (() => {
+          const activeTemps    = haccpShift === 'ranné' ? temps    : tempsVecerne;
+          const setActiveTemps = haccpShift === 'ranné' ? setTemps : setTempsVecerne;
+          const activeDone     = haccpShift === 'ranné' ? lastHaccpDate === new Date().toDateString() : lastHaccpDateVecerne === new Date().toDateString();
+          return (
           <>
             <Glass accent style={{ padding:'14px 16px' }}>
               <Tag text="Tvoje meno" />
@@ -1108,9 +1121,30 @@ export default function App() {
                 style={{ marginTop:7, borderColor: controllerName ? C.ok : C.border }} />
             </Glass>
 
+            {/* Prepínač zmeny */}
+            <div style={{ display:'flex', gap:8, padding:'0 2px' }}>
+              {['ranné', 'večerné'].map(shift => {
+                const shiftDone = shift === 'ranné' ? lastHaccpDate === new Date().toDateString() : lastHaccpDateVecerne === new Date().toDateString();
+                const isActive  = haccpShift === shift;
+                return (
+                  <button key={shift} onClick={() => setHaccpShift(shift)} style={{
+                    flex:1, padding:'11px 0', borderRadius:14, border:`1.5px solid ${isActive ? C.gold : C.border}`,
+                    background: isActive ? C.goldDim : 'rgba(255,255,255,0.7)',
+                    color: isActive ? C.gold : C.sub, fontWeight:700, fontSize:13,
+                    cursor:'pointer', fontFamily:'inherit', letterSpacing:.5,
+                    display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+                  }}>
+                    <span>{shift === 'ranné' ? '🌅' : '🌙'}</span>
+                    <span style={{ textTransform:'capitalize' }}>{shift}</span>
+                    {shiftDone && <span style={{ fontSize:11, color:C.ok }}>✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+
             <Glass style={{ padding:'14px 16px 16px' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
-                <span style={{ fontSize:12, fontWeight:700, letterSpacing:1, color:C.sub, textTransform:'uppercase' }}>HACCP — Teplotná kontrola</span>
+                <span style={{ fontSize:12, fontWeight:700, letterSpacing:1, color:C.sub, textTransform:'uppercase' }}>HACCP — {haccpShift === 'ranné' ? 'Ranná' : 'Večerná'} kontrola</span>
                 <div onClick={() => { if (showAddTemp) { setShowAddTemp(false); setNewTempLabel(''); setNewTempMax(''); } else { setConfirmAddTemp(true); } }}
                   style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer' }}>
                   {showAddTemp && <span style={{ fontSize:11, fontWeight:600, color:C.muted }}>Zrušiť</span>}
@@ -1135,13 +1169,14 @@ export default function App() {
                     : '';
                   setTempFields(prev => [{ key, label: newTempLabel.trim(), max: formattedMax }, ...prev]);
                   setTemps(prev => ({ ...prev, [key]: '' }));
+                  setTempsVecerne(prev => ({ ...prev, [key]: '' }));
                   setNewTempLabel(''); setNewTempMax(''); setShowAddTemp(false);
                 }} style={{ padding:'9px 16px', borderRadius:12, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:700, fontSize:13, cursor:'pointer', flexShrink:0, letterSpacing:.5 }}>Pridať</button>
               </div>}
 
               <div style={{ display: isTablet ? 'grid' : 'block', gridTemplateColumns: isDesktop ? '1fr 1fr 1fr' : '1fr 1fr', gap: 10 }}>
               {tempFields.map((field) => {
-                const val = temps[field.key] || '';
+                const val = activeTemps[field.key] || '';
                 const status = tempColor(field, val);
                 const accentColor = status === 'ok' ? C.ok : status === 'err' ? C.err : C.border;
                 return (
@@ -1156,8 +1191,8 @@ export default function App() {
                       </div>
                       <div style={{ position:'relative' }}>
                         <input type="text" inputMode="decimal" placeholder="0.0" value={val}
-                          onChange={e => { if (lastHaccpDate === new Date().toDateString()) return; setTemps(prev => ({ ...prev, [field.key]: e.target.value })); }}
-                          readOnly={lastHaccpDate === new Date().toDateString()}
+                          onChange={e => { if (activeDone) return; setActiveTemps(prev => ({ ...prev, [field.key]: e.target.value })); }}
+                          readOnly={activeDone}
                           style={{
                             width:'100%', padding:'10px 14px', borderRadius:12,
                             border:`1.5px solid ${accentColor}`,
@@ -1166,7 +1201,7 @@ export default function App() {
                             fontSize:18, fontWeight:800, textAlign:'center', letterSpacing:1,
                             outline:'none', boxSizing:'border-box', fontFamily:'inherit',
                             boxShadow: status ? `0 0 10px ${accentColor}22` : 'none',
-                            cursor: lastHaccpDate === new Date().toDateString() ? 'default' : 'text',
+                            cursor: activeDone ? 'default' : 'text',
                           }} />
                         {status && (
                           <div style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', fontSize:14 }}>
@@ -1180,9 +1215,9 @@ export default function App() {
               })}
               </div>
 
-              {lastHaccpDate === new Date().toDateString() ? (
+              {activeDone ? (
                 <div style={{ textAlign:'center', padding:'12px 0 4px', color:C.ok, fontSize:13, fontWeight:600 }}>
-                  ✓ Na dnes je všetko zaznamenané
+                  ✓ {haccpShift === 'ranné' ? 'Ranná' : 'Večerná'} kontrola zaznamenaná
                   <div style={{ fontSize:11, color:C.muted, marginTop:4, fontWeight:400 }}>🌙 Polia sa odomknú automaticky o polnoci</div>
                   <button onClick={() => setConfirmResetHaccp(true)} style={{ marginTop:12, background:'none', border:'none', color:C.muted, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit', textDecoration:'underline' }}>
                     Resetovať teraz
@@ -1194,14 +1229,20 @@ export default function App() {
                   setSending(true);
                   sendToSheets('haccp', {
                     date: new Date().toLocaleDateString('sk-SK'),
+                    shift: haccpShift,
                     podpis: controllerName || 'Anonym',
-                    readings: tempFields.map(f => ({ label: f.label, value: temps[f.key] || '', max: f.max })),
+                    readings: tempFields.map(f => ({ label: f.label, value: activeTemps[f.key] || '', max: f.max })),
                   });
                   setTimeout(() => {
                     setSending(false);
                     const today = new Date().toDateString();
-                    setLastHaccpDate(today);
-                    localStorage.setItem('foxford-haccp-date', today);
+                    if (haccpShift === 'ranné') {
+                      setLastHaccpDate(today);
+                      localStorage.setItem('foxford-haccp-date', today);
+                    } else {
+                      setLastHaccpDateVecerne(today);
+                      localStorage.setItem('foxford-haccp-date-vecerne', today);
+                    }
                     setCelebrateHaccp(true);
                   }, 900);
                 }} style={{
@@ -1212,12 +1253,13 @@ export default function App() {
                   opacity: sending ? .7 : 1,
                   boxShadow:`0 4px 18px rgba(184,112,32,0.35)`,
                 }}>
-                  {sending ? 'Odosielam…' : 'Odoslať kontrolu'}
+                  {sending ? 'Odosielam…' : `Odoslať ${haccpShift === 'ranné' ? 'rannú' : 'večernú'} kontrolu`}
                 </button>
               )}
             </Glass>
           </>
-        )}
+          );
+        })()}
 
         {/* ── INVENTORY ────────────────────────────────────────────────────── */}
         {tab === 'inventory' && (
@@ -1716,7 +1758,7 @@ export default function App() {
           { id:'odpisy',    emoji:'📝',  label:'Odpisy' },
           { id:'notes',     emoji:'💬',  label:'Správy' },
         ].map(({ id, emoji, label }) => {
-          const hasAlert = id === 'temps' && lastHaccpDate !== new Date().toDateString();
+          const hasAlert = id === 'temps' && (lastHaccpDate !== new Date().toDateString() || lastHaccpDateVecerne !== new Date().toDateString());
           const active = tab === id;
           return (
             <div key={id} onClick={() => setTab(id)} style={{
@@ -1823,10 +1865,16 @@ export default function App() {
             <div style={{ display:'flex', gap:10 }}>
               <button onMouseDown={() => setConfirmResetHaccp(false)} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>Zrušiť</button>
               <button onMouseDown={() => {
-                setLastHaccpDate('');
-                setTemps(tempFields.reduce((a, f) => ({ ...a, [f.key]: '' }), {}));
+                if (haccpShift === 'ranné') {
+                  setLastHaccpDate('');
+                  setTemps(tempFields.reduce((a, f) => ({ ...a, [f.key]: '' }), {}));
+                  localStorage.setItem('foxford-haccp-date', '');
+                } else {
+                  setLastHaccpDateVecerne('');
+                  setTempsVecerne(tempFields.reduce((a, f) => ({ ...a, [f.key]: '' }), {}));
+                  localStorage.setItem('foxford-haccp-date-vecerne', '');
+                }
                 setControllerName('');
-                localStorage.setItem('foxford-haccp-date', '');
                 setConfirmResetHaccp(false);
               }} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.err}44`, background:C.errDim, color:C.err, fontWeight:800, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>Áno, resetovať</button>
             </div>
