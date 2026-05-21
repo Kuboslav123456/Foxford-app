@@ -1064,6 +1064,7 @@ export default function App() {
                     onTouchStart={e => { longStart(t); onTouchStart(e,t.id); }}
                     onTouchMove={onTouchMove}
                     onTouchEnd={() => { longEnd(); onTouchEnd(t); }}
+                    onContextMenu={e => e.preventDefault()}
                     onClick={() => onTaskClick(t)}
                     style={{
                       position:'relative', zIndex:2,
@@ -1071,6 +1072,7 @@ export default function App() {
                       display:'flex', alignItems:'center', gap:12, padding:'13px 12px',
                       background: t.done ? C.okDim : t.issue ? C.errDim : t.urgent ? 'rgba(232,114,114,0.07)' : C.panelHov,
                       borderRadius:12,
+                      userSelect:'none', WebkitUserSelect:'none',
                       border:`1px solid ${t.done ? C.ok+'44' : t.issue ? C.err+'44' : t.urgent ? C.err+'55' : C.border}`,
                       cursor:'pointer', userSelect:'none',
                     }}>
