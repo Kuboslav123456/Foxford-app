@@ -5,6 +5,15 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* PWA: zakázať výber textu globálne — zabraňuje nechtiacemu označeniu pri long-press */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Výber textu ponechať funkčný v textových poliach */
+input, textarea, [contenteditable] {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 code {
