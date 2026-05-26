@@ -1327,12 +1327,13 @@ export default function App() {
                           <span onClick={() => setConfirmRemoveTemp(field)} style={{ color:C.muted, fontSize:12, cursor:'pointer', lineHeight:1 }}>✕</span>
                         </div>
                       </div>
-                      <div style={{ position:'relative' }}
+                      <div style={{ position:'relative', cursor: activeDone ? 'pointer' : 'auto' }}
+                        onPointerDown={e => { if (activeDone) { e.preventDefault(); showToast(`✓ ${haccpShift === 'ranné' ? 'Ranná' : 'Večerná'} kontrola je už zaznamenaná — odomkne sa o polnoci`); } }}
                         onClick={() => { if (activeDone) showToast(`✓ ${haccpShift === 'ranné' ? 'Ranná' : 'Večerná'} kontrola je už zaznamenaná — odomkne sa o polnoci`); }}>
                         <input type="text" inputMode="decimal" placeholder="0.0" value={val}
-                          onFocus={e => { if (activeDone) e.target.blur(); }}
                           onChange={e => { if (activeDone) return; setActiveTemps(prev => ({ ...prev, [field.key]: e.target.value })); }}
                           readOnly={activeDone}
+                          tabIndex={activeDone ? -1 : 0}
                           style={{
                             width:'100%', padding:'10px 14px', borderRadius:12,
                             border:`1.5px solid ${accentColor}`,
@@ -1341,7 +1342,8 @@ export default function App() {
                             fontSize:18, fontWeight:800, textAlign:'center', letterSpacing:1,
                             outline:'none', boxSizing:'border-box', fontFamily:'inherit',
                             boxShadow: status ? `0 0 10px ${accentColor}22` : 'none',
-                            cursor: activeDone ? 'default' : 'text',
+                            cursor: activeDone ? 'pointer' : 'text',
+                            pointerEvents: activeDone ? 'none' : 'auto',
                           }} />
                         {status && (
                           <div style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', fontSize:14 }}>
