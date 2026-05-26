@@ -353,14 +353,12 @@ export default function App() {
     const parsed = JSON.parse(saved);
     if (last !== today) {
       localStorage.setItem('foxford-last-reset-date', today);
-      localStorage.setItem('foxford-batch', '');
       return { ...parsed, denné: INIT_TASKS.denné };
     }
     return parsed;
   });
 
   const [inspectors, setInspectors] = useState(() => JSON.parse(localStorage.getItem('foxford-inspectors')) || { denné: '', víkendové: '', mesačné: '' });
-  const [batchTime, setBatchTime]   = useState(localStorage.getItem('foxford-batch') || null);
   const [newTask, setNewTask]       = useState('');
   const [tempFields, setTempFields] = useState(() => JSON.parse(localStorage.getItem('foxford-temp-fields')) || INIT_TEMP_FIELDS);
   const [temps, setTemps]           = useState(() => {
@@ -431,7 +429,6 @@ export default function App() {
   const [bugSent, setBugSent] = useState(false);
   const [offlineQueue, setOfflineQueue] = useState(() => JSON.parse(localStorage.getItem('foxford-offline-queue')) || []);
   const [offlineFlushed, setOfflineFlushed] = useState(0);
-  const [batchElapsedMins, setBatchElapsedMins] = useState(null);
   const [now, setNow] = useState(new Date());
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [odpisy, setOdpisy] = useState(() => JSON.parse(localStorage.getItem('foxford-odpisy')) || {});
@@ -465,7 +462,6 @@ export default function App() {
       // Reset denných úloh
       setTasks(prev => ({ ...prev, denné: prev.denné.map(t => ({ ...t, done: false, time: null, issue: null })) }));
       setInspectors(prev => ({ ...prev, denné: '' }));
-      setBatchTime(null);
       setLastHaccpDate('');
       setLastHaccpDateVecerne('');
       setTemps(prev => Object.keys(prev).reduce((a, k) => ({ ...a, [k]: '' }), {}));
@@ -504,7 +500,6 @@ export default function App() {
   }, []);
   useEffect(() => {
     localStorage.setItem('foxford-tasks',           JSON.stringify(tasks));
-    localStorage.setItem('foxford-batch',           batchTime || '');
     localStorage.setItem('foxford-last-reset-date', new Date().toDateString());
     localStorage.setItem('foxford-inspectors',      JSON.stringify(inspectors));
     localStorage.setItem('foxford-temp-fields',     JSON.stringify(tempFields));
@@ -525,7 +520,7 @@ export default function App() {
     localStorage.setItem('foxford-odpisy',          JSON.stringify(odpisy));
     localStorage.setItem('foxford-odpisy-author',   odpisyAuthor);
     setSavedAt(new Date().toLocaleTimeString('sk-SK', { hour:'2-digit', minute:'2-digit' }));
-  }, [tasks, batchTime, inspectors, tempFields, invData, invQty, invNotes, notes, notifSettings, odpisy, odpisyAuthor]);
+  }, [tasks, inspectors, tempFields, invData, invQty, invNotes, notes, notifSettings, odpisy, odpisyAuthor]);
 
   const scriptUrl = BRANCHES.find(b => b.name === branch)?.url || BRANCHES[0].url;
 
@@ -575,21 +570,6 @@ export default function App() {
 
   const isTablet  = windowWidth >= 768;
   const isDesktop = windowWidth >= 1024;
-
-  // Batch timer — aktualizácia každú minútu
-  useEffect(() => {
-    const calc = () => {
-      if (!batchTime) { setBatchElapsedMins(null); return; }
-      const [hh, mm] = batchTime.split(':').map(Number);
-      const now = new Date();
-      const batch = new Date(); batch.setHours(hh, mm, 0, 0);
-      const diff = Math.floor((now - batch) / 60000);
-      setBatchElapsedMins(diff < 0 ? null : diff);
-    };
-    calc();
-    const iv = setInterval(calc, 60000);
-    return () => clearInterval(iv);
-  }, [batchTime]);
 
   // ── NOTIFICATIONS ─────────────────────────────────────────────────────────
   const showNotification = (title, body) => {
@@ -854,7 +834,6 @@ export default function App() {
     }
     setTasks({ ...tasks, [subTab]: tasks[subTab].map(t => ({ ...t, done: false, time: null, issue: null })) });
     setInspectors(prev => ({ ...prev, [subTab]: '' }));
-    if (subTab === 'denné') setBatchTime(null);
     setConfirmReset(false);
   };
 
@@ -966,36 +945,7 @@ export default function App() {
         </span>
       </div>
 
-      {/* ── GLOBAL BATCH BANNER ─────────────────────────────────────────────── */}
-      {(() => {
-        const elColor = batchElapsedMins === null ? C.muted
-          : batchElapsedMins < 120 ? C.ok
-          : batchElapsedMins < 240 ? '#d07010'
-          : C.err;
-        const elStr = batchElapsedMins === null ? null
-          : batchElapsedMins < 60 ? `${batchElapsedMins} min`
-          : `${Math.floor(batchElapsedMins/60)}h ${batchElapsedMins%60}m`;
-        return (
-          <div style={{ margin: isTablet ? '0 24px 14px' : '0 14px 14px', padding: isTablet ? '14px 22px' : '11px 16px', borderRadius:16, background:C.panel, border:`1px solid ${batchElapsedMins >= 240 ? C.err+'55' : C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-              <span style={{ fontSize:18 }}>☕</span>
-              <div>
-                <div style={{ fontSize:9, fontWeight:800, letterSpacing:1.2, color:C.muted, textTransform:'uppercase' }}>Aktuálny batch</div>
-                <div style={{ display:'flex', alignItems:'baseline', gap:8, marginTop:1 }}>
-                  <span style={{ fontSize:16, fontWeight:800, color: batchTime ? C.gold : C.muted, letterSpacing:.5 }}>{batchTime || '—'}</span>
-                  {elStr && <span style={{ fontSize:11, fontWeight:700, color:elColor }}>pred {elStr}</span>}
-                </div>
-              </div>
-            </div>
-            <button onClick={() => setBatchTime(new Date().toLocaleTimeString('sk-SK',{hour:'2-digit',minute:'2-digit'}))}
-              style={{ background:C.goldDim, border:`1px solid ${C.goldLine}`, color:C.gold, padding:'7px 14px', borderRadius:10, fontWeight:800, fontSize:10, letterSpacing:.8, cursor:'pointer', fontFamily:'inherit' }}>
-              NOVÝ
-            </button>
-          </div>
-        );
-      })()}
-
-      <div style={{ padding: isTablet ? '0 24px' : '0 14px' }}>
+<div style={{ padding: isTablet ? '0 24px' : '0 14px' }}>
 
         {/* ── TASKS ────────────────────────────────────────────────────────── */}
         {tab === 'tasks' && (
