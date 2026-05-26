@@ -327,6 +327,7 @@ export default function App() {
   const [expCat, setExpCat]     = useState(null);
   const [quickTask, setQuickTask] = useState(null);
   const [pressingId, setPressingId] = useState(null);
+  const [pressPos, setPressPos] = useState({ x: 0, y: 0 });
   const [confirmUndo, setConfirmUndo] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [lastHaccpDate, setLastHaccpDate] = useState(localStorage.getItem('foxford-haccp-date') || '');
@@ -804,8 +805,12 @@ export default function App() {
     if (allResolved(updated)) setTimeout(() => setCelebrate(true), 300);
   };
 
-  const longStart = (t) => {
+  const longStart = (t, e) => {
     longPress.current = false;
+    if (e) {
+      const pt = e.touches?.[0] || e;
+      if (pt.clientX != null) setPressPos({ x: pt.clientX, y: pt.clientY });
+    }
     setPressingId(t.id);
     timerRef.current = setTimeout(() => {
       if (swipeOff < 10) { longPress.current = true; setQuickTask(t); }
@@ -1018,8 +1023,8 @@ export default function App() {
                 <div key={t.id} style={{ position:'relative', overflow:'hidden', borderRadius:12, marginBottom:5, background: swipeId===t.id ? C.err+'33' : 'transparent' }}>
                   {swipeId===t.id && <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'flex-end', paddingRight:14, color:C.err, fontWeight:800, fontSize:11 }}>ZMAZAŤ ✕</div>}
                   <div
-                    onMouseDown={() => longStart(t)} onMouseUp={longEnd}
-                    onTouchStart={e => { longStart(t); onTouchStart(e,t.id); }}
+                    onMouseDown={e => longStart(t, e)} onMouseUp={longEnd}
+                    onTouchStart={e => { longStart(t, e); onTouchStart(e,t.id); }}
                     onTouchMove={onTouchMove}
                     onTouchEnd={() => { longEnd(); onTouchEnd(t); }}
                     onContextMenu={e => e.preventDefault()}
@@ -1053,11 +1058,6 @@ export default function App() {
                       {t.issue && <div style={{ fontSize:11, color:C.err, fontWeight:600 }}>⚠ {t.issue}</div>}
                     </div>
                     {t.done && <span style={{ fontSize:11, fontWeight:700, color:C.ok, flexShrink:0, textAlign:'right', lineHeight:1.4 }}>{t.time}<br/><span style={{ fontSize:10, fontWeight:600, color:C.ok+'99' }}>{t.date}</span></span>}
-                    {pressingId === t.id && (
-                      <div className="press-ring">
-                        <svg viewBox="0 0 30 30"><circle cx="15" cy="15" r="12" /></svg>
-                      </div>
-                    )}
                   </div>
                 </div>
               ))}
@@ -1903,6 +1903,13 @@ export default function App() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── PRESS RING (long-press indikátor) ───────────────────────────────── */}
+      {pressingId && (
+        <div className="press-ring" style={{ left: pressPos.x - 50, top: pressPos.y - 50 }}>
+          <svg viewBox="0 0 30 30"><circle cx="15" cy="15" r="12" /></svg>
         </div>
       )}
 
