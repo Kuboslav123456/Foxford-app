@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Reset Foxford App</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+           background: linear-gradient(135deg, #f2ede4, #e8d4b4); min-height: 100vh;
+           display: flex; align-items: center; justify-content: center; padding: 24px; color: #4a3a2a; }
+    .box { background: rgba(255,255,255,0.94); backdrop-filter: blur(20px);
+           padding: 36px 28px; border-radius: 24px; max-width: 360px; width: 100%;
+           box-shadow: 0 12px 48px rgba(0,0,0,0.12); border: 1px solid rgba(184,112,32,0.2); text-align: center; }
+    .icon { font-size: 48px; margin-bottom: 12px; }
+    h1 { color: #b87020; margin: 0 0 8px; font-size: 22px; letter-spacing: 0.5px; }
+    p { margin: 0 0 8px; font-size: 14px; line-height: 1.5; color: #6b5d4f; }
+    .status { margin-top: 20px; padding: 14px; background: rgba(184,112,32,0.08);
+              border-radius: 12px; border: 1px solid rgba(184,112,32,0.2); font-size: 13px; }
+    .spinner { display: inline-block; width: 22px; height: 22px;
+               border: 3px solid rgba(184,112,32,0.2); border-top-color: #b87020;
+               border-radius: 50%; animation: spin 0.9s linear infinite; vertical-align: middle; margin-right: 10px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .done { color: #4a8a4a; font-weight: 700; }
+    .err  { color: #c84040; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="icon">🔄</div>
+    <h1>Reset Foxford</h1>
+    <p>Mažem cache a service worker</p>
+    <p style="color:#a08c70; font-size:12px;">Tvoje uložené dáta zostanú zachované</p>
+    <div class="status" id="status"><span class="spinner"></span>Pracujem…</div>
+  </div>
+  <script>
+    (async function () {
+      var s = document.getElementById('status');
+      var steps = [];
+      try {
+        if ('serviceWorker' in navigator) {
+          var regs = await navigator.serviceWorker.getRegistrations();
+          for (var i = 0; i < regs.length; i++) { await regs[i].unregister(); }
+          steps.push('SW odregistrovaný (' + regs.length + ')');
+        }
+      } catch (e) { steps.push('SW chyba: ' + e.message); }
+      try {
+        if ('caches' in window) {
+          var keys = await caches.keys();
+          for (var j = 0; j < keys.length; j++) { await caches.delete(keys[j]); }
+          steps.push('Cache vyčistený (' + keys.length + ' kľúčov)');
+        }
+      } catch (e) { steps.push('Cache chyba: ' + e.message); }
+      s.innerHTML = '<span class="done">✓ Hotovo</span><br>' + steps.join('<br>') + '<br><br>Presmerovávam za 2s…';
+      setTimeout(function () {
+        // Force-fetch index without any cache
+        window.location.replace('./?nocache=' + Date.now());
+      }, 2000);
+    })();
+  </script>
+</body>
+</html>
