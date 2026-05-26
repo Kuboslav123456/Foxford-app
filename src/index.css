@@ -212,15 +212,40 @@ input, select, textarea {
   transition: background 300ms ease;
 }
 
-/* ── Flash pri kliknutí na uzamknuté teplotné pole ── */
-@keyframes lockFlash {
-  0%   { transform: scale(1); background: transparent; box-shadow: 0 0 0 rgba(184,112,32,0); }
-  20%  { transform: scale(1.06); background: rgba(184, 112, 32, 0.15); box-shadow: 0 0 16px rgba(184, 112, 32, 0.35); }
-  60%  { transform: scale(1); background: rgba(184, 112, 32, 0.06); }
-  100% { transform: scale(1); background: transparent; box-shadow: 0 0 0 rgba(184,112,32,0); }
+/* ── Floating toast (objaví sa hore, viditeľné kdekoľvek na obrazovke) ── */
+@keyframes toastIn {
+  0%   { transform: translate(-50%, -130%); opacity: 0; }
+  60%  { transform: translate(-50%, 8%);    opacity: 1; }
+  100% { transform: translate(-50%, 0);     opacity: 1; }
 }
-.lock-flash {
-  animation: lockFlash 900ms cubic-bezier(0.34, 1.45, 0.64, 1);
+@keyframes toastOut {
+  from { transform: translate(-50%, 0);    opacity: 1; }
+  to   { transform: translate(-50%, -130%); opacity: 0; }
+}
+.toast-top {
+  position: fixed;
+  top: 88px;
+  left: 50%;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid rgba(184, 112, 32, 0.35);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+  color: #4a3a2a;
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+  max-width: 90vw;
+  animation: toastIn 320ms cubic-bezier(0.34, 1.45, 0.64, 1) forwards;
+}
+.toast-top.toast-leaving {
+  animation: toastOut 260ms cubic-bezier(0.4, 0, 0.7, 0) forwards;
 }
 
 code {

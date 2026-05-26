@@ -467,7 +467,16 @@ export default function App() {
   const [pressingId, setPressingId] = useState(null);
   const [pressPos, setPressPos] = useState({ x: 0, y: 0 });
   const [bouncingCheck, setBouncingCheck] = useState(null);
-  const [tempLockFlash, setTempLockFlash] = useState(false);
+  const [toast, setToast] = useState(null); // { msg, leaving }
+  const toastTimerRef = useRef(null);
+  const showToast = (msg) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast({ msg, leaving: false });
+    toastTimerRef.current = setTimeout(() => {
+      setToast(prev => prev ? { ...prev, leaving: true } : null);
+      toastTimerRef.current = setTimeout(() => setToast(null), 260);
+    }, 1900);
+  };
   const [confirmUndo, setConfirmUndo] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [lastHaccpDate, setLastHaccpDate] = useState(localStorage.getItem('foxford-haccp-date') || '');
@@ -1319,8 +1328,9 @@ export default function App() {
                         </div>
                       </div>
                       <div style={{ position:'relative' }}
-                        onClick={() => { if (activeDone) { setTempLockFlash(true); setTimeout(() => setTempLockFlash(false), 900); } }}>
+                        onClick={() => { if (activeDone) showToast(`✓ ${haccpShift === 'ranné' ? 'Ranná' : 'Večerná'} kontrola je už zaznamenaná — odomkne sa o polnoci`); }}>
                         <input type="text" inputMode="decimal" placeholder="0.0" value={val}
+                          onFocus={e => { if (activeDone) e.target.blur(); }}
                           onChange={e => { if (activeDone) return; setActiveTemps(prev => ({ ...prev, [field.key]: e.target.value })); }}
                           readOnly={activeDone}
                           style={{
@@ -1346,7 +1356,7 @@ export default function App() {
               </div>
 
               {activeDone ? (
-                <div className={tempLockFlash ? 'lock-flash' : ''} style={{ textAlign:'center', padding:'12px 8px 4px', color:C.ok, fontSize:13, fontWeight:600, borderRadius:12 }}>
+                <div style={{ textAlign:'center', padding:'12px 0 4px', color:C.ok, fontSize:13, fontWeight:600 }}>
                   ✓ {haccpShift === 'ranné' ? 'Ranná' : 'Večerná'} kontrola zaznamenaná
                   <div style={{ fontSize:11, color:C.muted, marginTop:4, fontWeight:400 }}>🌙 Polia sa odomknú automaticky o polnoci</div>
                   <button onClick={() => setConfirmResetHaccp(true)} style={{ marginTop:12, background:'none', border:'none', color:C.muted, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit', textDecoration:'underline' }}>
@@ -2072,6 +2082,13 @@ export default function App() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── TOAST (floating notifikácia hore) ───────────────────────────────── */}
+      {toast && (
+        <div className={`toast-top${toast.leaving ? ' toast-leaving' : ''}`}>
+          <span>{toast.msg}</span>
         </div>
       )}
 
