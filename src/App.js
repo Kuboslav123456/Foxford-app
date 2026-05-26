@@ -318,6 +318,15 @@ const Inp = React.forwardRef(({ style, shake, ...props }, ref) => (
   }} />
 ));
 
+// ── Local day key — YYYY-MM-DD v lokálnom čase (nie UTC, ktoré drift-uje v CET/CEST) ──
+function localDayKey(d) {
+  const date = d || new Date();
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 // ── Safe JSON.parse — defenzívne čítanie localStorage (predchádza white-screen pri poškodenom kľúči) ──
 function safeParse(key, fallback) {
   try {
@@ -359,7 +368,7 @@ function performDailyClose(endingDate) {
     const branch = localStorage.getItem('foxford-branch') || '';
     const url = (BRANCHES.find(b => b.name === branch) || BRANCHES[0]).url;
     const sendDate = endingDate.toLocaleDateString('sk-SK');
-    const endingDayKey = endingDate.toISOString().slice(0, 10);
+    const endingDayKey = localDayKey(endingDate); // lokálny dátum (CET/CEST safe)
 
     // 1) Odoslať denné úlohy ak bola aktivita
     let tasksData = {};
@@ -429,14 +438,19 @@ export default function App() {
       // Loop day-by-day cez všetky preskočené dni (handluje multi-day skip)
       let cursor = new Date(_last);
       let safety = 0; // bezpečnostná zarážka aby sa nezacyklilo
-      while (!isNaN(cursor.getTime()) && cursor.toDateString() !== _today && safety < 60) {
+      const SAFETY_MAX = 60;
+      while (!isNaN(cursor.getTime()) && cursor.toDateString() !== _today && safety < SAFETY_MAX) {
         performDailyClose(cursor);
-        // Posuň kurzor o 1 deň dopredu a synchronizuj last-reset-date
         cursor.setDate(cursor.getDate() + 1);
         localStorage.setItem('foxford-last-reset-date', cursor.toDateString());
         safety++;
       }
-      // Bezpečnosť: uistiť sa že last-reset-date je dnes (pre prípad zacyklenia)
+      // Ak appka bola zatvorená dlhšie ako safety limit, varuj a aspoň posledný deň skús zavrieť
+      if (safety >= SAFETY_MAX && cursor.toDateString() !== _today) {
+        console.warn(`Catch-up: preskočených >${SAFETY_MAX} dní, posielam dáta posledného (včerajšieho) dňa`);
+        performDailyClose(new Date(Date.now() - 86400000));
+      }
+      // Bezpečnosť: uistiť sa že last-reset-date je dnes
       localStorage.setItem('foxford-last-reset-date', _today);
     } else if (!_last) {
       // Prvé spustenie — zaznamenať dnešok
@@ -821,8 +835,8 @@ export default function App() {
 
   // ── ODPISY HELPERS ───────────────────────────────────────────────────────
   const ODPISOVY_DOVODY = ['Spotreba', 'Pokazené', 'Rozbité', 'Ochutnávka'];
-  const todayKey     = new Date().toISOString().slice(0, 10);
-  const yesterdayKey = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const todayKey     = localDayKey(new Date());
+  const yesterdayKey = localDayKey(new Date(Date.now() - 86400000));
 
   // backward compat: starý formát bol pole, nový je { entries, note }
   const getDayData = (key) => { const d = odpisy[key]; if (!d) return { entries: [], note: '' }; if (Array.isArray(d)) return { entries: d, note: '' }; return { entries: d.entries || [], note: d.note || '' }; };

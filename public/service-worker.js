@@ -1,9 +1,7 @@
-const CACHE = 'foxford-v1';
+const CACHE = 'foxford-v2';
 const ASSETS = [
   '/',
   '/index.html',
-  '/static/js/main.chunk.js',
-  '/static/js/bundle.js',
   '/manifest.json',
   '/favicon.ico',
 ];
@@ -20,6 +18,19 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  const url = new URL(e.request.url);
+  const isNavigation = e.request.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('/index.html');
+  // Pre HTML navigáciu: network-first (aby user videl nový build hneď po deploy)
+  if (isNavigation) {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        if (res.ok) caches.open(CACHE).then(c => c.put(e.request, res.clone()));
+        return res;
+      }).catch(() => caches.match(e.request).then(c => c || caches.match('/')))
+    );
+    return;
+  }
+  // Pre asset súbory (hashed JS/CSS, obrázky): cache-first (rýchle, hashe sa menia pri builde)
   e.respondWith(
     caches.match(e.request).then(cached => {
       const network = fetch(e.request).then(res => {
