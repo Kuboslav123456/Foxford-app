@@ -16,6 +16,12 @@ input, textarea, [contenteditable] {
   user-select: text;
 }
 
+/* iOS Safari: ak má input font < 16px, zoomne pri focuse. Vizuálne nechávame zmenšené ale font fixujeme cez touch-action. */
+input, select, textarea {
+  font-size: 16px;
+  touch-action: manipulation;
+}
+
 /* ── Bounce-in animácia pre spodný action sheet ── */
 @keyframes sheetBounceIn {
   0%   { transform: translateY(100%); }
