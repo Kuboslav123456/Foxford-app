@@ -1318,26 +1318,43 @@ export default function App() {
                           <span onClick={() => setConfirmRemoveTemp(field)} style={{ color:C.muted, fontSize:12, cursor:'pointer', lineHeight:1 }}>✕</span>
                         </div>
                       </div>
-                      <div style={{ position:'relative', cursor: activeDone ? 'pointer' : 'auto' }}
-                        onPointerDown={e => { if (activeDone) { e.preventDefault(); e.stopPropagation(); setLockedAlert({ shift: haccpShift }); } }}
-                        onClick={e => { if (activeDone) { e.preventDefault(); e.stopPropagation(); setLockedAlert({ shift: haccpShift }); } }}>
-                        <input type="text" inputMode="decimal" placeholder="0.0" value={val}
-                          onChange={e => { if (activeDone) return; setActiveTemps(prev => ({ ...prev, [field.key]: e.target.value })); }}
-                          readOnly={activeDone}
-                          tabIndex={activeDone ? -1 : 0}
-                          style={{
-                            width:'100%', padding:'10px 14px', borderRadius:12,
-                            border:`1.5px solid ${accentColor}`,
-                            background: status === 'ok' ? C.okDim : status === 'err' ? C.errDim : C.panel,
-                            color: status ? accentColor : C.text,
-                            fontSize:18, fontWeight:800, textAlign:'center', letterSpacing:1,
-                            outline:'none', boxSizing:'border-box', fontFamily:'inherit',
-                            boxShadow: status ? `0 0 10px ${accentColor}22` : 'none',
-                            cursor: activeDone ? 'pointer' : 'text',
-                            pointerEvents: activeDone ? 'none' : 'auto',
-                          }} />
+                      <div style={{ position:'relative' }}>
+                        {activeDone ? (
+                          /* Uzamknutý stav — namiesto inputu obyčajný div (žiadny scroll/keyboard/focus) */
+                          <div role="button" tabIndex={-1}
+                            onClick={e => { e.preventDefault(); e.stopPropagation(); setLockedAlert({ shift: haccpShift }); }}
+                            onTouchStart={e => { e.preventDefault(); e.stopPropagation(); setLockedAlert({ shift: haccpShift }); }}
+                            style={{
+                              width:'100%', padding:'10px 14px', borderRadius:12,
+                              border:`1.5px solid ${accentColor}`,
+                              background: status === 'ok' ? C.okDim : status === 'err' ? C.errDim : C.panel,
+                              color: status ? accentColor : C.text,
+                              fontSize:18, fontWeight:800, textAlign:'center', letterSpacing:1,
+                              boxSizing:'border-box', fontFamily:'inherit',
+                              boxShadow: status ? `0 0 10px ${accentColor}22` : 'none',
+                              cursor:'pointer',
+                              userSelect:'none', WebkitUserSelect:'none',
+                              WebkitTapHighlightColor:'transparent',
+                              minHeight: 22,
+                            }}>
+                            {val || '—'}
+                          </div>
+                        ) : (
+                          <input type="text" inputMode="decimal" placeholder="0.0" value={val}
+                            onChange={e => setActiveTemps(prev => ({ ...prev, [field.key]: e.target.value }))}
+                            style={{
+                              width:'100%', padding:'10px 14px', borderRadius:12,
+                              border:`1.5px solid ${accentColor}`,
+                              background: status === 'ok' ? C.okDim : status === 'err' ? C.errDim : C.panel,
+                              color: status ? accentColor : C.text,
+                              fontSize:18, fontWeight:800, textAlign:'center', letterSpacing:1,
+                              outline:'none', boxSizing:'border-box', fontFamily:'inherit',
+                              boxShadow: status ? `0 0 10px ${accentColor}22` : 'none',
+                              cursor:'text',
+                            }} />
+                        )}
                         {status && (
-                          <div style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', fontSize:14 }}>
+                          <div style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', fontSize:14, pointerEvents:'none' }}>
                             {status === 'ok' ? '✓' : '⚠'}
                           </div>
                         )}
