@@ -318,8 +318,97 @@ const Inp = React.forwardRef(({ style, shake, ...props }, ref) => (
   }} />
 ));
 
+// ── DAILY CLOSE — odošle denné úlohy + odpisy končiaceho dňa do GS a vyresetuje stav ──
+// Volá sa pri polnoci aj pri otvorení appky ak sa polnoc preskočila (zatvorená appka).
+function performDailyClose(endingDate) {
+  try {
+    const branch = localStorage.getItem('foxford-branch') || '';
+    const url = (BRANCHES.find(b => b.name === branch) || BRANCHES[0]).url;
+    const token = process.env.REACT_APP_GAS_TOKEN || '';
+    const sendDate = endingDate.toLocaleDateString('sk-SK');
+    const endingDayKey = endingDate.toISOString().slice(0, 10);
+
+    // 1) Odoslať denné úlohy ak bola aktivita
+    let tasksData = {};
+    try { tasksData = JSON.parse(localStorage.getItem('foxford-tasks')) || {}; } catch (_) {}
+    let inspectorsData = {};
+    try { inspectorsData = JSON.parse(localStorage.getItem('foxford-inspectors')) || {}; } catch (_) {}
+    const denne = Array.isArray(tasksData.denné) ? tasksData.denné : [];
+    const inspectorDenne = (inspectorsData.denné || '').trim();
+    const hadActivity = denne.some(t => t.done || t.issue) || inspectorDenne;
+    if (denne.length > 0 && hadActivity) {
+      fetch(url, {
+        method: 'POST', mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'tasks_summary',
+          date: sendDate,
+          category: 'denné',
+          inspector: inspectorDenne || 'Anonym',
+          tasks: denne.map(t => ({
+            text: t.text, done: !!t.done,
+            time: t.time || null, date: t.date || null, issue: t.issue || null,
+          })),
+          _token: token,
+        }),
+      }).catch(() => {});
+    }
+
+    // 2) Odoslať odpisy končiaceho dňa
+    let odpisy = {};
+    try { odpisy = JSON.parse(localStorage.getItem('foxford-odpisy')) || {}; } catch (_) {}
+    const rawDay = odpisy[endingDayKey];
+    const dayData = !rawDay ? null : Array.isArray(rawDay) ? { entries: rawDay, note: '' } : rawDay;
+    const filled = (dayData?.entries || []).filter(e => e.qty);
+    if (filled.length > 0) {
+      const author = localStorage.getItem('foxford-odpisy-author') || '';
+      fetch(url, {
+        method: 'POST', mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'odpis_daily',
+          date: sendDate,
+          author,
+          note: dayData.note || '',
+          entries: filled.map(e => ({
+            name: e.name,
+            qty: parseFloat((e.qty || '').toString().replace(',','.')) || 0,
+            unit: e.unit,
+            reason: e.reason || 'Spotreba',
+          })),
+          _token: token,
+        }),
+      }).catch(() => {});
+    }
+
+    // 3) Reset localStorage stavu pre nový deň
+    const resetTasks = { ...tasksData, denné: INIT_TASKS.denné.map(t => ({ ...t, done: false, time: null, issue: null })) };
+    localStorage.setItem('foxford-tasks', JSON.stringify(resetTasks));
+    const resetInspectors = { ...inspectorsData, denné: '' };
+    localStorage.setItem('foxford-inspectors', JSON.stringify(resetInspectors));
+    localStorage.setItem('foxford-haccp-date', '');
+    localStorage.setItem('foxford-haccp-date-vecerne', '');
+    localStorage.setItem('foxford-last-reset-date', new Date().toDateString());
+  } catch (err) {
+    console.error('performDailyClose failed:', err);
+  }
+}
+
 // ── APP ───────────────────────────────────────────────────────────────────────
 export default function App() {
+  // Catch-up: ak appka bola zatvorená cez polnoc, odošli a vyresetuj TERAZ pri otvorení
+  if (typeof window !== 'undefined') {
+    const _today = new Date().toDateString();
+    const _last  = localStorage.getItem('foxford-last-reset-date');
+    if (_last && _last !== _today) {
+      const _endingDate = new Date(_last);
+      if (!isNaN(_endingDate.getTime())) performDailyClose(_endingDate);
+    } else if (!_last) {
+      // Prvé spustenie — zaznamenať dnešok aby budúce polnoce fungovali
+      localStorage.setItem('foxford-last-reset-date', _today);
+    }
+  }
+
   const [loading, setLoading]   = useState(true);
   const [online, setOnline]     = useState(navigator.onLine);
   const [tab, setTab]           = useState('tasks');
@@ -453,55 +542,35 @@ export default function App() {
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
   }, []);
 
-  // ── MIDNIGHT AUTO-RESET + AUTO-SEND ODPISOV ───────────────────────────────
+  // ── MIDNIGHT AUTO-RESET + AUTO-SEND DENNÝCH ÚLOH + ODPISOV ────────────────
+  // Self-rearming: po každom polnočnom resete sa znovu naplánuje na ďalšiu polnoc.
+  // Pri zatvorenej appke catch-up beží pri otvorení (viď začiatok komponentu App).
   useEffect(() => {
-    const now = new Date();
-    const endingDayKey = now.toISOString().slice(0, 10); // deň ktorý sa o polnoci ukončí
-    const midnight = new Date(); midnight.setHours(24, 0, 0, 0);
-    const ms = midnight - now;
-    const timer = setTimeout(() => {
-      // Reset denných úloh
-      setTasks(prev => ({ ...prev, denné: prev.denné.map(t => ({ ...t, done: false, time: null, issue: null })) }));
-      setInspectors(prev => ({ ...prev, denné: '' }));
-      setLastHaccpDate('');
-      setLastHaccpDateVecerne('');
-      setTemps(prev => Object.keys(prev).reduce((a, k) => ({ ...a, [k]: '' }), {}));
-      setTempsVecerne(prev => Object.keys(prev).reduce((a, k) => ({ ...a, [k]: '' }), {}));
-      setControllerName('');
-      localStorage.setItem('foxford-last-reset-date', new Date().toDateString());
-      localStorage.setItem('foxford-haccp-date', '');
-      localStorage.setItem('foxford-haccp-date-vecerne', '');
-
-      // Auto-odoslanie odpisov za končiaci deň
-      try {
-        const savedOdpisy = JSON.parse(localStorage.getItem('foxford-odpisy')) || {};
-        const rawDay = savedOdpisy[endingDayKey];
-        const dayData = !rawDay ? null : Array.isArray(rawDay) ? { entries: rawDay, note: '' } : rawDay;
-        const filled = (dayData?.entries || []).filter(e => e.qty);
-        if (filled.length > 0) {
-          const savedBranch = localStorage.getItem('foxford-branch') || '';
-          const savedAuthor = localStorage.getItem('foxford-odpisy-author') || '';
-          const url = BRANCHES.find(b => b.name === savedBranch)?.url || BRANCHES[0].url;
-          fetch(url, {
-            method: 'POST', mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              type: 'odpis_daily',
-              date: new Date(endingDayKey).toLocaleDateString('sk-SK'),
-              author: savedAuthor,
-              note: dayData.note || '',
-              entries: filled.map(e => ({ name: e.name, qty: parseFloat((e.qty||'').toString().replace(',','.')) || 0, unit: e.unit, reason: e.reason || 'Spotreba' })),
-              _token: process.env.REACT_APP_GAS_TOKEN,
-            }),
-          }).catch(() => {});
-        }
-      } catch (_) {}
-    }, ms);
-    return () => clearTimeout(timer);
+    let timer;
+    const arm = () => {
+      const now = new Date();
+      const midnight = new Date(); midnight.setHours(24, 0, 0, 0);
+      const ms = midnight - now;
+      timer = setTimeout(() => {
+        // 1) Odošli denné úlohy a odpisy končiaceho dňa + zapíš reset do localStorage
+        performDailyClose(new Date());
+        // 2) Aktualizuj React state (kópia z localStorage)
+        setTasks(prev => ({ ...prev, denné: prev.denné.map(t => ({ ...t, done: false, time: null, issue: null })) }));
+        setInspectors(prev => ({ ...prev, denné: '' }));
+        setLastHaccpDate('');
+        setLastHaccpDateVecerne('');
+        setTemps(prev => Object.keys(prev).reduce((a, k) => ({ ...a, [k]: '' }), {}));
+        setTempsVecerne(prev => Object.keys(prev).reduce((a, k) => ({ ...a, [k]: '' }), {}));
+        setControllerName('');
+        // 3) Re-arm na ďalšiu polnoc
+        arm();
+      }, ms);
+    };
+    arm();
+    return () => { if (timer) clearTimeout(timer); };
   }, []);
   useEffect(() => {
     localStorage.setItem('foxford-tasks',           JSON.stringify(tasks));
-    localStorage.setItem('foxford-last-reset-date', new Date().toDateString());
     localStorage.setItem('foxford-inspectors',      JSON.stringify(inspectors));
     localStorage.setItem('foxford-temp-fields',     JSON.stringify(tempFields));
     // Uložiť celý katalóg (vrátane lokálnych úprav)
@@ -1033,7 +1102,7 @@ export default function App() {
                       borderRadius:12,
                       userSelect:'none', WebkitUserSelect:'none',
                       border:`1px solid ${t.done ? C.ok+'44' : t.issue ? C.err+'44' : t.urgent ? C.err+'55' : C.border}`,
-                      cursor:'pointer', userSelect:'none',
+                      cursor:'pointer',
                     }}>
                     {/* Circle checkbox */}
                     <div className={bouncingCheck === t.id ? 'checkbox-spring' : ''} style={{
