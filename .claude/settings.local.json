@@ -13,7 +13,15 @@
       "PowerShell(Test-Path \"C:\\\\Program Files\\\\nodejs\\\\npm.cmd\"; Test-Path \"C:\\\\Program Files\\\\nodejs\\\\node.exe\"; Test-Path \"$env:APPDATA\\\\npm\\\\npm.cmd\"; Test-Path \"$env:NVM_HOME\")",
       "Bash(npm install *)",
       "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;\" + $env:PATH; Set-Location \"C:\\\\Users\\\\jakub.hrebenar\\\\Desktop\\\\FXF APP\\\\Foxford-app-master\\\\Foxford-app-master\"; & \"C:\\\\Program Files\\\\nodejs\\\\npm.cmd\" install)",
-      "mcp__Claude_Preview__preview_start"
+      "mcp__Claude_Preview__preview_start",
+      "WebSearch",
+      "Bash(\"C:\\\\Program Files\\\\nodejs\\\\npm.cmd\" run build)",
+      "Bash(\"C:\\\\Program Files\\\\nodejs\\\\npm.cmd\" run deploy)",
+      "Bash(findstr \"fxf_Kx9m\" build\\\\static\\\\js\\\\*.js)",
+      "Bash(ls \"C:/Users/jakub.hrebenar/Desktop/TEST/web\")",
+      "PowerShell($root = \"C:\\\\Users\\\\jakub.hrebenar\\\\Desktop\\\\TEST\"; $out = Join-Path $root \"OUT\"; if \\(-not \\(Test-Path $out\\)\\) { New-Item -ItemType Directory -Path $out | Out-Null }; $items = @\\(\"cenovka_tools\",\"Cenovkovy_program.bat\",\"Cenovkovy_program.exe\",\"NAVOD_PRE_KOLEGU.txt\",\"produkty_doris_all.json\",\"Vyrobit_EXE.bat\"\\); foreach \\($i in $items\\) { $src = Join-Path $root $i; if \\(Test-Path $src\\) { Move-Item -Path $src -Destination $out -Force; Write-Output \"moved: $i\" } else { Write-Output \"missing: $i\" } }; Write-Output \"---\"; Write-Output \"TEST root after move:\"; Get-ChildItem $root | Select-Object Name, Mode | Format-Table -AutoSize | Out-String)",
+      "PowerShell(Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -in @\\(18372, 20688\\) } | Select-Object ProcessId, Name, CommandLine, ExecutablePath | Format-List)",
+      "Bash(node -e \"const d=new Date\\(\\); const s=d.toDateString\\(\\); console.log\\('toDateString:', s\\); const p=new Date\\(s\\); console.log\\('parsed:', p, 'valid:', !isNaN\\(p.getTime\\(\\)\\)\\)\")"
     ]
   }
 }

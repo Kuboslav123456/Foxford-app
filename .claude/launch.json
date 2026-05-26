@@ -6,6 +6,12 @@
       "runtimeExecutable": "C:\\Program Files\\nodejs\\npm.cmd",
       "runtimeArgs": ["start"],
       "port": 3000
+    },
+    {
+      "name": "cenovky-web",
+      "runtimeExecutable": "py",
+      "runtimeArgs": ["-m", "http.server", "8766", "--directory", "C:\\Users\\jakub.hrebenar\\Desktop\\vyrobník cenoviek\\web"],
+      "port": 8766
     }
   ]
 }
