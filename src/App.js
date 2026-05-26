@@ -318,13 +318,29 @@ const Inp = React.forwardRef(({ style, shake, ...props }, ref) => (
   }} />
 ));
 
+// ── Offline-aware send: pošle alebo uloží do fronty (modulová úroveň, bez React stavu) ──
+function sendOrQueue(url, type, payload) {
+  const token = process.env.REACT_APP_GAS_TOKEN || '';
+  const body = JSON.stringify({ type, ...payload, _token: token });
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    // Uložiť do localStorage fronty — App effect ju odošle keď príde online
+    try {
+      const raw = localStorage.getItem('foxford-offline-queue');
+      const q = raw ? JSON.parse(raw) : [];
+      q.push({ type, payload, url, ts: Date.now() });
+      localStorage.setItem('foxford-offline-queue', JSON.stringify(q));
+    } catch (_) {}
+    return;
+  }
+  fetch(url, { method:'POST', mode:'no-cors', headers:{ 'Content-Type':'application/json' }, body }).catch(() => {});
+}
+
 // ── DAILY CLOSE — odošle denné úlohy + odpisy končiaceho dňa do GS a vyresetuje stav ──
 // Volá sa pri polnoci aj pri otvorení appky ak sa polnoc preskočila (zatvorená appka).
 function performDailyClose(endingDate) {
   try {
     const branch = localStorage.getItem('foxford-branch') || '';
     const url = (BRANCHES.find(b => b.name === branch) || BRANCHES[0]).url;
-    const token = process.env.REACT_APP_GAS_TOKEN || '';
     const sendDate = endingDate.toLocaleDateString('sk-SK');
     const endingDayKey = endingDate.toISOString().slice(0, 10);
 
@@ -337,21 +353,15 @@ function performDailyClose(endingDate) {
     const inspectorDenne = (inspectorsData.denné || '').trim();
     const hadActivity = denne.some(t => t.done || t.issue) || inspectorDenne;
     if (denne.length > 0 && hadActivity) {
-      fetch(url, {
-        method: 'POST', mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'tasks_summary',
-          date: sendDate,
-          category: 'denné',
-          inspector: inspectorDenne || 'Anonym',
-          tasks: denne.map(t => ({
-            text: t.text, done: !!t.done,
-            time: t.time || null, date: t.date || null, issue: t.issue || null,
-          })),
-          _token: token,
-        }),
-      }).catch(() => {});
+      sendOrQueue(url, 'tasks_summary', {
+        date: sendDate,
+        category: 'denné',
+        inspector: inspectorDenne || 'Anonym',
+        tasks: denne.map(t => ({
+          text: t.text, done: !!t.done,
+          time: t.time || null, date: t.date || null, issue: t.issue || null,
+        })),
+      });
     }
 
     // 2) Odoslať odpisy končiaceho dňa
@@ -362,23 +372,17 @@ function performDailyClose(endingDate) {
     const filled = (dayData?.entries || []).filter(e => e.qty);
     if (filled.length > 0) {
       const author = localStorage.getItem('foxford-odpisy-author') || '';
-      fetch(url, {
-        method: 'POST', mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'odpis_daily',
-          date: sendDate,
-          author,
-          note: dayData.note || '',
-          entries: filled.map(e => ({
-            name: e.name,
-            qty: parseFloat((e.qty || '').toString().replace(',','.')) || 0,
-            unit: e.unit,
-            reason: e.reason || 'Spotreba',
-          })),
-          _token: token,
-        }),
-      }).catch(() => {});
+      sendOrQueue(url, 'odpis_daily', {
+        date: sendDate,
+        author,
+        note: dayData.note || '',
+        entries: filled.map(e => ({
+          name: e.name,
+          qty: parseFloat((e.qty || '').toString().replace(',','.')) || 0,
+          unit: e.unit,
+          reason: e.reason || 'Spotreba',
+        })),
+      });
     }
 
     // 3) Reset localStorage stavu pre nový deň
@@ -503,6 +507,7 @@ export default function App() {
   const [success, setSuccess]   = useState(false);
   const [missingWarning, setMissingWarning] = useState([]);
   const [savedAt, setSavedAt] = useState(null);
+  const savedAtThrottle = useRef(0);
   const [branch, setBranch] = useState(() => localStorage.getItem('foxford-branch') || null);
   const [showBranchSelect, setShowBranchSelect] = useState(false);
   const [pinInput, setPinInput] = useState('');
@@ -589,7 +594,12 @@ export default function App() {
     localStorage.setItem('foxford-notif-settings',  JSON.stringify(notifSettings));
     localStorage.setItem('foxford-odpisy',          JSON.stringify(odpisy));
     localStorage.setItem('foxford-odpisy-author',   odpisyAuthor);
-    setSavedAt(new Date().toLocaleTimeString('sk-SK', { hour:'2-digit', minute:'2-digit' }));
+    // Throttle: aktualizuj "uložené o XX:XX" max raz za 30 sekúnd (znižuje zbytočné re-rendery)
+    const nowMs = Date.now();
+    if (nowMs - savedAtThrottle.current > 30000) {
+      savedAtThrottle.current = nowMs;
+      setSavedAt(new Date().toLocaleTimeString('sk-SK', { hour:'2-digit', minute:'2-digit' }));
+    }
   }, [tasks, inspectors, tempFields, invData, invQty, invNotes, notes, notifSettings, odpisy, odpisyAuthor]);
 
   const scriptUrl = BRANCHES.find(b => b.name === branch)?.url || BRANCHES[0].url;
@@ -613,11 +623,14 @@ export default function App() {
     doFetch(scriptUrl, type, payload);
   };
 
-  // Odošli frontu keď príde konektivita
+  // Odošli frontu keď príde konektivita (čítaj z localStorage — môže obsahovať položky pridané module-level kódom)
   useEffect(() => {
-    if (!online || offlineQueue.length === 0) return;
-    offlineQueue.forEach(item => doFetch(item.url, item.type, item.payload));
-    const count = offlineQueue.length;
+    if (!online) return;
+    let queue = [];
+    try { queue = JSON.parse(localStorage.getItem('foxford-offline-queue')) || []; } catch (_) {}
+    if (queue.length === 0) return;
+    queue.forEach(item => doFetch(item.url, item.type, item.payload));
+    const count = queue.length;
     setOfflineQueue([]);
     localStorage.removeItem('foxford-offline-queue');
     setOfflineFlushed(count);
@@ -745,7 +758,7 @@ export default function App() {
   };
   const removeQtyRow = (itemId, rowId) => setInvQty(q => ({ ...q, [itemId]: (q[itemId]||[]).filter(r => r.id !== rowId) }));
   const updateQtyRow = (itemId, rowId, field, val) => setInvQty(q => ({ ...q, [itemId]: (q[itemId]||[]).map(r => r.id === rowId ? { ...r, [field]: val } : r) }));
-  const qtyTotal     = (itemId) => (invQty[itemId]||[]).reduce((s, r) => s + (parseFloat((r.qty||'').toString().replace(',','.'))||0), 0);
+  const qtyTotal     = (itemId) => Math.round((invQty[itemId]||[]).reduce((s, r) => s + (parseFloat((r.qty||'').toString().replace(',','.'))||0), 0) * 1000) / 1000;
   const needInsp = () => { if (!inspectors[subTab].trim()) { doShake(setShakeInsp, inspRef); return false; } return true; };
 
   // ── ODPISY HELPERS ───────────────────────────────────────────────────────
@@ -2300,8 +2313,9 @@ export default function App() {
             <div style={{ display:'flex', gap:10 }}>
               <button onClick={() => setMissingWarning([])} style={{ flex:1, padding:'13px', borderRadius:12, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, cursor:'pointer', fontFamily:'inherit', fontSize:13 }}>Späť</button>
               <button onClick={() => {
+                if (!needName()) { setMissingWarning([]); return; }
                 setMissingWarning([]);
-                const allItems = invData.flatMap(g => g.items).filter(item => invQty[item.id]);
+                const allItems = invData.flatMap(g => g.items).filter(item => (invQty[item.id]||[]).some(r => r.qty));
                 const _invTabName2 = `${selectedMonth} ${new Date().getFullYear()} — ${new Date().toLocaleTimeString('sk-SK', { hour:'2-digit', minute:'2-digit' })}`;
                 sendToSheets('inventory', {
                   date: new Date().toLocaleDateString('sk-SK'),
