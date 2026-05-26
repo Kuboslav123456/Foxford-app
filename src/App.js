@@ -344,8 +344,6 @@ export default function App() {
   const inspRef  = useRef(null);
   const nameRef  = useRef(null);
   const touchX   = useRef(null);
-  const [swipeId,  setSwipeId]  = useState(null);
-  const [swipeOff, setSwipeOff] = useState(0);
 
   const [tasks, setTasks] = useState(() => {
     const saved = localStorage.getItem('foxford-tasks');
@@ -754,17 +752,13 @@ export default function App() {
     return t.length === 0 ? 0 : Math.round(t.filter(x => x.done).length / t.length * 100);
   };
 
-  const onTouchStart = (e, id) => { touchX.current = e.targetTouches[0].clientX; setSwipeId(id); };
+  const onTouchStart = (e, id) => { touchX.current = e.targetTouches[0].clientX; };
   const onTouchMove  = (e) => {
     if (touchX.current === null) return;
     const d = touchX.current - e.targetTouches[0].clientX;
     if (Math.abs(d) > 10 && timerRef.current) { clearTimeout(timerRef.current); setPressingId(null); }
-    if (d > 0) setSwipeOff(d);
   };
-  const onTouchEnd = (t) => {
-    if (swipeOff > 70) setTasks({ ...tasks, [subTab]: tasks[subTab].filter(x => x.id !== t.id) });
-    touchX.current = null; setSwipeOff(0); setSwipeId(null);
-  };
+  const onTouchEnd = () => { touchX.current = null; };
 
   const uncheckedTask = (t) => {
     setTasks({ ...tasks, [subTab]: tasks[subTab].map(x => x.id === t.id ? { ...x, done: false, time: null, issue: null } : x) });
@@ -793,7 +787,7 @@ export default function App() {
   };
 
   const onTaskClick = (t) => {
-    if (longPress.current || swipeOff > 10) { longPress.current = false; return; }
+    if (longPress.current) { longPress.current = false; return; }
     if (!needInsp()) return;
     if (t.done) { setConfirmUndo(t); return; }
     const now = new Date();
@@ -813,7 +807,7 @@ export default function App() {
     }
     setPressingId(t.id);
     timerRef.current = setTimeout(() => {
-      if (swipeOff < 10) { longPress.current = true; setQuickTask(t); }
+      longPress.current = true; setQuickTask(t);
       setPressingId(null);
     }, 600);
   };
@@ -1020,18 +1014,16 @@ export default function App() {
                 if (a.urgent !== b.urgent) return a.urgent ? -1 : 1;
                 return 0;
               }).map(t => (
-                <div key={t.id} style={{ position:'relative', overflow:'hidden', borderRadius:12, marginBottom:5, background: swipeId===t.id ? C.err+'33' : 'transparent' }}>
-                  {swipeId===t.id && <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'flex-end', paddingRight:14, color:C.err, fontWeight:800, fontSize:11 }}>ZMAZAŤ ✕</div>}
+                <div key={t.id} style={{ position:'relative', borderRadius:12, marginBottom:5 }}>
                   <div
                     onMouseDown={e => longStart(t, e)} onMouseUp={longEnd}
                     onTouchStart={e => { longStart(t, e); onTouchStart(e,t.id); }}
                     onTouchMove={onTouchMove}
-                    onTouchEnd={() => { longEnd(); onTouchEnd(t); }}
+                    onTouchEnd={() => { longEnd(); onTouchEnd(); }}
                     onContextMenu={e => e.preventDefault()}
                     onClick={() => onTaskClick(t)}
                     style={{
                       position:'relative', zIndex:2,
-                      transform: swipeId===t.id ? `translateX(-${swipeOff}px)` : 'none',
                       display:'flex', alignItems:'center', gap:12, padding:'13px 12px',
                       background: t.done ? C.okDim : t.issue ? C.errDim : t.urgent ? 'rgba(232,114,114,0.07)' : C.panelHov,
                       borderRadius:12,
