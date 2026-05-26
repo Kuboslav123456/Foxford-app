@@ -89,4 +89,18 @@ The Foxford logo image is at `public/foxford-logo.png.png` (double extension —
 
 ## Deployment
 
-Deployed to GitHub Pages at `https://kuboslav123456.github.io/Foxford-app`. Run `npm run build` and push — no separate deploy script is configured yet (`gh-pages` package is not installed).
+Deployed to GitHub Pages at `https://kuboslav123456.github.io/Foxford-app`. `gh-pages` package IS installed.
+
+**IMPORTANT — vždy po zmene treba urobiť OBE veci:**
+
+```bash
+# 1) Build + nasadenie na gh-pages branch (čo užívateľ vidí live)
+npm run deploy
+
+# 2) Push source code na main branch (synchronizácia repo)
+git push origin main
+```
+
+`npm run deploy` push-uje len build artifacts na `gh-pages` branch. Source code commity na `main` musia byť osobitne pushnuté cez `git push origin main`, inak je GitHub history desynchronizovaný s live appkou.
+
+Po nasadení nového buildu má service worker `network-first` stratégiu pre HTML, takže používatelia vidia novú verziu okamžite pri ďalšom otvorení (nemusia twice-reload).
