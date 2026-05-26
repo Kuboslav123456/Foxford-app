@@ -326,6 +326,7 @@ export default function App() {
   const [subTab, setSubTab]     = useState('denné');
   const [expCat, setExpCat]     = useState(null);
   const [quickTask, setQuickTask] = useState(null);
+  const [pressingId, setPressingId] = useState(null);
   const [confirmUndo, setConfirmUndo] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [lastHaccpDate, setLastHaccpDate] = useState(localStorage.getItem('foxford-haccp-date') || '');
@@ -756,7 +757,7 @@ export default function App() {
   const onTouchMove  = (e) => {
     if (touchX.current === null) return;
     const d = touchX.current - e.targetTouches[0].clientX;
-    if (Math.abs(d) > 10 && timerRef.current) clearTimeout(timerRef.current);
+    if (Math.abs(d) > 10 && timerRef.current) { clearTimeout(timerRef.current); setPressingId(null); }
     if (d > 0) setSwipeOff(d);
   };
   const onTouchEnd = (t) => {
@@ -805,9 +806,16 @@ export default function App() {
 
   const longStart = (t) => {
     longPress.current = false;
-    timerRef.current = setTimeout(() => { if (swipeOff < 10) { longPress.current = true; setQuickTask(t); } }, 600);
+    setPressingId(t.id);
+    timerRef.current = setTimeout(() => {
+      if (swipeOff < 10) { longPress.current = true; setQuickTask(t); }
+      setPressingId(null);
+    }, 600);
   };
-  const longEnd = () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  const longEnd = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setPressingId(null);
+  };
 
   const reportIssue = (reason, e) => {
     if (e) { e.preventDefault(); e.stopPropagation(); }
@@ -1045,6 +1053,11 @@ export default function App() {
                       {t.issue && <div style={{ fontSize:11, color:C.err, fontWeight:600 }}>⚠ {t.issue}</div>}
                     </div>
                     {t.done && <span style={{ fontSize:11, fontWeight:700, color:C.ok, flexShrink:0, textAlign:'right', lineHeight:1.4 }}>{t.time}<br/><span style={{ fontSize:10, fontWeight:600, color:C.ok+'99' }}>{t.date}</span></span>}
+                    {pressingId === t.id && (
+                      <div className="press-ring">
+                        <svg viewBox="0 0 30 30"><circle cx="15" cy="15" r="12" /></svg>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
