@@ -467,6 +467,7 @@ export default function App() {
   const [pressingId, setPressingId] = useState(null);
   const [pressPos, setPressPos] = useState({ x: 0, y: 0 });
   const [bouncingCheck, setBouncingCheck] = useState(null);
+  const [tempLockFlash, setTempLockFlash] = useState(false);
   const [confirmUndo, setConfirmUndo] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [lastHaccpDate, setLastHaccpDate] = useState(localStorage.getItem('foxford-haccp-date') || '');
@@ -1317,7 +1318,8 @@ export default function App() {
                           <span onClick={() => setConfirmRemoveTemp(field)} style={{ color:C.muted, fontSize:12, cursor:'pointer', lineHeight:1 }}>✕</span>
                         </div>
                       </div>
-                      <div style={{ position:'relative' }}>
+                      <div style={{ position:'relative' }}
+                        onClick={() => { if (activeDone) { setTempLockFlash(true); setTimeout(() => setTempLockFlash(false), 900); } }}>
                         <input type="text" inputMode="decimal" placeholder="0.0" value={val}
                           onChange={e => { if (activeDone) return; setActiveTemps(prev => ({ ...prev, [field.key]: e.target.value })); }}
                           readOnly={activeDone}
@@ -1344,7 +1346,7 @@ export default function App() {
               </div>
 
               {activeDone ? (
-                <div style={{ textAlign:'center', padding:'12px 0 4px', color:C.ok, fontSize:13, fontWeight:600 }}>
+                <div className={tempLockFlash ? 'lock-flash' : ''} style={{ textAlign:'center', padding:'12px 8px 4px', color:C.ok, fontSize:13, fontWeight:600, borderRadius:12 }}>
                   ✓ {haccpShift === 'ranné' ? 'Ranná' : 'Večerná'} kontrola zaznamenaná
                   <div style={{ fontSize:11, color:C.muted, marginTop:4, fontWeight:400 }}>🌙 Polia sa odomknú automaticky o polnoci</div>
                   <button onClick={() => setConfirmResetHaccp(true)} style={{ marginTop:12, background:'none', border:'none', color:C.muted, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit', textDecoration:'underline' }}>

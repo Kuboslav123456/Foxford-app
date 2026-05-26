@@ -212,6 +212,17 @@ input, select, textarea {
   transition: background 300ms ease;
 }
 
+/* ── Flash pri kliknutí na uzamknuté teplotné pole ── */
+@keyframes lockFlash {
+  0%   { transform: scale(1); background: transparent; box-shadow: 0 0 0 rgba(184,112,32,0); }
+  20%  { transform: scale(1.06); background: rgba(184, 112, 32, 0.15); box-shadow: 0 0 16px rgba(184, 112, 32, 0.35); }
+  60%  { transform: scale(1); background: rgba(184, 112, 32, 0.06); }
+  100% { transform: scale(1); background: transparent; box-shadow: 0 0 0 rgba(184,112,32,0); }
+}
+.lock-flash {
+  animation: lockFlash 900ms cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
