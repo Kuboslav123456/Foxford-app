@@ -915,9 +915,6 @@ export default function App() {
             <span style={{ fontSize: isTablet ? 20 : 17 }}>🐛</span>
             <span style={{ fontSize:7, color:C.sub, fontWeight:700, letterSpacing:.3, marginTop:1, lineHeight:1 }}>CHYBA</span>
           </div>
-          {online && offlineFlushed === 0 && (
-            <div className="dot-pulse-green" style={{ width:8, height:8, borderRadius:'50%', background:C.ok, boxShadow:`0 0 6px ${C.ok}` }} title="Online" />
-          )}
           {!online && (
             <div className="dot-pulse-red" style={{ fontSize:9, fontWeight:800, color:C.err, border:`1px solid ${C.err}`, padding:'3px 9px', borderRadius:20, letterSpacing:.5 }}>
               OFFLINE{offlineQueue.length > 0 ? ` (${offlineQueue.length})` : ''}
