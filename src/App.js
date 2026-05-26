@@ -385,14 +385,15 @@ function performDailyClose(endingDate) {
       });
     }
 
-    // 3) Reset localStorage stavu pre nový deň
-    const resetTasks = { ...tasksData, denné: INIT_TASKS.denné.map(t => ({ ...t, done: false, time: null, issue: null })) };
+    // 3) Reset localStorage stavu pre nový deň — zachovať vlastné úlohy, len resetnúť stav
+    const baseDenne = (Array.isArray(tasksData.denné) && tasksData.denné.length > 0) ? tasksData.denné : INIT_TASKS.denné;
+    const resetTasks = { ...tasksData, denné: baseDenne.map(t => ({ ...t, done: false, time: null, date: null, issue: null })) };
     localStorage.setItem('foxford-tasks', JSON.stringify(resetTasks));
     const resetInspectors = { ...inspectorsData, denné: '' };
     localStorage.setItem('foxford-inspectors', JSON.stringify(resetInspectors));
     localStorage.setItem('foxford-haccp-date', '');
     localStorage.setItem('foxford-haccp-date-vecerne', '');
-    localStorage.setItem('foxford-last-reset-date', new Date().toDateString());
+    // Pozn.: `foxford-last-reset-date` zapisuje volajúci (catch-up loop / midnight timer)
   } catch (err) {
     console.error('performDailyClose failed:', err);
   }
@@ -400,15 +401,28 @@ function performDailyClose(endingDate) {
 
 // ── APP ───────────────────────────────────────────────────────────────────────
 export default function App() {
-  // Catch-up: ak appka bola zatvorená cez polnoc, odošli a vyresetuj TERAZ pri otvorení
-  if (typeof window !== 'undefined') {
+
+  // Catch-up: ak appka bola zatvorená cez polnoc — gated cez ref aby bežalo presne raz na mount
+  const _catchupRan = useRef(false);
+  if (!_catchupRan.current && typeof window !== 'undefined') {
+    _catchupRan.current = true;
     const _today = new Date().toDateString();
     const _last  = localStorage.getItem('foxford-last-reset-date');
     if (_last && _last !== _today) {
-      const _endingDate = new Date(_last);
-      if (!isNaN(_endingDate.getTime())) performDailyClose(_endingDate);
+      // Loop day-by-day cez všetky preskočené dni (handluje multi-day skip)
+      let cursor = new Date(_last);
+      let safety = 0; // bezpečnostná zarážka aby sa nezacyklilo
+      while (!isNaN(cursor.getTime()) && cursor.toDateString() !== _today && safety < 60) {
+        performDailyClose(cursor);
+        // Posuň kurzor o 1 deň dopredu a synchronizuj last-reset-date
+        cursor.setDate(cursor.getDate() + 1);
+        localStorage.setItem('foxford-last-reset-date', cursor.toDateString());
+        safety++;
+      }
+      // Bezpečnosť: uistiť sa že last-reset-date je dnes (pre prípad zacyklenia)
+      localStorage.setItem('foxford-last-reset-date', _today);
     } else if (!_last) {
-      // Prvé spustenie — zaznamenať dnešok aby budúce polnoce fungovali
+      // Prvé spustenie — zaznamenať dnešok
       localStorage.setItem('foxford-last-reset-date', _today);
     }
   }
@@ -559,6 +573,7 @@ export default function App() {
       timer = setTimeout(() => {
         // 1) Odošli denné úlohy a odpisy končiaceho dňa + zapíš reset do localStorage
         performDailyClose(new Date());
+        localStorage.setItem('foxford-last-reset-date', new Date().toDateString());
         // 2) Aktualizuj React state (kópia z localStorage)
         setTasks(prev => ({ ...prev, denné: prev.denné.map(t => ({ ...t, done: false, time: null, issue: null })) }));
         setInspectors(prev => ({ ...prev, denné: '' }));
@@ -689,6 +704,7 @@ export default function App() {
   // Schedule daily notification
   useEffect(() => {
     if (!notifSettings.enabled || notifPermission !== 'granted') return;
+    if (!/^\d{1,2}:\d{2}$/.test(notifSettings.time || '')) return;
     const [h, m] = notifSettings.time.split(':').map(Number);
     const now = new Date();
     const target = new Date(); target.setHours(h, m, 0, 0);
@@ -706,6 +722,7 @@ export default function App() {
   // On-open check: if past reminder time and tasks not done, nudge
   useEffect(() => {
     if (!notifSettings.enabled || notifPermission !== 'granted') return;
+    if (!/^\d{1,2}:\d{2}$/.test(notifSettings.time || '')) return;
     const [h, m] = notifSettings.time.split(':').map(Number);
     const now = new Date();
     const reminder = new Date(); reminder.setHours(h, m, 0, 0);
