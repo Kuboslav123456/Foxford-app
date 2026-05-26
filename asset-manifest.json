@@ -1,15 +1,15 @@
 {
   "files": {
-    "main.css": "/Foxford-app/static/css/main.c009ec91.css",
-    "main.js": "/Foxford-app/static/js/main.8cffce50.js",
+    "main.css": "/Foxford-app/static/css/main.fed98c3f.css",
+    "main.js": "/Foxford-app/static/js/main.c296479a.js",
     "static/js/453.1fdb7a78.chunk.js": "/Foxford-app/static/js/453.1fdb7a78.chunk.js",
     "index.html": "/Foxford-app/index.html",
-    "main.c009ec91.css.map": "/Foxford-app/static/css/main.c009ec91.css.map",
-    "main.8cffce50.js.map": "/Foxford-app/static/js/main.8cffce50.js.map",
+    "main.fed98c3f.css.map": "/Foxford-app/static/css/main.fed98c3f.css.map",
+    "main.c296479a.js.map": "/Foxford-app/static/js/main.c296479a.js.map",
     "453.1fdb7a78.chunk.js.map": "/Foxford-app/static/js/453.1fdb7a78.chunk.js.map"
   },
   "entrypoints": [
-    "static/css/main.c009ec91.css",
-    "static/js/main.8cffce50.js"
+    "static/css/main.fed98c3f.css",
+    "static/js/main.c296479a.js"
   ]
 }
