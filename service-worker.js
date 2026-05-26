@@ -1,4 +1,4 @@
-const CACHE = 'foxford-v3';
+const CACHE = 'foxford-v4';
 const ASSETS = [
   '/',
   '/index.html',
