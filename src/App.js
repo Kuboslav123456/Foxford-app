@@ -328,6 +328,7 @@ export default function App() {
   const [quickTask, setQuickTask] = useState(null);
   const [pressingId, setPressingId] = useState(null);
   const [pressPos, setPressPos] = useState({ x: 0, y: 0 });
+  const [bouncingCheck, setBouncingCheck] = useState(null);
   const [confirmUndo, setConfirmUndo] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [lastHaccpDate, setLastHaccpDate] = useState(localStorage.getItem('foxford-haccp-date') || '');
@@ -790,6 +791,8 @@ export default function App() {
     if (longPress.current) { longPress.current = false; return; }
     if (!needInsp()) return;
     if (t.done) { setConfirmUndo(t); return; }
+    setBouncingCheck(t.id);
+    setTimeout(() => setBouncingCheck(null), 500);
     const now = new Date();
     const time = now.toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' });
     const date = now.toLocaleDateString('sk-SK', { day: 'numeric', month: 'numeric' });
@@ -1032,7 +1035,7 @@ export default function App() {
                       cursor:'pointer', userSelect:'none',
                     }}>
                     {/* Circle checkbox */}
-                    <div style={{
+                    <div className={bouncingCheck === t.id ? 'checkbox-spring' : ''} style={{
                       width:22, height:22, borderRadius:'50%', flexShrink:0,
                       border:`2px solid ${t.done ? C.ok : t.issue ? C.err : C.muted}`,
                       background: t.done ? C.ok : 'transparent',
@@ -1360,11 +1363,14 @@ export default function App() {
                                 fontSize:11, fontWeight:600, padding:'5px 10px',
                                 borderRadius:8, cursor:'pointer', fontFamily:'inherit',
                               }}>+ Pridať množstvo</button>
-                              {(invQty[item.id]||[]).length > 1 && (
-                                <div style={{ fontSize:11, fontWeight:700, color:C.gold, paddingLeft:2 }}>
-                                  Spolu: {qtyTotal(item.id)} {item.unit}
-                                </div>
-                              )}
+                              {(invQty[item.id]||[]).length > 1 && (() => {
+                                const total = qtyTotal(item.id);
+                                return (
+                                  <div style={{ fontSize:11, fontWeight:700, color:C.gold, paddingLeft:2 }}>
+                                    Spolu: <span key={total} className="number-flip">{total}</span> {item.unit}
+                                  </div>
+                                );
+                              })()}
                               <Inp type="text" placeholder="Poznámka…" value={invNotes[item.id]||''}
                                 onChange={e => setInvNotes({...invNotes,[item.id]:e.target.value})}
                                 onFocus={() => setActiveInvField({ itemId: item.id, rowId: 'note', field: 'note' })}
