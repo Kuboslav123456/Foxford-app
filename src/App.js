@@ -467,16 +467,7 @@ export default function App() {
   const [pressingId, setPressingId] = useState(null);
   const [pressPos, setPressPos] = useState({ x: 0, y: 0 });
   const [bouncingCheck, setBouncingCheck] = useState(null);
-  const [toast, setToast] = useState(null); // { msg, leaving }
-  const toastTimerRef = useRef(null);
-  const showToast = (msg) => {
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    setToast({ msg, leaving: false });
-    toastTimerRef.current = setTimeout(() => {
-      setToast(prev => prev ? { ...prev, leaving: true } : null);
-      toastTimerRef.current = setTimeout(() => setToast(null), 260);
-    }, 1900);
-  };
+  const [lockedAlert, setLockedAlert] = useState(null); // { shift }
   const [confirmUndo, setConfirmUndo] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [lastHaccpDate, setLastHaccpDate] = useState(localStorage.getItem('foxford-haccp-date') || '');
@@ -1328,8 +1319,8 @@ export default function App() {
                         </div>
                       </div>
                       <div style={{ position:'relative', cursor: activeDone ? 'pointer' : 'auto' }}
-                        onPointerDown={e => { if (activeDone) { e.preventDefault(); showToast(`✓ ${haccpShift === 'ranné' ? 'Ranná' : 'Večerná'} kontrola je už zaznamenaná — odomkne sa o polnoci`); } }}
-                        onClick={() => { if (activeDone) showToast(`✓ ${haccpShift === 'ranné' ? 'Ranná' : 'Večerná'} kontrola je už zaznamenaná — odomkne sa o polnoci`); }}>
+                        onPointerDown={e => { if (activeDone) { e.preventDefault(); e.stopPropagation(); setLockedAlert({ shift: haccpShift }); } }}
+                        onClick={e => { if (activeDone) { e.preventDefault(); e.stopPropagation(); setLockedAlert({ shift: haccpShift }); } }}>
                         <input type="text" inputMode="decimal" placeholder="0.0" value={val}
                           onChange={e => { if (activeDone) return; setActiveTemps(prev => ({ ...prev, [field.key]: e.target.value })); }}
                           readOnly={activeDone}
@@ -2087,10 +2078,26 @@ export default function App() {
         </div>
       )}
 
-      {/* ── TOAST (floating notifikácia hore) ───────────────────────────────── */}
-      {toast && (
-        <div className={`toast-top${toast.leaving ? ' toast-leaving' : ''}`}>
-          <span>{toast.msg}</span>
+      {/* ── LOCKED ALERT — pop-up keď user klikne na uzamknuté teplotné pole ─ */}
+      {lockedAlert && (
+        <div onMouseDown={() => setLockedAlert(null)} onTouchStart={() => setLockedAlert(null)}
+          style={{ position:'fixed', inset:0, background:'rgba(30,22,8,.55)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:3500, padding:24 }}>
+          <div onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}
+            className="sheet-bounce"
+            style={{ background:C.modal, border:`1px solid ${C.borderM}`, width:'100%', maxWidth:360, borderRadius:24, padding:'28px 22px 22px', boxShadow:'0 12px 48px rgba(0,0,0,.18)' }}>
+            <div style={{ fontSize:40, textAlign:'center', marginBottom:12 }}>🔒</div>
+            <div style={{ fontSize:17, fontWeight:800, color:C.text, textAlign:'center', marginBottom:10 }}>
+              {lockedAlert.shift === 'ranné' ? 'Ranná' : 'Večerná'} kontrola je už zaznamenaná
+            </div>
+            <div style={{ fontSize:13, color:C.sub, textAlign:'center', marginBottom:22, lineHeight:1.6 }}>
+              Teplotné polia sú uzamknuté.<br />
+              Automaticky sa odomknú <span style={{ color:C.gold, fontWeight:700 }}>o polnoci</span>.
+            </div>
+            <button onClick={() => setLockedAlert(null)}
+              style={{ width:'100%', padding:'13px', borderRadius:14, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:800, fontSize:14, cursor:'pointer', fontFamily:'inherit', letterSpacing:.5 }}>
+              Rozumiem
+            </button>
+          </div>
         </div>
       )}
 
