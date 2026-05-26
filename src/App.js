@@ -318,8 +318,25 @@ const Inp = React.forwardRef(({ style, shake, ...props }, ref) => (
   }} />
 ));
 
+// ── Safe JSON.parse — defenzívne čítanie localStorage (predchádza white-screen pri poškodenom kľúči) ──
+function safeParse(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw == null) return fallback;
+    const parsed = JSON.parse(raw);
+    return parsed == null ? fallback : parsed;
+  } catch (_) {
+    return fallback;
+  }
+}
+
 // ── Offline-aware send: pošle alebo uloží do fronty (modulová úroveň, bez React stavu) ──
 function sendOrQueue(url, type, payload) {
+  // Ochrana proti placeholder URL pre nenakonfigurované pobočky
+  if (!url || /^URL_POBOCKA/.test(url) || !/^https?:\/\//.test(url)) {
+    console.warn('sendOrQueue: skipped — placeholder/invalid URL', url);
+    return;
+  }
   const token = process.env.REACT_APP_GAS_TOKEN || '';
   const body = JSON.stringify({ type, ...payload, _token: token });
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
@@ -442,7 +459,7 @@ export default function App() {
   const [lastHaccpDateVecerne, setLastHaccpDateVecerne] = useState(localStorage.getItem('foxford-haccp-date-vecerne') || '');
   const [haccpShift, setHaccpShift] = useState('ranné');
   const [tempsVecerne, setTempsVecerne] = useState(() => {
-    const fields = JSON.parse(localStorage.getItem('foxford-temp-fields')) || INIT_TEMP_FIELDS;
+    const fields = safeParse('foxford-temp-fields', INIT_TEMP_FIELDS);
     return fields.reduce((a, f) => ({ ...a, [f.key]: '' }), {});
   });
   const [invSearch, setInvSearch] = useState('');
@@ -454,23 +471,18 @@ export default function App() {
   const touchX   = useRef(null);
 
   const [tasks, setTasks] = useState(() => {
+    // Catch-up loop nad nami už zapísal reset do localStorage ak preskočili sa dni,
+    // takže tu už len bezpečne načítame uložené úlohy.
     const saved = localStorage.getItem('foxford-tasks');
-    const last  = localStorage.getItem('foxford-last-reset-date');
-    const today = new Date().toDateString();
     if (!saved) return INIT_TASKS;
-    const parsed = JSON.parse(saved);
-    if (last !== today) {
-      localStorage.setItem('foxford-last-reset-date', today);
-      return { ...parsed, denné: INIT_TASKS.denné };
-    }
-    return parsed;
+    try { return JSON.parse(saved); } catch (_) { return INIT_TASKS; }
   });
 
-  const [inspectors, setInspectors] = useState(() => JSON.parse(localStorage.getItem('foxford-inspectors')) || { denné: '', víkendové: '', mesačné: '' });
+  const [inspectors, setInspectors] = useState(() => safeParse('foxford-inspectors', { denné: '', víkendové: '', mesačné: '' }));
   const [newTask, setNewTask]       = useState('');
-  const [tempFields, setTempFields] = useState(() => JSON.parse(localStorage.getItem('foxford-temp-fields')) || INIT_TEMP_FIELDS);
+  const [tempFields, setTempFields] = useState(() => safeParse('foxford-temp-fields', INIT_TEMP_FIELDS));
   const [temps, setTemps]           = useState(() => {
-    const fields = JSON.parse(localStorage.getItem('foxford-temp-fields')) || INIT_TEMP_FIELDS;
+    const fields = safeParse('foxford-temp-fields', INIT_TEMP_FIELDS);
     return fields.reduce((a, f) => ({ ...a, [f.key]: '' }), {});
   });
   const [newTempLabel, setNewTempLabel] = useState('');
@@ -482,11 +494,11 @@ export default function App() {
   const [selectedMonth, setSelectedMonth]   = useState(MONTHS[new Date().getMonth()]);
   const [invData, setInvData]   = useState(() => {
     const savedVer  = localStorage.getItem('foxford-inv-version');
-    const savedData = localStorage.getItem('foxford-inventory-data');
+    const savedData = safeParse('foxford-inventory-data', null);
     // Verzia sedí a dáta existujú → použi lokálne (vrátane úprav pobočky)
-    if (savedVer === INV_DATA_VERSION && savedData) return JSON.parse(savedData);
+    if (savedVer === INV_DATA_VERSION && savedData) return savedData;
     // Nová verzia kódu → štart od INIT_INV, ale zachovaj vlastné pridané položky
-    const customItems = JSON.parse(localStorage.getItem('foxford-custom-items')) || [];
+    const customItems = safeParse('foxford-custom-items', []);
     if (customItems.length === 0) return INIT_INV;
     const merged = INIT_INV.map(g => ({ ...g, items: [...g.items] }));
     customItems.forEach(({ category, item }) => {
@@ -497,7 +509,7 @@ export default function App() {
     return merged;
   });
   const [invQty, setInvQty]     = useState(() => {
-    const saved = JSON.parse(localStorage.getItem('foxford-inventory')) || {};
+    const saved = safeParse('foxford-inventory', {});
     // migrate old string format → new array-of-rows format
     const out = {};
     for (const [key, val] of Object.entries(saved)) {
@@ -505,13 +517,13 @@ export default function App() {
     }
     return out;
   });
-  const [invNotes, setInvNotes] = useState(() => JSON.parse(localStorage.getItem('foxford-inventory-notes')) || {});
+  const [invNotes, setInvNotes] = useState(() => safeParse('foxford-inventory-notes', {}));
   const [newCat, setNewCat]     = useState('');
   const [addingTo, setAddingTo] = useState(null);
   const [newItemName, setNewItemName] = useState('');
   const [newItemUnit, setNewItemUnit] = useState('');
   const [newItemCode, setNewItemCode] = useState('');
-  const [notes, setNotes]   = useState(() => JSON.parse(localStorage.getItem('foxford-notes')) || []);
+  const [notes, setNotes]   = useState(() => safeParse('foxford-notes', []));
   const [newNote, setNewNote] = useState('');
   const [noteAuthor, setNoteAuthor] = useState('');
   const [celebrate, setCelebrate] = useState(false);
@@ -530,17 +542,17 @@ export default function App() {
   const [shakeName, setShakeName] = useState(false);
   const [shakeInsp, setShakeInsp] = useState(false);
   const [notifPermission, setNotifPermission] = useState(() => 'Notification' in window ? Notification.permission : 'unsupported');
-  const [notifSettings, setNotifSettings] = useState(() => JSON.parse(localStorage.getItem('foxford-notif-settings')) || { enabled: false, time: '09:00' });
+  const [notifSettings, setNotifSettings] = useState(() => safeParse('foxford-notif-settings', { enabled: false, time: '09:00' }));
   const [showNotifModal, setShowNotifModal] = useState(false);
   const [showBugModal, setShowBugModal] = useState(false);
   const [bugText, setBugText] = useState('');
   const [bugAuthor, setBugAuthor] = useState('');
   const [bugSent, setBugSent] = useState(false);
-  const [offlineQueue, setOfflineQueue] = useState(() => JSON.parse(localStorage.getItem('foxford-offline-queue')) || []);
+  const [offlineQueue, setOfflineQueue] = useState(() => safeParse('foxford-offline-queue', []));
   const [offlineFlushed, setOfflineFlushed] = useState(0);
   const [now, setNow] = useState(new Date());
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
-  const [odpisy, setOdpisy] = useState(() => JSON.parse(localStorage.getItem('foxford-odpisy')) || {});
+  const [odpisy, setOdpisy] = useState(() => safeParse('foxford-odpisy', {}));
   const [odpisySearch, setOdpisySearch] = useState('');
   const [odpisySummaryDate, setOdpisySummaryDate] = useState(() => { const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() }; });
   const [odpisyAuthor, setOdpisyAuthor] = useState(() => localStorage.getItem('foxford-odpisy-author') || '');
@@ -579,8 +591,11 @@ export default function App() {
         setInspectors(prev => ({ ...prev, denné: '' }));
         setLastHaccpDate('');
         setLastHaccpDateVecerne('');
-        setTemps(prev => Object.keys(prev).reduce((a, k) => ({ ...a, [k]: '' }), {}));
-        setTempsVecerne(prev => Object.keys(prev).reduce((a, k) => ({ ...a, [k]: '' }), {}));
+        // Reset všetkých temp polí — vrátane akýchkoľvek čo boli pridané po mount-e
+        const _resetFields = safeParse('foxford-temp-fields', INIT_TEMP_FIELDS);
+        const _emptyTemps = _resetFields.reduce((a, f) => ({ ...a, [f.key]: '' }), {});
+        setTemps(prev => ({ ...prev, ..._emptyTemps }));
+        setTempsVecerne(prev => ({ ...prev, ..._emptyTemps }));
         setControllerName('');
         // 3) Re-arm na ďalšiu polnoc
         arm();
@@ -620,6 +635,10 @@ export default function App() {
   const scriptUrl = BRANCHES.find(b => b.name === branch)?.url || BRANCHES[0].url;
 
   const doFetch = (url, type, payload) => {
+    if (!url || /^URL_POBOCKA/.test(url) || !/^https?:\/\//.test(url)) {
+      console.warn('doFetch: skipped — placeholder/invalid URL', url);
+      return;
+    }
     fetch(url, {
       method: 'POST', mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
@@ -638,18 +657,40 @@ export default function App() {
     doFetch(scriptUrl, type, payload);
   };
 
-  // Odošli frontu keď príde konektivita (čítaj z localStorage — môže obsahovať položky pridané module-level kódom)
+  // Odošli frontu keď príde konektivita. Failed položky (network-level) vrátime späť do fronty.
   useEffect(() => {
     if (!online) return;
-    let queue = [];
-    try { queue = JSON.parse(localStorage.getItem('foxford-offline-queue')) || []; } catch (_) {}
+    const queue = safeParse('foxford-offline-queue', []);
     if (queue.length === 0) return;
-    queue.forEach(item => doFetch(item.url, item.type, item.payload));
-    const count = queue.length;
+    // Hneď vyčisti frontu aby sa nezdvojili odoslanie pri rýchlych online/offline prepnutiach
     setOfflineQueue([]);
     localStorage.removeItem('foxford-offline-queue');
-    setOfflineFlushed(count);
-    setTimeout(() => setOfflineFlushed(0), 4000);
+
+    Promise.allSettled(queue.map(item => {
+      const url = item.url;
+      if (!url || /^URL_POBOCKA/.test(url) || !/^https?:\/\//.test(url)) {
+        return Promise.reject(new Error('invalid URL'));
+      }
+      return fetch(url, {
+        method: 'POST', mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: item.type, ...item.payload, _token: process.env.REACT_APP_GAS_TOKEN }),
+      });
+    })).then(results => {
+      const failed = results.map((r, i) => r.status === 'rejected' ? queue[i] : null).filter(Boolean);
+      if (failed.length > 0) {
+        // Vráť zlyhane položky späť do fronty (zlúči s prípadne novými)
+        const current = safeParse('foxford-offline-queue', []);
+        const merged = [...current, ...failed];
+        localStorage.setItem('foxford-offline-queue', JSON.stringify(merged));
+        setOfflineQueue(merged);
+      }
+      const sentOk = queue.length - failed.length;
+      if (sentOk > 0) {
+        setOfflineFlushed(sentOk);
+        setTimeout(() => setOfflineFlushed(0), 4000);
+      }
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online]);
 
@@ -1989,6 +2030,7 @@ export default function App() {
               <button onMouseDown={() => {
                 setTempFields(prev => prev.filter(f => f.key !== confirmRemoveTemp.key));
                 setTemps(prev => { const n = { ...prev }; delete n[confirmRemoveTemp.key]; return n; });
+                setTempsVecerne(prev => { const n = { ...prev }; delete n[confirmRemoveTemp.key]; return n; });
                 setConfirmRemoveTemp(null);
               }} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.err}44`, background:C.errDim, color:C.err, fontWeight:800, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>Áno, odstrániť</button>
             </div>
