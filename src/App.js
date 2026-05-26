@@ -895,7 +895,8 @@ export default function App() {
 
   // ── MAIN ──────────────────────────────────────────────────────────────────
   return (
-    <div style={{ maxWidth: isDesktop ? 1100 : isTablet ? 860 : 500, margin:'0 auto', minHeight:'100vh', fontFamily:'-apple-system,sans-serif', color:C.text, paddingBottom: isTablet ? 120 : 110, overflowX:'hidden', background:`radial-gradient(ellipse at 15% 0%, rgba(224,160,58,.08) 0%, transparent 55%), radial-gradient(ellipse at 85% 90%, rgba(184,112,32,.06) 0%, transparent 55%), ${C.bg}` }}>
+    <div style={{ maxWidth: isDesktop ? 1100 : isTablet ? 860 : 500, margin:'0 auto', minHeight:'100vh', fontFamily:'-apple-system,sans-serif', color:C.text, paddingBottom: isTablet ? 120 : 110, overflowX:'hidden', background: C.bg, position:'relative' }}>
+      <div className="bg-parallax" />
       <style>{`.shake{animation:shake .4s ease-in-out;border-color:${C.err}!important;} @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}`}</style>
 
       {/* HEADER */}
@@ -914,8 +915,11 @@ export default function App() {
             <span style={{ fontSize: isTablet ? 20 : 17 }}>🐛</span>
             <span style={{ fontSize:7, color:C.sub, fontWeight:700, letterSpacing:.3, marginTop:1, lineHeight:1 }}>CHYBA</span>
           </div>
+          {online && offlineFlushed === 0 && (
+            <div className="dot-pulse-green" style={{ width:8, height:8, borderRadius:'50%', background:C.ok, boxShadow:`0 0 6px ${C.ok}` }} title="Online" />
+          )}
           {!online && (
-            <div style={{ fontSize:9, fontWeight:800, color:C.err, border:`1px solid ${C.err}`, padding:'3px 9px', borderRadius:20, letterSpacing:.5 }}>
+            <div className="dot-pulse-red" style={{ fontSize:9, fontWeight:800, color:C.err, border:`1px solid ${C.err}`, padding:'3px 9px', borderRadius:20, letterSpacing:.5 }}>
               OFFLINE{offlineQueue.length > 0 ? ` (${offlineQueue.length})` : ''}
             </div>
           )}
@@ -993,8 +997,8 @@ export default function App() {
                   {(tasks[subTab]||[]).filter(t=>t.done).length} / {(tasks[subTab]||[]).length}
                 </span>
               </div>
-              <div style={{ height:4, background:C.muted, borderRadius:4, overflow:'hidden' }}>
-                <div style={{ height:'100%', width:`${pct()}%`, background: pct()===100 ? C.ok : C.gold, borderRadius:4, transition:'width .35s ease', boxShadow: pct()>0 ? `0 0 8px ${pct()===100 ? C.ok : C.gold}` : 'none' }} />
+              <div style={{ height:7, background:C.muted, borderRadius:4, overflow:'hidden' }}>
+                <div className="progress-fill" style={{ height:'100%', width:`${pct()}%`, background: pct()===100 ? C.ok : C.gold, borderRadius:4, boxShadow: pct()>0 ? `0 0 10px ${pct()===100 ? C.ok : C.gold}` : 'none' }} />
               </div>
             </Glass>
             </div>
@@ -1139,8 +1143,21 @@ export default function App() {
                 const val = activeTemps[field.key] || '';
                 const status = tempColor(field, val);
                 const accentColor = status === 'ok' ? C.ok : status === 'err' ? C.err : C.border;
+                const fillPct = (() => {
+                  if (!status) return 0;
+                  if (status === 'err') return 100;
+                  const v = parseFloat((val || '').replace(',','.'));
+                  const m = parseFloat((field.max || '').replace(/[^\d.]/g, ''));
+                  if (isNaN(v) || isNaN(m) || m <= 0) return 55;
+                  return Math.max(10, Math.min(85, (Math.abs(v) / m) * 65));
+                })();
+                const thermoColor = status === 'ok' ? C.ok : status === 'err' ? C.err : C.muted;
                 return (
                   <div key={field.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom: isTablet ? 0 : 10 }}>
+                    <div className="thermo" title={`${val || '—'} ${field.max || ''}`}>
+                      <div className="thermo-fill" style={{ height: `${fillPct}%`, background: `linear-gradient(180deg, ${thermoColor}, ${thermoColor}cc)`, '--fill': `${fillPct}%` }} />
+                      <div className="thermo-bulb" style={{ background: thermoColor, boxShadow: status ? `0 0 6px ${thermoColor}88` : 'none' }} />
+                    </div>
                     <div style={{ flex:1 }}>
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
                         <span style={{ fontSize:11, fontWeight:700, letterSpacing:.5, color: status ? accentColor : C.sub, textTransform:'uppercase' }}>{field.label}</span>
@@ -1733,7 +1750,7 @@ export default function App() {
               )}
               <div style={{ position:'relative', fontSize: isTablet ? 24 : 20, zIndex:1, transition:'transform .15s', transform: active ? 'scale(1.12)' : 'scale(1)' }}>
                 {emoji}
-                {hasAlert && <div style={{ position:'absolute', top:-2, right:-4, width:7, height:7, borderRadius:'50%', background:C.err, boxShadow:`0 0 6px ${C.err}` }} />}
+                {hasAlert && <div className="dot-pulse-red" style={{ position:'absolute', top:-2, right:-4, width:7, height:7, borderRadius:'50%', background:C.err, color:C.err, boxShadow:`0 0 6px ${C.err}` }} />}
               </div>
               <div style={{ fontSize: isTablet ? 11 : 9, fontWeight: active ? 700 : 500, letterSpacing:.3, color: active ? C.gold : C.muted, transition:'color .15s', zIndex:1 }}>{label}</div>
             </div>
