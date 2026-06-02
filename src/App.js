@@ -1538,12 +1538,14 @@ export default function App() {
                           borderBottom: `1.5px solid rgba(90,70,45,0.28)`,
                         }}>
                           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:7 }}>
-                            <span style={{ fontSize:13, fontWeight:600, color:C.text }}>{item.name}</span>
-                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                              <span style={{ fontSize:10, color:C.gold, fontWeight:700, padding:'2px 7px', border:`1px solid ${C.goldLine}`, borderRadius:8 }}>{item.unit}</span>
+                            <div style={{ display:'flex', alignItems:'center', gap:9 }}>
                               <span onClick={() => { if(window.confirm(`Zmazať "${item.name}"?`)) setInvData(invData.map(g => g.category===group.category ? {...g, items: g.items.filter(i=>i.id!==item.id)} : g)); }}
-                                style={{ color:C.muted, fontSize:12, cursor:'pointer', lineHeight:1 }}>✕</span>
+                                style={{ color:C.err, fontSize:14, cursor:'pointer', lineHeight:1, fontWeight:700, flexShrink:0,
+                                         width:20, height:20, borderRadius:6, display:'flex', alignItems:'center', justifyContent:'center',
+                                         background:C.errDim, border:`1px solid ${C.err}33` }}>✕</span>
+                              <span style={{ fontSize:13, fontWeight:600, color:C.text }}>{item.name}</span>
                             </div>
+                            <span style={{ fontSize:10, color:C.gold, fontWeight:700, padding:'2px 7px', border:`1px solid ${C.goldLine}`, borderRadius:8 }}>{item.unit}</span>
                           </div>
                           <div style={{ display:'flex', gap:7, alignItems:'flex-start' }}>
                             {/* Portos kód */}
