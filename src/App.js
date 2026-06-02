@@ -1501,6 +1501,30 @@ export default function App() {
               );
             })()}
 
+            {/* Editačná legenda — vysvetlivky ikon */}
+            {editMode && (
+              <div style={{ marginBottom:12, padding:'14px 16px', borderRadius:16,
+                            background:C.goldDim, border:`1px solid ${C.goldLine}` }}>
+                <div style={{ fontSize:12, fontWeight:800, color:C.gold, letterSpacing:.5, textTransform:'uppercase', marginBottom:10 }}>
+                  ✏️ Editačný režim — vysvetlivky
+                </div>
+                {[
+                  { ico:'+', col:C.gold, txt:'Pridať produkt do kategórie (v hlavičke kategórie)' },
+                  { ico:'✕', col:C.err,  txt:'Odstrániť kategóriu (v hlavičke kategórie)' },
+                  { ico:'✕', col:C.err,  txt:'Odstrániť produkt (vľavo pri názve produktu)' },
+                ].map((r, i) => (
+                  <div key={i} style={{ display:'flex', alignItems:'center', gap:10, marginBottom: i<2 ? 8 : 0 }}>
+                    <span style={{ width:22, height:22, flexShrink:0, borderRadius:6, display:'flex', alignItems:'center', justifyContent:'center',
+                                   fontSize:13, fontWeight:700, color:r.col, background:'rgba(255,255,255,0.6)', border:`1px solid ${r.col}44` }}>{r.ico}</span>
+                    <span style={{ fontSize:12.5, color:C.sub, lineHeight:1.4 }}>{r.txt}</span>
+                  </div>
+                ))}
+                <div style={{ fontSize:11.5, color:C.muted, marginTop:10, lineHeight:1.4 }}>
+                  Novú kategóriu pridáš úplne dole cez <b style={{ color:C.sub }}>„Pridať kategóriu"</b>.
+                </div>
+              </div>
+            )}
+
             {/* Categories */}
             <div>
             {invData.map(group => {
