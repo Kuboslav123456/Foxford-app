@@ -489,8 +489,14 @@ export default function App() {
   const dismissKeyboard = () => {
     const input = activeInputRef.current;
     if (input) {
-      // tabIndex={-1} na inpute zabraňuje presunu focusu na ďalší element
+      // Ulož scroll pozíciu pred zatvorením klávesnice
+      const savedScroll = window.scrollY;
       input.blur();
+      // Android: keď sa klávesnica schová, viewport sa rozšíri a prehliadač posunie scroll.
+      // Obnovíme pozíciu vo viacerých krokoch počas animácie klavesnice (0 / 150 / 350 ms)
+      requestAnimationFrame(() => window.scrollTo(0, savedScroll));
+      setTimeout(() => window.scrollTo(0, savedScroll), 150);
+      setTimeout(() => window.scrollTo(0, savedScroll), 350);
     }
     activeInputRef.current = null;
   };
