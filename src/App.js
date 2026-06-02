@@ -1506,13 +1506,14 @@ export default function App() {
               if (s && !catMatch && items.length === 0) return null;
               const open = expCat === group.category || !!invSearch;
               return (
-                <Glass key={group.category} style={{ overflow:'hidden', marginBottom:8 }}>
+                <Glass key={group.category} style={{ overflow:'hidden', marginBottom:16, borderLeft:`4px solid ${C.gold}` }}>
                   <div onClick={() => setExpCat(open && !invSearch ? null : group.category)}
-                    style={{ padding:'13px 16px', display:'flex', justifyContent:'space-between', alignItems:'center', cursor:'pointer', borderBottom: open ? `1px solid ${C.border}` : 'none' }}>
+                    style={{ padding:'15px 16px', display:'flex', justifyContent:'space-between', alignItems:'center', cursor:'pointer',
+                             background:`linear-gradient(135deg, rgba(184,112,32,0.14), rgba(184,112,32,0.05))`,
+                             borderBottom: open ? `1px solid ${C.goldLine}` : 'none' }}>
                     <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                      <div style={{ width:3, height:16, borderRadius:2, background:C.gold }} />
-                      <span style={{ fontWeight:700, fontSize:13, color:C.text, letterSpacing:.3 }}>{group.category}</span>
-                      <span style={{ fontSize:10, color:C.muted }}>({group.items.length})</span>
+                      <span style={{ fontWeight:800, fontSize:15, color:C.gold, letterSpacing:.6, textTransform:'uppercase' }}>{group.category}</span>
+                      <span style={{ fontSize:11, color:C.gold, fontWeight:700, opacity:.7 }}>({group.items.length})</span>
                     </div>
                     <div style={{ display:'flex', gap:14, alignItems:'center' }}>
                       <span onClick={e => { e.stopPropagation(); setAddingTo(group.category); }} style={{ color:C.gold, fontSize:20, lineHeight:1, fontWeight:300 }}>+</span>
