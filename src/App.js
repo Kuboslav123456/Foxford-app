@@ -484,6 +484,8 @@ export default function App() {
   const longPress  = useRef(false);
   const inspRef  = useRef(null);
   const nameRef  = useRef(null);
+  // Priama referencia na aktuálne focusnutý <input> — pre spoľahlivé zatváranie klávesnice
+  const activeInputRef = useRef(null);
   const touchX   = useRef(null);
 
   const [tasks, setTasks] = useState(() => {
@@ -1544,8 +1546,8 @@ export default function App() {
                                     <span style={{ fontSize:11, color:C.muted, flexShrink:0 }}>{item.unit}</span>
                                     <Inp placeholder="Miesto (napr. Bar)" value={row.label}
                                       onChange={e => updateQtyRow(item.id, row.id, 'label', e.target.value)}
-                                      onFocus={() => setActiveInvField({ itemId: item.id, rowId: row.id, field: 'label' })}
-                                      onBlur={() => setActiveInvField(null)}
+                                      onFocus={e => { activeInputRef.current = e.target; setActiveInvField({ itemId: item.id, rowId: row.id, field: 'label' }); }}
+                                      onBlur={() => { activeInputRef.current = null; setActiveInvField(null); }}
                                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
                                       enterKeyHint="done"
                                       style={{ flex:1, padding:'8px 10px', fontSize:12 }} />
@@ -1556,14 +1558,14 @@ export default function App() {
                                   {activeInvField?.itemId === item.id && activeInvField?.rowId === row.id && activeInvField?.field === 'label' && (
                                     <div style={{ display:'flex', gap:6, marginTop:4 }}>
                                       <button
-                                        onTouchStart={e => { e.preventDefault(); e.stopPropagation(); updateQtyRow(item.id, row.id, 'label', ''); document.activeElement?.blur(); setActiveInvField(null); }}
-                                        onMouseDown={e => { e.preventDefault(); e.stopPropagation(); updateQtyRow(item.id, row.id, 'label', ''); document.activeElement?.blur(); setActiveInvField(null); }}
+                                        onTouchStart={e => { e.preventDefault(); e.stopPropagation(); updateQtyRow(item.id, row.id, 'label', ''); activeInputRef.current?.blur(); setActiveInvField(null); }}
+                                        onMouseDown={e => { e.preventDefault(); e.stopPropagation(); updateQtyRow(item.id, row.id, 'label', ''); activeInputRef.current?.blur(); setActiveInvField(null); }}
                                         style={{ flex:1, padding:'6px', borderRadius:8, border:`1px solid ${C.border}`, background:'transparent', color:C.muted, fontWeight:700, fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>
                                         Zrušiť
                                       </button>
                                       <button
-                                        onTouchStart={e => { e.preventDefault(); e.stopPropagation(); document.activeElement?.blur(); setActiveInvField(null); }}
-                                        onMouseDown={e => { e.preventDefault(); e.stopPropagation(); document.activeElement?.blur(); setActiveInvField(null); }}
+                                        onTouchStart={e => { e.preventDefault(); e.stopPropagation(); activeInputRef.current?.blur(); setActiveInvField(null); }}
+                                        onMouseDown={e => { e.preventDefault(); e.stopPropagation(); activeInputRef.current?.blur(); setActiveInvField(null); }}
                                         style={{ flex:2, padding:'6px', borderRadius:8, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:700, fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>
                                         OK ✓
                                       </button>
