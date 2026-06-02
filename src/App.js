@@ -492,24 +492,19 @@ export default function App() {
     activeInputRef.current = null;
 
     const savedScroll = window.scrollY;
-    input.blur();
-    // Explicitne prenesieme focus na body — zabraňuje skoku na iný input (napr. search)
-    document.body.focus();
 
-    // Android/iOS: klávesnica schová → visualViewport vyvolá "resize" event →
-    // prehliadač posunie scroll. Zachytíme presne tento moment a obnovíme pozíciu.
-    const vv = window.visualViewport;
-    if (vv) {
-      const restore = () => {
-        window.scrollTo({ top: savedScroll, behavior: 'instant' });
-        vv.removeEventListener('resize', restore);
-      };
-      vv.addEventListener('resize', restore);
-      // Fallback — ak resize nepríde do 600ms (desktop / klávesnica nebola otvorená)
-      setTimeout(() => {
-        vv.removeEventListener('resize', restore);
-      }, 600);
-    }
+    // Uzamkneme scroll pozíciu na 600ms — akýkoľvek pokus Androidu scrollnúť
+    // (keyboard close, DOM zmena, focus jump) sa okamžite koriguje späť
+    let locked = true;
+    const lockFn = () => { if (locked) window.scrollTo(0, savedScroll); };
+    window.addEventListener('scroll', lockFn, { passive: true });
+    setTimeout(() => {
+      locked = false;
+      window.removeEventListener('scroll', lockFn);
+    }, 600);
+
+    input.blur();
+    document.body.focus();
   };
   const touchX   = useRef(null);
 
