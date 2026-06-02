@@ -558,6 +558,7 @@ export default function App() {
   const [invNotes, setInvNotes] = useState(() => safeParse('foxford-inventory-notes', {}));
   const [newCat, setNewCat]     = useState('');
   const [addingTo, setAddingTo] = useState(null);
+  const [editMode, setEditMode] = useState(false); // editácia skladu (mazanie/pridávanie) — predvolene vypnuté
   const [newItemName, setNewItemName] = useState('');
   const [newItemUnit, setNewItemUnit] = useState('');
   const [newItemCode, setNewItemCode] = useState('');
@@ -1519,9 +1520,9 @@ export default function App() {
                       <span style={{ fontSize:11, color:C.gold, fontWeight:700, opacity:.7 }}>({group.items.length})</span>
                     </div>
                     <div style={{ display:'flex', gap:14, alignItems:'center' }}>
-                      <span onClick={e => { e.stopPropagation(); setAddingTo(group.category); }} style={{ color:C.gold, fontSize:20, lineHeight:1, fontWeight:300 }}>+</span>
-                      <span onClick={e => { e.stopPropagation(); if(window.confirm(`Zmazať "${group.category}"?`)) setInvData(invData.filter(g=>g.category!==group.category)); }}
-                        style={{ color:C.muted, fontSize:12, cursor:'pointer' }}>✕</span>
+                      {editMode && <span onClick={e => { e.stopPropagation(); setAddingTo(group.category); }} style={{ color:C.gold, fontSize:20, lineHeight:1, fontWeight:300 }}>+</span>}
+                      {editMode && <span onClick={e => { e.stopPropagation(); if(window.confirm(`Zmazať "${group.category}"?`)) setInvData(invData.filter(g=>g.category!==group.category)); }}
+                        style={{ color:C.err, fontSize:12, cursor:'pointer' }}>✕</span>}
                       <span style={{ color:C.muted, fontSize:10 }}>{open ? '▲' : '▼'}</span>
                     </div>
                   </div>
@@ -1539,8 +1540,8 @@ export default function App() {
                         }}>
                           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:7 }}>
                             <div style={{ display:'flex', alignItems:'center', gap:9 }}>
-                              <span onClick={() => { if(window.confirm(`Zmazať "${item.name}"?`)) setInvData(invData.map(g => g.category===group.category ? {...g, items: g.items.filter(i=>i.id!==item.id)} : g)); }}
-                                style={{ color:C.muted, fontSize:11, cursor:'pointer', lineHeight:1, flexShrink:0, opacity:.6 }}>✕</span>
+                              {editMode && <span onClick={() => { if(window.confirm(`Zmazať "${item.name}"?`)) setInvData(invData.map(g => g.category===group.category ? {...g, items: g.items.filter(i=>i.id!==item.id)} : g)); }}
+                                style={{ color:C.err, fontSize:11, cursor:'pointer', lineHeight:1, flexShrink:0, opacity:.8 }}>✕</span>}
                               <span style={{ fontSize:13, fontWeight:600, color:C.text }}>{item.name}</span>
                             </div>
                             <span style={{ fontSize:10, color:C.gold, fontWeight:700, padding:'2px 7px', border:`1px solid ${C.goldLine}`, borderRadius:8 }}>{item.unit}</span>
@@ -1703,14 +1704,33 @@ export default function App() {
               ↺ Nová inventúra
             </button>
 
-            {/* Add category */}
-            <Glass style={{ padding:'14px 16px', border:`1px dashed ${C.goldLine}` }}>
-              <Inp placeholder="Nová kategória…" value={newCat} onChange={e => setNewCat(e.target.value)} style={{ marginBottom:9 }} />
-              <button onClick={() => { if(newCat.trim()){setInvData([...invData,{category:newCat,items:[]}]);setNewCat('');} }}
-                style={{ width:'100%', padding:'11px', background:C.panel, border:`1px solid ${C.border}`, color:C.text, borderRadius:12, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
-                + Pridať kategóriu
-              </button>
-            </Glass>
+            {/* Add category — len v editačnom režime */}
+            {editMode && (
+              <Glass style={{ padding:'14px 16px', border:`1px dashed ${C.goldLine}` }}>
+                <Inp placeholder="Nová kategória…" value={newCat} onChange={e => setNewCat(e.target.value)} style={{ marginBottom:9 }} />
+                <button onClick={() => { if(newCat.trim()){setInvData([...invData,{category:newCat,items:[]}]);setNewCat('');} }}
+                  style={{ width:'100%', padding:'11px', background:C.panel, border:`1px solid ${C.border}`, color:C.text, borderRadius:12, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                  + Pridať kategóriu
+                </button>
+              </Glass>
+            )}
+
+            {/* Editačný režim prepínač — úplne dole */}
+            <div onClick={() => setEditMode(v => !v)}
+              style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:10, marginTop:6,
+                       padding:'12px', borderRadius:14, cursor:'pointer', userSelect:'none',
+                       border:`1px solid ${editMode ? C.goldLine : C.border}`,
+                       background: editMode ? C.goldDim : 'transparent' }}>
+              <span style={{ fontSize:13, fontWeight:700, letterSpacing:.5, color: editMode ? C.gold : C.muted }}>
+                {editMode ? '🔓 Editácia zapnutá' : '🔒 Editácia'}
+              </span>
+              <div style={{ width:38, height:22, borderRadius:11, padding:2, transition:'background .2s',
+                            background: editMode ? C.gold : 'rgba(150,120,80,0.25)', flexShrink:0 }}>
+                <div style={{ width:18, height:18, borderRadius:'50%', background:'#fff', transition:'transform .2s',
+                              transform: editMode ? 'translateX(16px)' : 'translateX(0)',
+                              boxShadow:'0 1px 3px rgba(0,0,0,0.3)' }} />
+              </div>
+            </div>
           </div>
         )}
 
