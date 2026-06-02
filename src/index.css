@@ -1,3 +1,6 @@
+/* tabIndex=-1 na body umožňuje document.body.focus() — zabraňuje skoku focusu na iný input pri dismiss klávesnice */
+body { outline: none; }
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',

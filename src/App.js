@@ -493,6 +493,8 @@ export default function App() {
 
     const savedScroll = window.scrollY;
     input.blur();
+    // Explicitne prenesieme focus na body — zabraňuje skoku na iný input (napr. search)
+    document.body.focus();
 
     // Android/iOS: klávesnica schová → visualViewport vyvolá "resize" event →
     // prehliadač posunie scroll. Zachytíme presne tento moment a obnovíme pozíciu.
@@ -1477,6 +1479,7 @@ export default function App() {
             <Glass style={{ padding:'10px 14px', display:'flex', alignItems:'center', gap:8 }}>
               <span style={{ color:C.muted, fontSize:14 }}>⌕</span>
               <Inp placeholder="Hľadať položku…" value={invSearch} onChange={e => setInvSearch(e.target.value)}
+                tabIndex={-1}
                 style={{ border:'none', padding:'4px 0', background:'transparent', fontSize:14 }} />
               {invSearch && <span onClick={() => setInvSearch('')} style={{ color:C.muted, fontSize:14, cursor:'pointer' }}>✕</span>}
             </Glass>
