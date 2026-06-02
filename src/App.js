@@ -822,7 +822,6 @@ export default function App() {
   const needName = () => { if (!controllerName.trim()) { doShake(setShakeName, nameRef); return false; } return true; };
 
   // ── MULTI-QTY HELPERS ────────────────────────────────────────────────────────
-  const [focusLabelRow, setFocusLabelRow] = useState(null);
   const [activeInvField, setActiveInvField] = useState(null); // { itemId, rowId, field: 'qty'|'label'|'note' }
   const addQtyRow = (itemId, itemName, unit) => {
     const newId = 'r' + Date.now();
@@ -1544,9 +1543,6 @@ export default function App() {
                                     </div>
                                     <span style={{ fontSize:11, color:C.muted, flexShrink:0 }}>{item.unit}</span>
                                     <Inp placeholder="Miesto (napr. Bar)" value={row.label}
-                                      ref={focusLabelRow?.itemId === item.id && focusLabelRow?.rowId === row.id
-                                        ? el => { if (el) { el.focus(); setFocusLabelRow(null); } }
-                                        : null}
                                       onChange={e => updateQtyRow(item.id, row.id, 'label', e.target.value)}
                                       onFocus={() => setActiveInvField({ itemId: item.id, rowId: row.id, field: 'label' })}
                                       onBlur={() => setActiveInvField(null)}
@@ -1559,11 +1555,15 @@ export default function App() {
                                   {/* Action strip pre label pole */}
                                   {activeInvField?.itemId === item.id && activeInvField?.rowId === row.id && activeInvField?.field === 'label' && (
                                     <div style={{ display:'flex', gap:6, marginTop:4 }}>
-                                      <button onMouseDown={e => { e.preventDefault(); updateQtyRow(item.id, row.id, 'label', ''); document.activeElement?.blur(); setActiveInvField(null); }}
+                                      <button
+                                        onTouchStart={e => { e.preventDefault(); e.stopPropagation(); updateQtyRow(item.id, row.id, 'label', ''); document.activeElement?.blur(); setActiveInvField(null); }}
+                                        onMouseDown={e => { e.preventDefault(); e.stopPropagation(); updateQtyRow(item.id, row.id, 'label', ''); document.activeElement?.blur(); setActiveInvField(null); }}
                                         style={{ flex:1, padding:'6px', borderRadius:8, border:`1px solid ${C.border}`, background:'transparent', color:C.muted, fontWeight:700, fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>
                                         Zrušiť
                                       </button>
-                                      <button onMouseDown={e => { e.preventDefault(); document.activeElement?.blur(); setActiveInvField(null); }}
+                                      <button
+                                        onTouchStart={e => { e.preventDefault(); e.stopPropagation(); document.activeElement?.blur(); setActiveInvField(null); }}
+                                        onMouseDown={e => { e.preventDefault(); e.stopPropagation(); document.activeElement?.blur(); setActiveInvField(null); }}
                                         style={{ flex:2, padding:'6px', borderRadius:8, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:700, fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>
                                         OK ✓
                                       </button>
