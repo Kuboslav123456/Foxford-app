@@ -487,11 +487,13 @@ export default function App() {
   // Priama referencia na aktuálne focusnutý <input> — pre spoľahlivé zatváranie klávesnice
   const activeInputRef = useRef(null);
   const dismissKeyboard = () => {
-    // 1) blur aktuálneho inputu
-    activeInputRef.current?.blur();
-    // 2) Android trik: focus+blur readonly dummy → zaručene zatvorí klávesnicu
-    const dummy = document.getElementById('kb-dismiss-dummy');
-    if (dummy) { dummy.focus(); setTimeout(() => dummy.blur(), 10); }
+    const input = activeInputRef.current;
+    if (input) {
+      // Android trik: nastavíme readonly → klávesnica sa zatvorí bez presunu focusu
+      input.setAttribute('readonly', '');
+      input.blur();
+      setTimeout(() => input.removeAttribute('readonly'), 150);
+    }
     activeInputRef.current = null;
   };
   const touchX   = useRef(null);
@@ -2128,10 +2130,6 @@ export default function App() {
           </div>
         </div>
       )}
-
-      {/* ── Skrytý dummy input — Android keyboard dismiss trik ─────────────── */}
-      <input id="kb-dismiss-dummy" readOnly aria-hidden="true"
-        style={{ position:'fixed', opacity:0, top:'-200px', left:0, width:1, height:1, fontSize:16, pointerEvents:'none' }} />
 
       {/* ── LOCKED ALERT — pop-up keď user klikne na uzamknuté teplotné pole ─ */}
       {lockedAlert && (
