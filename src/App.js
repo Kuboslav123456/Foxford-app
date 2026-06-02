@@ -486,6 +486,14 @@ export default function App() {
   const nameRef  = useRef(null);
   // Priama referencia na aktuálne focusnutý <input> — pre spoľahlivé zatváranie klávesnice
   const activeInputRef = useRef(null);
+  const dismissKeyboard = () => {
+    // 1) blur aktuálneho inputu
+    activeInputRef.current?.blur();
+    // 2) Android trik: focus+blur readonly dummy → zaručene zatvorí klávesnicu
+    const dummy = document.getElementById('kb-dismiss-dummy');
+    if (dummy) { dummy.focus(); setTimeout(() => dummy.blur(), 10); }
+    activeInputRef.current = null;
+  };
   const touchX   = useRef(null);
 
   const [tasks, setTasks] = useState(() => {
@@ -1558,14 +1566,14 @@ export default function App() {
                                   {activeInvField?.itemId === item.id && activeInvField?.rowId === row.id && activeInvField?.field === 'label' && (
                                     <div style={{ display:'flex', gap:6, marginTop:4 }}>
                                       <button
-                                        onTouchStart={e => { e.preventDefault(); e.stopPropagation(); updateQtyRow(item.id, row.id, 'label', ''); activeInputRef.current?.blur(); setActiveInvField(null); }}
-                                        onMouseDown={e => { e.preventDefault(); e.stopPropagation(); updateQtyRow(item.id, row.id, 'label', ''); activeInputRef.current?.blur(); setActiveInvField(null); }}
+                                        onTouchStart={e => { e.preventDefault(); e.stopPropagation(); updateQtyRow(item.id, row.id, 'label', ''); dismissKeyboard(); setActiveInvField(null); }}
+                                        onMouseDown={e => { e.preventDefault(); e.stopPropagation(); updateQtyRow(item.id, row.id, 'label', ''); dismissKeyboard(); setActiveInvField(null); }}
                                         style={{ flex:1, padding:'6px', borderRadius:8, border:`1px solid ${C.border}`, background:'transparent', color:C.muted, fontWeight:700, fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>
                                         Zrušiť
                                       </button>
                                       <button
-                                        onTouchStart={e => { e.preventDefault(); e.stopPropagation(); activeInputRef.current?.blur(); setActiveInvField(null); }}
-                                        onMouseDown={e => { e.preventDefault(); e.stopPropagation(); activeInputRef.current?.blur(); setActiveInvField(null); }}
+                                        onTouchStart={e => { e.preventDefault(); e.stopPropagation(); dismissKeyboard(); setActiveInvField(null); }}
+                                        onMouseDown={e => { e.preventDefault(); e.stopPropagation(); dismissKeyboard(); setActiveInvField(null); }}
                                         style={{ flex:2, padding:'6px', borderRadius:8, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:700, fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>
                                         OK ✓
                                       </button>
@@ -2120,6 +2128,10 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* ── Skrytý dummy input — Android keyboard dismiss trik ─────────────── */}
+      <input id="kb-dismiss-dummy" readOnly aria-hidden="true"
+        style={{ position:'fixed', opacity:0, top:'-200px', left:0, width:1, height:1, fontSize:16, pointerEvents:'none' }} />
 
       {/* ── LOCKED ALERT — pop-up keď user klikne na uzamknuté teplotné pole ─ */}
       {lockedAlert && (
