@@ -1501,30 +1501,6 @@ export default function App() {
               );
             })()}
 
-            {/* Editačná legenda — vysvetlivky ikon */}
-            {editMode && (
-              <div style={{ marginBottom:12, padding:'14px 16px', borderRadius:16,
-                            background:C.goldDim, border:`1px solid ${C.goldLine}` }}>
-                <div style={{ fontSize:12, fontWeight:800, color:C.gold, letterSpacing:.5, textTransform:'uppercase', marginBottom:10 }}>
-                  ✏️ Editačný režim — vysvetlivky
-                </div>
-                {[
-                  { ico:'+', col:C.gold, txt:'Pridať produkt do kategórie (v hlavičke kategórie)' },
-                  { ico:'✕', col:C.err,  txt:'Odstrániť kategóriu (v hlavičke kategórie)' },
-                  { ico:'✕', col:C.err,  txt:'Odstrániť produkt (vľavo pri názve produktu)' },
-                ].map((r, i) => (
-                  <div key={i} style={{ display:'flex', alignItems:'center', gap:10, marginBottom: i<2 ? 8 : 0 }}>
-                    <span style={{ width:22, height:22, flexShrink:0, borderRadius:6, display:'flex', alignItems:'center', justifyContent:'center',
-                                   fontSize:13, fontWeight:700, color:r.col, background:'rgba(255,255,255,0.6)', border:`1px solid ${r.col}44` }}>{r.ico}</span>
-                    <span style={{ fontSize:12.5, color:C.sub, lineHeight:1.4 }}>{r.txt}</span>
-                  </div>
-                ))}
-                <div style={{ fontSize:11.5, color:C.muted, marginTop:10, lineHeight:1.4 }}>
-                  Novú kategóriu pridáš úplne dole cez <b style={{ color:C.sub }}>„Pridať kategóriu"</b>.
-                </div>
-              </div>
-            )}
-
             {/* Categories */}
             <div>
             {invData.map(group => {
@@ -1543,10 +1519,15 @@ export default function App() {
                       <span style={{ fontWeight:800, fontSize:15, color:C.gold, letterSpacing:.6, textTransform:'uppercase' }}>{group.category}</span>
                       <span style={{ fontSize:11, color:C.gold, fontWeight:700, opacity:.7 }}>({group.items.length})</span>
                     </div>
-                    <div style={{ display:'flex', gap:14, alignItems:'center' }}>
-                      {editMode && <span onClick={e => { e.stopPropagation(); setAddingTo(group.category); }} style={{ color:C.gold, fontSize:20, lineHeight:1, fontWeight:300 }}>+</span>}
+                    <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+                      {editMode && <span onClick={e => { e.stopPropagation(); setAddingTo(group.category); }}
+                        style={{ display:'inline-flex', alignItems:'center', gap:4, color:C.gold, fontSize:11, fontWeight:700, cursor:'pointer', lineHeight:1,
+                                 padding:'5px 9px', borderRadius:8, background:'rgba(255,255,255,0.6)', border:`1px solid ${C.goldLine}` }}>
+                        + Produkt</span>}
                       {editMode && <span onClick={e => { e.stopPropagation(); if(window.confirm(`Zmazať "${group.category}"?`)) setInvData(invData.filter(g=>g.category!==group.category)); }}
-                        style={{ color:C.err, fontSize:12, cursor:'pointer' }}>✕</span>}
+                        style={{ display:'inline-flex', alignItems:'center', gap:4, color:C.err, fontSize:11, fontWeight:700, cursor:'pointer', lineHeight:1,
+                                 padding:'5px 9px', borderRadius:8, background:C.errDim, border:`1px solid ${C.err}33` }}>
+                        ✕ Kategóriu</span>}
                       <span style={{ color:C.muted, fontSize:10 }}>{open ? '▲' : '▼'}</span>
                     </div>
                   </div>
@@ -1565,7 +1546,9 @@ export default function App() {
                           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:7 }}>
                             <div style={{ display:'flex', alignItems:'center', gap:9 }}>
                               {editMode && <span onClick={() => { if(window.confirm(`Zmazať "${item.name}"?`)) setInvData(invData.map(g => g.category===group.category ? {...g, items: g.items.filter(i=>i.id!==item.id)} : g)); }}
-                                style={{ color:C.err, fontSize:11, cursor:'pointer', lineHeight:1, flexShrink:0, opacity:.8 }}>✕</span>}
+                                style={{ display:'inline-flex', alignItems:'center', gap:5, color:C.err, fontSize:11, cursor:'pointer', lineHeight:1, flexShrink:0,
+                                         padding:'4px 8px', borderRadius:8, background:C.errDim, border:`1px solid ${C.err}33`, fontWeight:700 }}>
+                                ✕ Zmazať</span>}
                               <span style={{ fontSize:13, fontWeight:600, color:C.text }}>{item.name}</span>
                             </div>
                             <span style={{ fontSize:10, color:C.gold, fontWeight:700, padding:'2px 7px', border:`1px solid ${C.goldLine}`, borderRadius:8 }}>{item.unit}</span>
