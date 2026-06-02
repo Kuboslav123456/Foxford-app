@@ -468,6 +468,7 @@ export default function App() {
   const [pressPos, setPressPos] = useState({ x: 0, y: 0 });
   const [bouncingCheck, setBouncingCheck] = useState(null);
   const [lockedAlert, setLockedAlert] = useState(null); // { shift }
+  const [invNumpad, setInvNumpad]     = useState(null); // { itemId, rowId, value, unit, itemName }
   const [confirmUndo, setConfirmUndo] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [lastHaccpDate, setLastHaccpDate] = useState(localStorage.getItem('foxford-haccp-date') || '');
@@ -821,17 +822,33 @@ export default function App() {
   const needName = () => { if (!controllerName.trim()) { doShake(setShakeName, nameRef); return false; } return true; };
 
   // ── MULTI-QTY HELPERS ────────────────────────────────────────────────────────
-  const [focusNewRow, setFocusNewRow] = useState(null);
   const [focusLabelRow, setFocusLabelRow] = useState(null);
   const [activeInvField, setActiveInvField] = useState(null); // { itemId, rowId, field: 'qty'|'label'|'note' }
-  const addQtyRow = (itemId) => {
+  const addQtyRow = (itemId, itemName, unit) => {
     const newId = 'r' + Date.now();
     setInvQty(q => ({ ...q, [itemId]: [...(q[itemId]||[]), { id: newId, label:'', qty:'' }] }));
-    setFocusNewRow({ itemId, rowId: newId });
+    // Automaticky otvor numpad pre nový riadok
+    setInvNumpad({ itemId, rowId: newId, value: '', unit: unit || '', itemName: itemName || '' });
   };
   const removeQtyRow = (itemId, rowId) => setInvQty(q => ({ ...q, [itemId]: (q[itemId]||[]).filter(r => r.id !== rowId) }));
   const updateQtyRow = (itemId, rowId, field, val) => setInvQty(q => ({ ...q, [itemId]: (q[itemId]||[]).map(r => r.id === rowId ? { ...r, [field]: val } : r) }));
   const qtyTotal     = (itemId) => Math.round((invQty[itemId]||[]).reduce((s, r) => s + (parseFloat((r.qty||'').toString().replace(',','.'))||0), 0) * 1000) / 1000;
+
+  // ── NUMPAD HELPERS ───────────────────────────────────────────────────────
+  const numpadPress = key => setInvNumpad(prev => {
+    if (!prev) return prev;
+    let v = prev.value;
+    if (key === '⌫') { v = v.slice(0, -1); }
+    else if (key === '.') { if (!v.includes('.')) v += v === '' ? '0.' : '.'; }
+    else if (v === '0') { v = key; }
+    else { if (v.length < 8) v += key; }
+    return { ...prev, value: v };
+  });
+  const numpadConfirm = () => {
+    if (!invNumpad) return;
+    updateQtyRow(invNumpad.itemId, invNumpad.rowId, 'qty', invNumpad.value);
+    setInvNumpad(null);
+  };
   const needInsp = () => { if (!inspectors[subTab].trim()) { doShake(setShakeInsp, inspRef); return false; } return true; };
 
   // ── ODPISY HELPERS ───────────────────────────────────────────────────────
@@ -1509,15 +1526,22 @@ export default function App() {
                               {(invQty[item.id]||[]).map(row => (
                                 <div key={row.id}>
                                   <div style={{ display:'flex', gap:5, alignItems:'center' }}>
-                                    <Inp type="text" inputMode="decimal" placeholder="0" value={row.qty}
-                                      ref={focusNewRow?.itemId === item.id && focusNewRow?.rowId === row.id
-                                        ? el => { if (el) { el.focus(); el.scrollIntoView({ behavior:'smooth', block:'center' }); setFocusNewRow(null); } }
-                                        : null}
-                                      onChange={e => updateQtyRow(item.id, row.id, 'qty', e.target.value)}
-                                      onFocus={() => setActiveInvField({ itemId: item.id, rowId: row.id, field: 'qty' })}
-                                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); setFocusLabelRow({ itemId: item.id, rowId: row.id }); } }}
-                                      enterKeyHint="next"
-                                      style={{ width:70, padding:'8px 8px', textAlign:'center', fontWeight:800, fontSize:14 }} />
+                                    {/* Qty — tap otvori numpad modal (tablet-friendly) */}
+                                    <div
+                                      onPointerDown={e => { e.preventDefault(); setInvNumpad({ itemId: item.id, rowId: row.id, value: row.qty || '', unit: item.unit, itemName: item.name }); }}
+                                      style={{
+                                        width:70, padding:'9px 8px', borderRadius:12, boxSizing:'border-box',
+                                        border:`1px solid ${row.qty ? C.goldLine : C.border}`,
+                                        background: row.qty ? C.goldDim : 'rgba(255,255,255,0.85)',
+                                        color: row.qty ? C.gold : C.muted,
+                                        fontSize:16, fontWeight:800, textAlign:'center',
+                                        cursor:'pointer', userSelect:'none', WebkitUserSelect:'none',
+                                        WebkitTapHighlightColor:'transparent',
+                                        minHeight:40, display:'flex', alignItems:'center', justifyContent:'center',
+                                        flexShrink:0,
+                                      }}>
+                                      {row.qty || '0'}
+                                    </div>
                                     <span style={{ fontSize:11, color:C.muted, flexShrink:0 }}>{item.unit}</span>
                                     <Inp placeholder="Miesto (napr. Bar)" value={row.label}
                                       ref={focusLabelRow?.itemId === item.id && focusLabelRow?.rowId === row.id
@@ -1547,7 +1571,7 @@ export default function App() {
                                   )}
                                 </div>
                               ))}
-                              <button onClick={() => addQtyRow(item.id)} style={{
+                              <button onClick={() => addQtyRow(item.id, item.name, item.unit)} style={{
                                 alignSelf:'flex-start', background:'none',
                                 border:`1px dashed ${C.goldLine}`, color:C.gold,
                                 fontSize:11, fontWeight:600, padding:'5px 10px',
@@ -2114,6 +2138,75 @@ export default function App() {
               style={{ width:'100%', padding:'13px', borderRadius:14, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:800, fontSize:14, cursor:'pointer', fontFamily:'inherit', letterSpacing:.5 }}>
               Rozumiem
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── INVENTORY NUMPAD MODAL ───────────────────────────────────────────── */}
+      {invNumpad && (
+        <div onPointerDown={() => setInvNumpad(null)}
+          style={{ position:'fixed', inset:0, background:'rgba(30,22,8,.55)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)',
+                   display:'flex', alignItems:'center', justifyContent:'center', zIndex:3500, padding:24 }}>
+          <div onPointerDown={e => e.stopPropagation()} className="sheet-bounce"
+            style={{ background:C.modal, border:`1px solid ${C.borderM}`, width:'100%', maxWidth:340,
+                     borderRadius:26, padding:'22px 18px 20px', boxShadow:'0 12px 48px rgba(0,0,0,.2)' }}>
+
+            {/* Názov položky */}
+            <div style={{ fontSize:12, fontWeight:700, color:C.sub, textAlign:'center', letterSpacing:.5, textTransform:'uppercase', marginBottom:6 }}>
+              {invNumpad.itemName}
+            </div>
+
+            {/* Displej */}
+            <div style={{ background:C.goldDim, border:`1.5px solid ${C.goldLine}`, borderRadius:16,
+                          padding:'16px 20px', textAlign:'center', marginBottom:16, minHeight:64,
+                          display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+              <span style={{ fontSize:42, fontWeight:800, color:C.gold, letterSpacing:1, fontVariantNumeric:'tabular-nums' }}>
+                {invNumpad.value || '0'}
+              </span>
+              <span style={{ fontSize:16, color:C.sub, fontWeight:600 }}>{invNumpad.unit}</span>
+            </div>
+
+            {/* Numpad mriežka */}
+            {[['7','8','9'],['4','5','6'],['1','2','3'],['.','0','⌫']].map((row, ri) => (
+              <div key={ri} style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginBottom:8 }}>
+                {row.map(key => (
+                  <button key={key} onPointerDown={e => { e.preventDefault(); numpadPress(key); }}
+                    style={{
+                      padding:'18px 0', borderRadius:14, fontSize:22, fontWeight:700,
+                      border:`1px solid ${key === '⌫' ? C.errDim : C.border}`,
+                      background: key === '⌫' ? C.errDim : 'rgba(255,255,255,0.9)',
+                      color: key === '⌫' ? C.err : C.text,
+                      cursor:'pointer', fontFamily:'inherit',
+                      WebkitTapHighlightColor:'transparent',
+                      boxShadow:'0 2px 6px rgba(0,0,0,0.06)',
+                      transition:'transform .08s, background .1s',
+                      userSelect:'none',
+                    }}>
+                    {key}
+                  </button>
+                ))}
+              </div>
+            ))}
+
+            {/* Confirm + Cancel */}
+            <div style={{ display:'flex', gap:10, marginTop:4 }}>
+              <button onPointerDown={e => { e.preventDefault(); setInvNumpad(null); }}
+                style={{ flex:1, padding:'14px', borderRadius:14, border:`1px solid ${C.border}`,
+                         background:'transparent', color:C.sub, fontWeight:700, fontSize:14,
+                         cursor:'pointer', fontFamily:'inherit' }}>
+                Zrušiť
+              </button>
+              <button onPointerDown={e => { e.preventDefault(); numpadConfirm(); }}
+                style={{ flex:2, padding:'14px', borderRadius:14, border:`1px solid ${C.goldLine}`,
+                         background:`linear-gradient(135deg, ${C.gold}, #d4903a)`,
+                         color:'#fff', fontWeight:800, fontSize:16,
+                         cursor:'pointer', fontFamily:'inherit',
+                         boxShadow:'0 4px 16px rgba(184,112,32,0.35)',
+                         letterSpacing:.5 }}>
+                Potvrdiť ✓
+              </button>
+            </div>
+
           </div>
         </div>
       )}
