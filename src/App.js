@@ -488,17 +488,26 @@ export default function App() {
   const activeInputRef = useRef(null);
   const dismissKeyboard = () => {
     const input = activeInputRef.current;
-    if (input) {
-      // Ulož scroll pozíciu pred zatvorením klávesnice
-      const savedScroll = window.scrollY;
-      input.blur();
-      // Android: keď sa klávesnica schová, viewport sa rozšíri a prehliadač posunie scroll.
-      // Obnovíme pozíciu vo viacerých krokoch počas animácie klavesnice (0 / 150 / 350 ms)
-      requestAnimationFrame(() => window.scrollTo(0, savedScroll));
-      setTimeout(() => window.scrollTo(0, savedScroll), 150);
-      setTimeout(() => window.scrollTo(0, savedScroll), 350);
-    }
+    if (!input) return;
     activeInputRef.current = null;
+
+    const savedScroll = window.scrollY;
+    input.blur();
+
+    // Android/iOS: klávesnica schová → visualViewport vyvolá "resize" event →
+    // prehliadač posunie scroll. Zachytíme presne tento moment a obnovíme pozíciu.
+    const vv = window.visualViewport;
+    if (vv) {
+      const restore = () => {
+        window.scrollTo({ top: savedScroll, behavior: 'instant' });
+        vv.removeEventListener('resize', restore);
+      };
+      vv.addEventListener('resize', restore);
+      // Fallback — ak resize nepríde do 600ms (desktop / klávesnica nebola otvorená)
+      setTimeout(() => {
+        vv.removeEventListener('resize', restore);
+      }, 600);
+    }
   };
   const touchX   = useRef(null);
 
@@ -1603,9 +1612,10 @@ export default function App() {
                                 );
                               })()}
                               <Inp type="text" placeholder="Poznámka…" value={invNotes[item.id]||''}
+                                tabIndex={-1}
                                 onChange={e => setInvNotes({...invNotes,[item.id]:e.target.value})}
-                                onFocus={() => setActiveInvField({ itemId: item.id, rowId: 'note', field: 'note' })}
-                                onBlur={() => setActiveInvField(null)}
+                                onFocus={e => { activeInputRef.current = e.target; setActiveInvField({ itemId: item.id, rowId: 'note', field: 'note' }); }}
+                                onBlur={() => { activeInputRef.current = null; setActiveInvField(null); }}
                                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
                                 enterKeyHint="done"
                                 style={{ width:'100%', padding:'8px 10px', fontSize:12, borderStyle:'dashed' }} />
