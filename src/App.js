@@ -1471,12 +1471,15 @@ export default function App() {
             )}
 
             {/* Search */}
-            <Glass style={{ padding:'10px 14px', display:'flex', alignItems:'center', gap:8 }}>
-              <span style={{ color:C.muted, fontSize:14 }}>⌕</span>
+            <Glass style={{ padding:'13px 16px', marginBottom:10, display:'flex', alignItems:'center', gap:10,
+                            border:`2px solid ${C.goldLine}`,
+                            background:`linear-gradient(135deg, rgba(184,112,32,0.10), rgba(255,255,255,0.85))`,
+                            boxShadow:`0 2px 14px rgba(184,112,32,0.15)` }}>
+              <span style={{ color:C.gold, fontSize:20, lineHeight:1 }}>🔍</span>
               <Inp placeholder="Hľadať položku…" value={invSearch} onChange={e => setInvSearch(e.target.value)}
                 tabIndex={-1}
-                style={{ border:'none', padding:'4px 0', background:'transparent', fontSize:14 }} />
-              {invSearch && <span onClick={() => setInvSearch('')} style={{ color:C.muted, fontSize:14, cursor:'pointer' }}>✕</span>}
+                style={{ border:'none', padding:'4px 0', background:'transparent', fontSize:16, fontWeight:600, color:C.text }} />
+              {invSearch && <span onClick={() => setInvSearch('')} style={{ color:C.gold, fontSize:18, cursor:'pointer', fontWeight:700 }}>✕</span>}
             </Glass>
 
             {/* Inventory progress */}
