@@ -489,10 +489,8 @@ export default function App() {
   const dismissKeyboard = () => {
     const input = activeInputRef.current;
     if (input) {
-      // Android trik: nastavíme readonly → klávesnica sa zatvorí bez presunu focusu
-      input.setAttribute('readonly', '');
+      // tabIndex={-1} na inpute zabraňuje presunu focusu na ďalší element
       input.blur();
-      setTimeout(() => input.removeAttribute('readonly'), 150);
     }
     activeInputRef.current = null;
   };
@@ -1555,6 +1553,7 @@ export default function App() {
                                     </div>
                                     <span style={{ fontSize:11, color:C.muted, flexShrink:0 }}>{item.unit}</span>
                                     <Inp placeholder="Miesto (napr. Bar)" value={row.label}
+                                      tabIndex={-1}
                                       onChange={e => updateQtyRow(item.id, row.id, 'label', e.target.value)}
                                       onFocus={e => { activeInputRef.current = e.target; setActiveInvField({ itemId: item.id, rowId: row.id, field: 'label' }); }}
                                       onBlur={() => { activeInputRef.current = null; setActiveInvField(null); }}
