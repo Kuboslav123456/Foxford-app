@@ -1526,10 +1526,12 @@ export default function App() {
                     <div style={{ padding:'8px 8px' }}>
                       {items.map((item, idx) => (
                         <div key={item.id} style={{
-                          padding:'10px 10px',
-                          marginBottom: idx < items.length-1 ? 6 : 0,
+                          padding:'12px 10px',
+                          marginBottom: idx < items.length-1 ? 10 : 0,
                           borderRadius:12,
-                          background: idx % 2 === 1 ? 'rgba(150,120,80,0.07)' : 'transparent',
+                          background: idx % 2 === 1 ? 'rgba(150,120,80,0.07)' : 'rgba(255,255,255,0.5)',
+                          borderTop: `1.5px solid rgba(90,70,45,0.28)`,
+                          borderBottom: `1.5px solid rgba(90,70,45,0.28)`,
                         }}>
                           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:7 }}>
                             <span style={{ fontSize:13, fontWeight:600, color:C.text }}>{item.name}</span>
