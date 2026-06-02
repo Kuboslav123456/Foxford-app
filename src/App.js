@@ -1523,9 +1523,14 @@ export default function App() {
                   </div>
 
                   {open && (
-                    <div style={{ padding:'10px 12px' }}>
+                    <div style={{ padding:'8px 8px' }}>
                       {items.map((item, idx) => (
-                        <div key={item.id} style={{ paddingBottom:10, marginBottom:10, borderBottom: idx<items.length-1 ? `1px solid ${C.border}` : 'none' }}>
+                        <div key={item.id} style={{
+                          padding:'10px 10px',
+                          marginBottom: idx < items.length-1 ? 6 : 0,
+                          borderRadius:12,
+                          background: idx % 2 === 1 ? 'rgba(150,120,80,0.07)' : 'transparent',
+                        }}>
                           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:7 }}>
                             <span style={{ fontSize:13, fontWeight:600, color:C.text }}>{item.name}</span>
                             <div style={{ display:'flex', alignItems:'center', gap:8 }}>
