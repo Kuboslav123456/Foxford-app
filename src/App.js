@@ -686,6 +686,11 @@ export default function App() {
   };
 
   const sendToSheets = (type, payload) => {
+    // Neplatná/placeholder URL — nemá zmysel posielať ani queue-ovať (inak by položka navždy visela vo fronte)
+    if (!scriptUrl || /^URL_POBOCKA/.test(scriptUrl) || !/^https?:\/\//.test(scriptUrl)) {
+      console.warn('sendToSheets: skipped — placeholder/invalid URL', scriptUrl);
+      return;
+    }
     if (!navigator.onLine) {
       // Uložiť do fronty na neskôr (aj s URL pobočky)
       const q = [...offlineQueue, { type, payload, url: scriptUrl, ts: Date.now() }];
@@ -699,18 +704,24 @@ export default function App() {
   // Odošli frontu keď príde konektivita. Failed položky (network-level) vrátime späť do fronty.
   useEffect(() => {
     if (!online) return;
-    const queue = safeParse('foxford-offline-queue', []);
-    if (queue.length === 0) return;
+    const rawQueue = safeParse('foxford-offline-queue', []);
+    if (rawQueue.length === 0) return;
+    // Položky s neplatnou/placeholder URL natrvalo zahodiť — opakovaný pokus by aj tak nikdy neuspel
+    const queue = rawQueue.filter(item =>
+      item.url && !/^URL_POBOCKA/.test(item.url) && /^https?:\/\//.test(item.url)
+    );
+    if (queue.length === 0) {
+      // Vo fronte boli len invalid položky — vyčisti ich z localStorage
+      setOfflineQueue([]);
+      localStorage.removeItem('foxford-offline-queue');
+      return;
+    }
     // Hneď vyčisti frontu aby sa nezdvojili odoslanie pri rýchlych online/offline prepnutiach
     setOfflineQueue([]);
     localStorage.removeItem('foxford-offline-queue');
 
     Promise.allSettled(queue.map(item => {
-      const url = item.url;
-      if (!url || /^URL_POBOCKA/.test(url) || !/^https?:\/\//.test(url)) {
-        return Promise.reject(new Error('invalid URL'));
-      }
-      return fetch(url, {
+      return fetch(item.url, {
         method: 'POST', mode: 'no-cors',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: item.type, ...item.payload, _token: process.env.REACT_APP_GAS_TOKEN }),
@@ -781,20 +792,26 @@ export default function App() {
     }
   };
 
-  // Schedule daily notification
+  // Schedule daily notification — self-rearming (po odpálení sa naplánuje na ďalší deň)
   useEffect(() => {
     if (!notifSettings.enabled || notifPermission !== 'granted') return;
     if (!/^\d{1,2}:\d{2}$/.test(notifSettings.time || '')) return;
     const [h, m] = notifSettings.time.split(':').map(Number);
-    const now = new Date();
-    const target = new Date(); target.setHours(h, m, 0, 0);
-    if (target <= now) target.setDate(target.getDate() + 1);
-    const ms = target - now;
-    const timer = setTimeout(() => {
-      const done = tasks.denné.filter(t => t.done || t.issue).length;
-      const total = tasks.denné.length;
-      if (done < total) showNotification('Foxford ☕', `Nezabudni na denné úlohy! (${done}/${total} hotovo)`);
-    }, ms);
+    let timer;
+    const arm = () => {
+      const now = new Date();
+      const target = new Date(); target.setHours(h, m, 0, 0);
+      if (target <= now) target.setDate(target.getDate() + 1);
+      timer = setTimeout(() => {
+        // Čerstvé dáta z localStorage — state v closure by bol zastaraný
+        const tasksData = safeParse('foxford-tasks', INIT_TASKS);
+        const denne = Array.isArray(tasksData.denné) ? tasksData.denné : [];
+        const done = denne.filter(t => t.done || t.issue).length;
+        if (done < denne.length) showNotification('Foxford ☕', `Nezabudni na denné úlohy! (${done}/${denne.length} hotovo)`);
+        arm();
+      }, target - now);
+    };
+    arm();
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notifSettings.enabled, notifSettings.time, notifPermission]);
@@ -849,8 +866,8 @@ export default function App() {
   const addQtyRow = (itemId, itemName, unit) => {
     const newId = 'r' + Date.now();
     setInvQty(q => ({ ...q, [itemId]: [...(q[itemId]||[]), { id: newId, label:'', qty:'' }] }));
-    // Automaticky otvor numpad pre nový riadok
-    setInvNumpad({ itemId, rowId: newId, value: '', unit: unit || '', itemName: itemName || '' });
+    // Automaticky otvor numpad pre nový riadok — isNew: pri zrušení sa prázdny riadok odstráni
+    setInvNumpad({ itemId, rowId: newId, value: '', unit: unit || '', itemName: itemName || '', isNew: true });
   };
   const removeQtyRow = (itemId, rowId) => setInvQty(q => ({ ...q, [itemId]: (q[itemId]||[]).filter(r => r.id !== rowId) }));
   const updateQtyRow = (itemId, rowId, field, val) => setInvQty(q => ({ ...q, [itemId]: (q[itemId]||[]).map(r => r.id === rowId ? { ...r, [field]: val } : r) }));
@@ -868,7 +885,19 @@ export default function App() {
   });
   const numpadConfirm = () => {
     if (!invNumpad) return;
+    // Potvrdenie prázdnej hodnoty na čerstvo pridanom riadku = riadok netreba
+    if (invNumpad.isNew && !invNumpad.value) {
+      removeQtyRow(invNumpad.itemId, invNumpad.rowId);
+      setInvNumpad(null);
+      return;
+    }
     updateQtyRow(invNumpad.itemId, invNumpad.rowId, 'qty', invNumpad.value);
+    setInvNumpad(null);
+  };
+  const numpadCancel = () => {
+    if (!invNumpad) return;
+    // Zrušenie numpadu pre nový riadok — odstráň prázdny riadok aby nezostal visieť
+    if (invNumpad.isNew) removeQtyRow(invNumpad.itemId, invNumpad.rowId);
     setInvNumpad(null);
   };
   const needInsp = () => { if (!inspectors[subTab].trim()) { doShake(setShakeInsp, inspRef); return false; } return true; };
@@ -1638,11 +1667,15 @@ export default function App() {
                                 style={{ width:'100%', padding:'8px 10px', fontSize:12, borderStyle:'dashed' }} />
                               {activeInvField?.itemId === item.id && activeInvField?.field === 'note' && (
                                 <div style={{ display:'flex', gap:6, marginTop:4 }}>
-                                  <button onMouseDown={e => { e.preventDefault(); setInvNotes({...invNotes,[item.id]:''}); document.activeElement?.blur(); setActiveInvField(null); }}
+                                  <button
+                                    onTouchStart={e => { e.preventDefault(); e.stopPropagation(); setInvNotes({...invNotes,[item.id]:''}); dismissKeyboard(); setActiveInvField(null); }}
+                                    onMouseDown={e => { e.preventDefault(); e.stopPropagation(); setInvNotes({...invNotes,[item.id]:''}); dismissKeyboard(); setActiveInvField(null); }}
                                     style={{ flex:1, padding:'6px', borderRadius:8, border:`1px solid ${C.border}`, background:'transparent', color:C.muted, fontWeight:700, fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>
                                     Zrušiť
                                   </button>
-                                  <button onMouseDown={e => { e.preventDefault(); document.activeElement?.blur(); setActiveInvField(null); }}
+                                  <button
+                                    onTouchStart={e => { e.preventDefault(); e.stopPropagation(); dismissKeyboard(); setActiveInvField(null); }}
+                                    onMouseDown={e => { e.preventDefault(); e.stopPropagation(); dismissKeyboard(); setActiveInvField(null); }}
                                     style={{ flex:2, padding:'6px', borderRadius:8, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:700, fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>
                                     OK ✓
                                   </button>
@@ -2207,7 +2240,7 @@ export default function App() {
 
       {/* ── INVENTORY NUMPAD MODAL ───────────────────────────────────────────── */}
       {invNumpad && (
-        <div onPointerDown={() => setInvNumpad(null)}
+        <div onPointerDown={numpadCancel}
           style={{ position:'fixed', inset:0, background:'rgba(30,22,8,.55)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)',
                    display:'flex', alignItems:'center', justifyContent:'center', zIndex:3500, padding:24 }}>
           <div onPointerDown={e => e.stopPropagation()} className="sheet-bounce"
@@ -2253,7 +2286,7 @@ export default function App() {
 
             {/* Confirm + Cancel */}
             <div style={{ display:'flex', gap:10, marginTop:4 }}>
-              <button onPointerDown={e => { e.preventDefault(); setInvNumpad(null); }}
+              <button onPointerDown={e => { e.preventDefault(); numpadCancel(); }}
                 style={{ flex:1, padding:'14px', borderRadius:14, border:`1px solid ${C.border}`,
                          background:'transparent', color:C.sub, fontWeight:700, fontSize:14,
                          cursor:'pointer', fontFamily:'inherit' }}>
