@@ -71,7 +71,8 @@ self.addEventListener('notificationclick', e => {
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
       const existing = list.find(c => c.url && c.focus);
       if (existing) return existing.focus();
-      return clients.openWindow('/');
+      // './' = relatívne k scope SW (/Foxford-app/), nie koreň domény
+      return clients.openWindow('./');
     })
   );
 });
