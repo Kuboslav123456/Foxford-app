@@ -852,6 +852,45 @@ export default function App() {
     document.body.removeChild(a); URL.revokeObjectURL(url);
   };
 
+  // ── ZÁLOHA DÁT — export/import celého foxford-* localStorage ────────────────
+  const exportBackup = () => {
+    const data = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('foxford-')) data[k] = localStorage.getItem(k);
+    }
+    const payload = { _app: 'foxford', _exported: new Date().toISOString(), _branch: branch || '', data };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = `foxford-zaloha_${(branch || 'pobocka').replace(/\s+/g, '-')}_${localDayKey(new Date())}.json`;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  };
+
+  const importBackup = (file) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result);
+        if (parsed._app !== 'foxford' || !parsed.data || typeof parsed.data !== 'object') {
+          alert('Neplatný súbor zálohy — vyber súbor exportovaný z Foxford appky.');
+          return;
+        }
+        const when = parsed._exported ? new Date(parsed._exported).toLocaleDateString('sk-SK') : 'neznámy dátum';
+        if (!window.confirm(`Obnoviť dáta zo zálohy (${parsed._branch || '—'}, ${when})?\n\nAktuálne dáta v appke budú PREPÍSANÉ.`)) return;
+        Object.entries(parsed.data).forEach(([k, v]) => {
+          if (k.startsWith('foxford-') && typeof v === 'string') localStorage.setItem(k, v);
+        });
+        window.location.reload();
+      } catch (_) {
+        alert('Súbor sa nepodarilo načítať — nie je to platný JSON.');
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const doShake = (setter, ref) => {
     setter(true);
     ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -885,6 +924,12 @@ export default function App() {
   });
   const numpadConfirm = () => {
     if (!invNumpad) return;
+    // Odpisy: numpad zapíše množstvo do dnešného odpisu (itemId = dayKey, rowId = entry id)
+    if (invNumpad.kind === 'odpis') {
+      updateOdpisQty(invNumpad.itemId, invNumpad.rowId, invNumpad.value);
+      setInvNumpad(null);
+      return;
+    }
     // Potvrdenie prázdnej hodnoty na čerstvo pridanom riadku = riadok netreba
     if (invNumpad.isNew && !invNumpad.value) {
       removeQtyRow(invNumpad.itemId, invNumpad.rowId);
@@ -1771,6 +1816,30 @@ export default function App() {
                               boxShadow:'0 1px 3px rgba(0,0,0,0.3)' }} />
               </div>
             </div>
+
+            {/* Záloha dát — export/import localStorage */}
+            <div style={{ display:'flex', gap:8, marginTop:8 }}>
+              <button onClick={exportBackup} style={{
+                flex:1, padding:'12px', borderRadius:14, border:`1px solid ${C.border}`,
+                background:'transparent', color:C.sub, fontWeight:700, fontSize:12,
+                cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+              }}>
+                💾 Exportovať zálohu
+              </button>
+              <label style={{
+                flex:1, padding:'12px', borderRadius:14, border:`1px solid ${C.border}`,
+                background:'transparent', color:C.sub, fontWeight:700, fontSize:12,
+                cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+                boxSizing:'border-box',
+              }}>
+                📥 Obnoviť zálohu
+                <input type="file" accept=".json,application/json" style={{ display:'none' }}
+                  onChange={e => { const f = e.target.files?.[0]; if (f) importBackup(f); e.target.value = ''; }} />
+              </label>
+            </div>
+            <div style={{ fontSize:10, color:C.muted, textAlign:'center', marginTop:4, lineHeight:1.5 }}>
+              Záloha obsahuje úlohy, katalóg, inventúru, odpisy aj nastavenia.<br />Ulož si ju pred výmenou zariadenia alebo čistením prehliadača.
+            </div>
           </div>
         )}
 
@@ -1902,12 +1971,22 @@ export default function App() {
                     {/* Riadok: názov + qty + jednotka + zmazať */}
                     <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
                       <div style={{ flex:1, fontSize:13, fontWeight:600, color:C.text, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{entry.name}</div>
-                      <Inp type="text" inputMode="decimal" placeholder="0"
-                        value={entry.qty}
-                        onChange={e => updateOdpisQty(todayKey, entry.id, e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
-                        enterKeyHint="done"
-                        style={{ width:70, padding:'8px', textAlign:'center', fontWeight:800, fontSize:14, flexShrink:0 }} />
+                      {/* Qty — tap otvorí numpad (rovnaký ako v Sklade) */}
+                      <div
+                        onPointerDown={e => { e.preventDefault(); setInvNumpad({ kind:'odpis', itemId: todayKey, rowId: entry.id, value: entry.qty || '', unit: entry.unit, itemName: entry.name }); }}
+                        style={{
+                          width:70, padding:'9px 8px', borderRadius:12, boxSizing:'border-box',
+                          border:`1px solid ${entry.qty ? C.goldLine : C.border}`,
+                          background: entry.qty ? C.goldDim : 'rgba(255,255,255,0.85)',
+                          color: entry.qty ? C.gold : C.muted,
+                          fontSize:16, fontWeight:800, textAlign:'center',
+                          cursor:'pointer', userSelect:'none', WebkitUserSelect:'none',
+                          WebkitTapHighlightColor:'transparent',
+                          minHeight:40, display:'flex', alignItems:'center', justifyContent:'center',
+                          flexShrink:0,
+                        }}>
+                        {entry.qty || '0'}
+                      </div>
                       <span style={{ fontSize:11, fontWeight:700, color:C.gold, border:`1px solid ${C.goldLine}`, padding:'3px 8px', borderRadius:8, flexShrink:0 }}>{entry.unit}</span>
                       <span onClick={() => removeOdpis(todayKey, entry.id)} style={{ color:C.muted, fontSize:16, cursor:'pointer', flexShrink:0, lineHeight:1 }}>✕</span>
                     </div>
