@@ -269,6 +269,9 @@ const INIT_TEMP_FIELDS = [
 
 const strip = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
+// Horné limity pre odpisy podľa jednotky — nad limit appka vyzve na kontrolu jednotky (napr. 20 kg kávy = omyl, myslel g)
+const ODPIS_UNIT_LIMITS = { kg: 10, l: 15, g: 1000, ml: 2000, ks: 100, bal: 30 };
+
 // ── LOGO ─────────────────────────────────────────────────────────────────────
 const Logo = ({ size = 40 }) => (
   <div style={{
@@ -490,6 +493,7 @@ export default function App() {
   const [bouncingCheck, setBouncingCheck] = useState(null);
   const [lockedAlert, setLockedAlert] = useState(null); // { shift }
   const [invNumpad, setInvNumpad]     = useState(null); // { itemId, rowId, value, unit, itemName }
+  const [qtyWarn, setQtyWarn]         = useState(null); // { itemId, rowId, value, unit, itemName } — odpis nad limit jednotky
   const [confirmUndo, setConfirmUndo] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [lastHaccpDate, setLastHaccpDate] = useState(localStorage.getItem('foxford-haccp-date') || '');
@@ -960,6 +964,14 @@ export default function App() {
     if (!invNumpad) return;
     // Odpisy: numpad zapíše množstvo do dnešného odpisu (itemId = dayKey, rowId = entry id)
     if (invNumpad.kind === 'odpis') {
+      const num = parseFloat((invNumpad.value || '').toString().replace(',', '.')) || 0;
+      const limit = ODPIS_UNIT_LIMITS[invNumpad.unit];
+      // Nad limit jednotky → vyzvi na kontrolu (pravdepodobný omyl kg vs g a pod.)
+      if (limit && num > limit) {
+        setQtyWarn({ itemId: invNumpad.itemId, rowId: invNumpad.rowId, value: invNumpad.value, unit: invNumpad.unit, itemName: invNumpad.itemName });
+        setInvNumpad(null);
+        return;
+      }
       updateOdpisQty(invNumpad.itemId, invNumpad.rowId, invNumpad.value);
       setInvNumpad(null);
       return;
@@ -2553,6 +2565,37 @@ export default function App() {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* ── ODPIS QTY WARNING — podozrivo veľké množstvo (možný omyl jednotky) ─ */}
+      {qtyWarn && (
+        <div onPointerDown={() => setQtyWarn(null)}
+          style={{ position:'fixed', inset:0, background:'rgba(30,22,8,.55)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)',
+                   display:'flex', alignItems:'center', justifyContent:'center', zIndex:3600, padding:24 }}>
+          <div onPointerDown={e => e.stopPropagation()} className="sheet-bounce"
+            style={{ background:C.modal, border:`1px solid ${C.borderM}`, width:'100%', maxWidth:360, borderRadius:24, padding:'28px 22px 22px', boxShadow:'0 12px 48px rgba(0,0,0,.18)' }}>
+            <div style={{ fontSize:40, textAlign:'center', marginBottom:12 }}>⚠️</div>
+            <div style={{ fontSize:17, fontWeight:800, color:C.text, textAlign:'center', marginBottom:10 }}>
+              Naozaj odpísať <span style={{ color:C.err }}>{qtyWarn.value} {qtyWarn.unit}</span>?
+            </div>
+            <div style={{ fontSize:13, color:C.sub, textAlign:'center', marginBottom:22, lineHeight:1.6 }}>
+              <span style={{ fontWeight:600, color:C.text }}>{qtyWarn.itemName}</span> sa eviduje v <span style={{ color:C.gold, fontWeight:700 }}>{qtyWarn.unit}</span>.<br />
+              Je to veľké množstvo — skontroluj, či si nepomýlil jednotku.
+            </div>
+            <div style={{ display:'flex', gap:10 }}>
+              <button
+                onPointerDown={e => { e.preventDefault(); const w = qtyWarn; setQtyWarn(null); setInvNumpad({ kind:'odpis', itemId: w.itemId, rowId: w.rowId, value: w.value, unit: w.unit, itemName: w.itemName }); }}
+                style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:800, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                Opraviť
+              </button>
+              <button
+                onPointerDown={e => { e.preventDefault(); updateOdpisQty(qtyWarn.itemId, qtyWarn.rowId, qtyWarn.value); setQtyWarn(null); }}
+                style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                Áno, správne
+              </button>
+            </div>
           </div>
         </div>
       )}
