@@ -1660,8 +1660,7 @@ export default function App() {
                         {activeDone ? (
                           /* Uzamknutý stav — namiesto inputu obyčajný div (žiadny scroll/keyboard/focus) */
                           <div role="button" tabIndex={-1}
-                            onClick={e => { e.preventDefault(); e.stopPropagation(); setLockedAlert({ shift: haccpShift }); }}
-                            onTouchStart={e => { e.preventDefault(); e.stopPropagation(); setLockedAlert({ shift: haccpShift }); }}
+                            onPointerDown={e => { e.preventDefault(); e.stopPropagation(); setLockedAlert({ shift: haccpShift }); }}
                             style={{
                               width:'100%', padding:'10px 14px', borderRadius:12,
                               border:`1.5px solid ${accentColor}`,
@@ -2728,9 +2727,9 @@ export default function App() {
 
       {/* ── LOCKED ALERT — pop-up keď user klikne na uzamknuté teplotné pole ─ */}
       {lockedAlert && (
-        <div onMouseDown={() => setLockedAlert(null)} onTouchStart={() => setLockedAlert(null)}
+        <div onPointerDown={() => setLockedAlert(null)}
           style={{ position:'fixed', inset:0, background:'rgba(30,22,8,.55)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:3500, padding:24 }}>
-          <div onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}
+          <div onPointerDown={e => e.stopPropagation()}
             className="sheet-bounce"
             style={{ background:C.modal, border:`1px solid ${C.borderM}`, width:'100%', maxWidth:360, borderRadius:24, padding:'28px 22px 22px', boxShadow:'0 12px 48px rgba(0,0,0,.18)' }}>
             <div style={{ fontSize:40, textAlign:'center', marginBottom:12 }}>🔒</div>
