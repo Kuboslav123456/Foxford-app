@@ -1384,7 +1384,18 @@ export default function App() {
                       </div>
                       {t.issue && <div style={{ fontSize:11, color:C.err, fontWeight:600 }}>⚠ {t.issue}</div>}
                     </div>
-                    {t.done && <span style={{ fontSize:11, fontWeight:700, color:C.ok, flexShrink:0, textAlign:'right', lineHeight:1.4 }}>{t.time}<br/><span style={{ fontSize:10, fontWeight:600, color:C.ok+'99' }}>{t.date}</span></span>}
+                    {t.done && !editMode && <span style={{ fontSize:11, fontWeight:700, color:C.ok, flexShrink:0, textAlign:'right', lineHeight:1.4 }}>{t.time}<br/><span style={{ fontSize:10, fontWeight:600, color:C.ok+'99' }}>{t.date}</span></span>}
+                    {/* Editácia: ✕ na zmazanie úlohy */}
+                    {editMode && (
+                      <span
+                        onClick={e => { e.stopPropagation(); setConfirmDeleteTask(t); }}
+                        onMouseDown={e => e.stopPropagation()}
+                        onTouchStart={e => e.stopPropagation()}
+                        style={{ display:'inline-flex', alignItems:'center', gap:5, color:C.err, fontSize:11, fontWeight:700, cursor:'pointer', lineHeight:1, flexShrink:0,
+                                 padding:'5px 9px', borderRadius:8, background:C.errDim, border:`1px solid ${C.err}33` }}>
+                        ✕ Zmazať
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1396,6 +1407,23 @@ export default function App() {
             <button onClick={resetList} style={{ display:'block', width:'100%', padding:'10px', background:'none', border:'none', color:C.err+'99', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
               Resetovať zoznam
             </button>
+
+            {/* Editačný prepínač — odomkne mazanie úloh */}
+            <div onClick={() => setEditMode(v => !v)}
+              style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:10, marginTop:6,
+                       padding:'12px', borderRadius:14, cursor:'pointer', userSelect:'none',
+                       border:`1px solid ${editMode ? C.goldLine : C.border}`,
+                       background: editMode ? C.goldDim : 'transparent' }}>
+              <span style={{ fontSize:13, fontWeight:700, letterSpacing:.5, color: editMode ? C.gold : C.muted }}>
+                {editMode ? '🔓 Editácia zapnutá' : '🔒 Editácia (mazanie úloh)'}
+              </span>
+              <div style={{ width:38, height:22, borderRadius:11, padding:2, transition:'background .2s',
+                            background: editMode ? C.gold : 'rgba(150,120,80,0.25)', flexShrink:0 }}>
+                <div style={{ width:18, height:18, borderRadius:'50%', background:'#fff', transition:'transform .2s',
+                              transform: editMode ? 'translateX(16px)' : 'translateX(0)',
+                              boxShadow:'0 1px 3px rgba(0,0,0,0.3)' }} />
+              </div>
+            </div>
           </>
         )}
 
@@ -2682,16 +2710,7 @@ export default function App() {
               }}>Potvrdiť vlastný dôvod</button>
             </div>
 
-            {/* Delete */}
-            <button onMouseDown={e => {
-              e.stopPropagation();
-              setConfirmDeleteTask(quickTask);
-              setQuickTask(null);
-            }} style={{ display:'block', width:'100%', padding:'13px 16px', marginBottom:6, borderRadius:14, border:`1px solid ${C.err}33`, background:C.errDim, textAlign:'left', fontSize:14, fontWeight:700, color:C.err, cursor:'pointer', fontFamily:'inherit' }}>
-              🗑 Zmazať úlohu
-            </button>
-
-            <button onMouseDown={() => setQuickTask(null)} style={{ display:'block', width:'100%', padding:'12px', marginTop:2, background:'none', border:'none', color:C.muted, fontWeight:700, fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>Zrušiť</button>
+            <button onMouseDown={() => setQuickTask(null)} style={{ display:'block', width:'100%', padding:'12px', marginTop:8, background:'none', border:'none', color:C.muted, fontWeight:700, fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>Zrušiť</button>
           </div>
         </div>
       )}
