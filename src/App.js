@@ -441,7 +441,7 @@ function performDailyClose(endingDate) {
         inspector: inspectorDenne || 'Anonym',
         tasks: denne.map(t => ({
           text: t.text, done: !!t.done,
-          time: t.time || null, date: t.date || null, issue: t.issue || null,
+          time: t.time || null, date: t.date || null, issue: t.issue || null, by: t.by || null,
         })),
       });
     }
@@ -490,7 +490,7 @@ function performDailyClose(endingDate) {
 
     // 3) Reset localStorage stavu pre nový deň — zachovať vlastné úlohy, len resetnúť stav
     const baseDenne = (Array.isArray(tasksData.denné) && tasksData.denné.length > 0) ? tasksData.denné : INIT_TASKS.denné;
-    const resetTasks = { ...tasksData, denné: baseDenne.map(t => ({ ...t, done: false, time: null, date: null, issue: null })) };
+    const resetTasks = { ...tasksData, denné: baseDenne.map(t => ({ ...t, done: false, time: null, date: null, issue: null, by: null })) };
     localStorage.setItem('foxford-tasks', JSON.stringify(resetTasks));
     const resetInspectors = { ...inspectorsData, denné: '' };
     localStorage.setItem('foxford-inspectors', JSON.stringify(resetInspectors));
@@ -726,7 +726,7 @@ export default function App() {
         performDailyClose(new Date());
         localStorage.setItem('foxford-last-reset-date', new Date().toDateString());
         // 2) Aktualizuj React state (kópia z localStorage)
-        setTasks(prev => ({ ...prev, denné: prev.denné.map(t => ({ ...t, done: false, time: null, issue: null })) }));
+        setTasks(prev => ({ ...prev, denné: prev.denné.map(t => ({ ...t, done: false, time: null, issue: null, by: null })) }));
         setInspectors(prev => ({ ...prev, denné: '' }));
         setLastHaccpDate('');
         setLastHaccpDateVecerne('');
@@ -1158,7 +1158,7 @@ export default function App() {
   const onTouchEnd = () => { touchX.current = null; };
 
   const uncheckedTask = (t) => {
-    setTasks({ ...tasks, [subTab]: tasks[subTab].map(x => x.id === t.id ? { ...x, done: false, time: null, issue: null } : x) });
+    setTasks({ ...tasks, [subTab]: tasks[subTab].map(x => x.id === t.id ? { ...x, done: false, time: null, issue: null, by: null } : x) });
     setConfirmUndo(null);
   };
 
@@ -1179,6 +1179,7 @@ export default function App() {
         time: t.time || null,
         date: t.date || null,
         issue: t.issue || null,
+        by: t.by || null,
       })),
     });
   };
@@ -1193,7 +1194,8 @@ export default function App() {
     const now = new Date();
     const time = now.toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' });
     const date = now.toLocaleDateString('sk-SK', { day: 'numeric', month: 'numeric' });
-    const updated = tasks[subTab].map(x => x.id === t.id ? { ...x, done: true, time, date, issue: null } : x);
+    const by = inspectors[subTab].trim(); // kto úlohu splnil
+    const updated = tasks[subTab].map(x => x.id === t.id ? { ...x, done: true, time, date, by, issue: null } : x);
     setTasks({ ...tasks, [subTab]: updated });
     autoSend(updated);
     if (allResolved(updated)) setTimeout(() => setCelebrate(true), 300);
@@ -1219,7 +1221,8 @@ export default function App() {
   const reportIssue = (reason, e) => {
     if (e) { e.preventDefault(); e.stopPropagation(); }
     if (!needInsp()) { setQuickTask(null); return; }
-    const updated = tasks[subTab].map(x => x.id === quickTask.id ? { ...x, done: false, time: null, issue: reason } : x);
+    const by = inspectors[subTab].trim(); // kto problém nahlásil
+    const updated = tasks[subTab].map(x => x.id === quickTask.id ? { ...x, done: false, time: null, issue: reason, by } : x);
     setTasks({ ...tasks, [subTab]: updated });
     autoSend(updated);
     if (allResolved(updated)) setTimeout(() => setCelebrate(true), 300);
@@ -1236,10 +1239,10 @@ export default function App() {
         date: new Date().toLocaleDateString('sk-SK'),
         category: subTab,
         inspector: inspectors[subTab],
-        tasks: taskList.map(t => ({ text: t.text, done: t.done, time: t.time || null, date: t.date || null, issue: t.issue || null })),
+        tasks: taskList.map(t => ({ text: t.text, done: t.done, time: t.time || null, date: t.date || null, issue: t.issue || null, by: t.by || null })),
       });
     }
-    setTasks({ ...tasks, [subTab]: tasks[subTab].map(t => t.header ? t : ({ ...t, done: false, time: null, issue: null })) });
+    setTasks({ ...tasks, [subTab]: tasks[subTab].map(t => t.header ? t : ({ ...t, done: false, time: null, issue: null, by: null })) });
     setInspectors(prev => ({ ...prev, [subTab]: '' }));
     setConfirmReset(false);
   };
@@ -1461,9 +1464,14 @@ export default function App() {
                         {t.urgent && !t.done && <span style={{ fontSize:9, fontWeight:800, color:C.err, border:`1px solid ${C.err}55`, padding:'1px 5px', borderRadius:5, letterSpacing:.5, flexShrink:0 }}>URGENTNÉ</span>}
                         <div style={{ fontSize:14, fontWeight:500, color: t.done ? C.sub : C.text, textDecoration: t.done ? 'line-through' : 'none', lineHeight:1.4, wordBreak:'break-word' }}>{t.text}</div>
                       </div>
-                      {t.issue && <div style={{ fontSize:11, color:C.err, fontWeight:600 }}>⚠ {t.issue}</div>}
+                      {t.issue && <div style={{ fontSize:11, color:C.err, fontWeight:600 }}>⚠ {t.issue}{t.by ? <span style={{ color:C.muted, fontWeight:500 }}> · {t.by}</span> : null}</div>}
                     </div>
-                    {t.done && !editMode && <span style={{ fontSize:11, fontWeight:700, color:C.ok, flexShrink:0, textAlign:'right', lineHeight:1.4 }}>{t.time}<br/><span style={{ fontSize:10, fontWeight:600, color:C.ok+'99' }}>{t.date}</span></span>}
+                    {t.done && !editMode && (
+                      <span style={{ fontSize:11, fontWeight:700, color:C.ok, flexShrink:0, textAlign:'right', lineHeight:1.45, maxWidth:110 }}>
+                        {t.by && <span style={{ display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.by}</span>}
+                        <span style={{ fontSize:10, fontWeight:600, color:C.ok+'99' }}>{t.time}{t.date ? ` · ${t.date}` : ''}</span>
+                      </span>
+                    )}
                     {/* Editácia: ✕ na zmazanie úlohy */}
                     {editMode && (
                       <span
