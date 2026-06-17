@@ -1255,6 +1255,10 @@ export default function App() {
     return n > maxNum ? 'err' : 'ok';
   };
 
+  // ── TEPLOTY — editácia názvu a max teploty zariadenia ──────────────────────
+  const updateTempLabel = (key, label) => setTempFields(prev => prev.map(f => f.key === key ? { ...f, label } : f));
+  const updateTempMax   = (key, numStr) => setTempFields(prev => prev.map(f => f.key === key ? { ...f, max: numStr.trim() ? `≤ ${numStr.trim()} °C` : '' } : f));
+
   // ── LOADING ────────────────────────────────────────────────────────────────
   if (loading) {
     return (
@@ -1552,17 +1556,19 @@ export default function App() {
             <Glass style={{ padding:'14px 16px 16px' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
                 <span style={{ fontSize:12, fontWeight:700, letterSpacing:1, color:C.sub, textTransform:'uppercase' }}>HACCP — {haccpShift === 'ranné' ? 'Ranná' : 'Večerná'} kontrola</span>
-                <div onClick={() => { if (showAddTemp) { setShowAddTemp(false); setNewTempLabel(''); setNewTempMax(''); } else { setConfirmAddTemp(true); } }}
-                  style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer' }}>
-                  {showAddTemp && <span style={{ fontSize:11, fontWeight:600, color:C.muted }}>Zrušiť</span>}
-                  <span style={{ width:22, height:22, borderRadius:6, border:`1px solid ${showAddTemp ? C.goldLine : C.border}`, background: showAddTemp ? C.goldDim : 'transparent', color: showAddTemp ? C.gold : C.muted, display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:300, lineHeight:1 }}>
-                    {showAddTemp ? '✕' : '+'}
-                  </span>
-                </div>
+                {editMode && (
+                  <div onClick={() => { if (showAddTemp) { setShowAddTemp(false); setNewTempLabel(''); setNewTempMax(''); } else { setConfirmAddTemp(true); } }}
+                    style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer' }}>
+                    {showAddTemp && <span style={{ fontSize:11, fontWeight:600, color:C.muted }}>Zrušiť</span>}
+                    <span style={{ width:22, height:22, borderRadius:6, border:`1px solid ${showAddTemp ? C.goldLine : C.border}`, background: showAddTemp ? C.goldDim : 'transparent', color: showAddTemp ? C.gold : C.muted, display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:300, lineHeight:1 }}>
+                      {showAddTemp ? '✕' : '+'}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Pridať zariadenie */}
-              {showAddTemp && <div style={{ display:'flex', gap:8, marginBottom:14 }}>
+              {editMode && showAddTemp && <div style={{ display:'flex', gap:8, marginBottom:14 }}>
                 <Inp placeholder="Názov zariadenia…" value={newTempLabel} onChange={e => setNewTempLabel(e.target.value)}
                   style={{ flex:2, padding:'9px 12px', fontSize:13 }} />
                 <Inp placeholder="Max (napr. ≤ 5 °C)" value={newTempMax} onChange={e => setNewTempMax(e.target.value)}
@@ -1583,6 +1589,24 @@ export default function App() {
 
               <div style={{ display: isTablet ? 'grid' : 'block', gridTemplateColumns: isDesktop ? '1fr 1fr 1fr' : '1fr 1fr', gap: 10 }}>
               {tempFields.map((field) => {
+                // ── Editačný režim: úprava názvu + max teploty ──
+                if (editMode) {
+                  const maxNum = (field.max || '').replace(/[^\d.,]/g, '');
+                  return (
+                    <div key={field.key} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10, padding:'10px', borderRadius:12, background:'rgba(150,120,80,0.06)', border:`1px solid ${C.border}` }}>
+                      <Inp value={field.label} onChange={e => updateTempLabel(field.key, e.target.value)} placeholder="Názov zariadenia"
+                        style={{ flex:2, fontSize:13, padding:'9px 10px' }} />
+                      <div style={{ display:'flex', alignItems:'center', gap:4, flexShrink:0 }}>
+                        <span style={{ fontSize:13, color:C.sub, fontWeight:700 }}>≤</span>
+                        <Inp value={maxNum} onChange={e => updateTempMax(field.key, e.target.value)} placeholder="5" inputMode="decimal"
+                          style={{ width:50, fontSize:13, padding:'9px 4px', textAlign:'center' }} />
+                        <span style={{ fontSize:13, color:C.sub }}>°C</span>
+                      </div>
+                      <span onClick={() => setConfirmRemoveTemp(field)}
+                        style={{ color:C.err, fontSize:12, fontWeight:700, cursor:'pointer', flexShrink:0, padding:'6px 9px', borderRadius:8, background:C.errDim, border:`1px solid ${C.err}33` }}>✕</span>
+                    </div>
+                  );
+                }
                 const val = activeTemps[field.key] || '';
                 const status = tempColor(field, val);
                 const accentColor = status === 'ok' ? C.ok : status === 'err' ? C.err : C.border;
@@ -1606,7 +1630,6 @@ export default function App() {
                         <span style={{ fontSize:11, fontWeight:700, letterSpacing:.5, color: status ? accentColor : C.sub, textTransform:'uppercase' }}>{field.label}</span>
                         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                           {field.max && <span style={{ fontSize:10, color:C.muted }}>{field.max}</span>}
-                          <span onClick={() => setConfirmRemoveTemp(field)} style={{ color:C.muted, fontSize:12, cursor:'pointer', lineHeight:1 }}>✕</span>
                         </div>
                       </div>
                       <div style={{ position:'relative' }}>
@@ -1656,7 +1679,7 @@ export default function App() {
               })}
               </div>
 
-              {activeDone ? (
+              {editMode ? null : activeDone ? (
                 <div style={{ textAlign:'center', padding:'12px 0 4px', color:C.ok, fontSize:13, fontWeight:600 }}>
                   ✓ {haccpShift === 'ranné' ? 'Ranná' : 'Večerná'} kontrola zaznamenaná
                   <div style={{ fontSize:11, color:C.muted, marginTop:4, fontWeight:400 }}>🌙 Polia sa odomknú automaticky o polnoci</div>
@@ -1698,6 +1721,29 @@ export default function App() {
                 </button>
               )}
             </Glass>
+
+            {editMode && (
+              <div style={{ fontSize:11, color:C.muted, textAlign:'center', margin:'2px 0 8px', lineHeight:1.5 }}>
+                Uprav názvy zariadení a max teploty. Zmeny platia pre rannú aj večernú kontrolu.
+              </div>
+            )}
+
+            {/* Editačný prepínač — odomkne úpravu zariadení a teplôt */}
+            <div onClick={() => setEditMode(v => !v)}
+              style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:10, marginTop:6,
+                       padding:'12px', borderRadius:14, cursor:'pointer', userSelect:'none',
+                       border:`1px solid ${editMode ? C.goldLine : C.border}`,
+                       background: editMode ? C.goldDim : 'transparent' }}>
+              <span style={{ fontSize:13, fontWeight:700, letterSpacing:.5, color: editMode ? C.gold : C.muted }}>
+                {editMode ? '🔓 Editácia zapnutá' : '🔒 Editácia (zariadenia a teploty)'}
+              </span>
+              <div style={{ width:38, height:22, borderRadius:11, padding:2, transition:'background .2s',
+                            background: editMode ? C.gold : 'rgba(150,120,80,0.25)', flexShrink:0 }}>
+                <div style={{ width:18, height:18, borderRadius:'50%', background:'#fff', transition:'transform .2s',
+                              transform: editMode ? 'translateX(16px)' : 'translateX(0)',
+                              boxShadow:'0 1px 3px rgba(0,0,0,0.3)' }} />
+              </div>
+            </div>
           </>
           );
         })()}
