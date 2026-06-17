@@ -663,6 +663,7 @@ export default function App() {
   const [success, setSuccess]   = useState(false);
   const [missingWarning, setMissingWarning] = useState([]);
   const [haccpMissing, setHaccpMissing] = useState(null); // [labels] nevyplnených teplôt pri odoslaní
+  const [confirmExportPdf, setConfirmExportPdf] = useState(false); // potvrdenie PDF exportu odpisov
   const [savedAt, setSavedAt] = useState(null);
   const savedAtThrottle = useRef(0);
   const [branch, setBranch] = useState(() => localStorage.getItem('foxford-branch') || null);
@@ -2339,7 +2340,7 @@ export default function App() {
                     <div style={{ marginTop:8, padding:'8px 0', borderTop:`1px solid ${C.border}`, fontSize:11, color:C.muted, textAlign:'right' }}>
                       {summary.length} položiek
                     </div>
-                    <button onClick={exportOdpisyPDF} style={{
+                    <button onClick={() => setConfirmExportPdf(true)} style={{
                       width:'100%', marginTop:10, padding:'13px', borderRadius:14,
                       background:C.gold, border:'none', color:'#fff',
                       fontWeight:800, fontSize:14, letterSpacing:.5, cursor:'pointer', fontFamily:'inherit',
@@ -2584,6 +2585,27 @@ export default function App() {
               </button>
               <button onMouseDown={() => uncheckedTask(confirmUndo)} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.err}44`, background:C.errDim, color:C.err, fontWeight:800, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
                 Zrušiť splnenie
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── CONFIRM EXPORT PDF (odpisy) ──────────────────────────────────────── */}
+      {confirmExportPdf && (
+        <div onMouseDown={() => setConfirmExportPdf(false)} style={{ position:'fixed', inset:0, background:'rgba(30,22,8,.55)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:3000, padding:24 }}>
+          <div onMouseDown={e => e.stopPropagation()} style={{ background:C.modal, border:`1px solid ${C.borderM}`, width:'100%', maxWidth:360, borderRadius:24, padding:'28px 22px 24px', boxShadow:'0 8px 40px rgba(0,0,0,.12)' }}>
+            <div style={{ fontSize:32, textAlign:'center', marginBottom:14 }}>📄</div>
+            <div style={{ fontSize:16, fontWeight:800, color:C.text, textAlign:'center', marginBottom:8 }}>Exportovať do PDF?</div>
+            <div style={{ fontSize:13, color:C.sub, textAlign:'center', marginBottom:24, lineHeight:1.5 }}>
+              Otvorí sa dokument s mesačným súhrnom odpisov pripravený na tlač.
+            </div>
+            <div style={{ display:'flex', gap:10 }}>
+              <button onMouseDown={() => setConfirmExportPdf(false)} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                Zrušiť
+              </button>
+              <button onMouseDown={() => { setConfirmExportPdf(false); exportOdpisyPDF(); }} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:800, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                Áno, exportovať
               </button>
             </div>
           </div>
