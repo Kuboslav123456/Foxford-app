@@ -496,6 +496,7 @@ export default function App() {
   const [qtyWarn, setQtyWarn]         = useState(null); // { itemId, rowId, value, unit, itemName } — odpis nad limit jednotky
   const [confirmUndo, setConfirmUndo] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmDeleteTask, setConfirmDeleteTask] = useState(null); // úloha na zmazanie (potvrdenie)
   const [lastHaccpDate, setLastHaccpDate] = useState(localStorage.getItem('foxford-haccp-date') || '');
   const [lastHaccpDateVecerne, setLastHaccpDateVecerne] = useState(localStorage.getItem('foxford-haccp-date-vecerne') || '');
   const [haccpShift, setHaccpShift] = useState('ranné');
@@ -2387,6 +2388,30 @@ export default function App() {
         </div>
       )}
 
+      {/* ── CONFIRM DELETE TASK ──────────────────────────────────────────────── */}
+      {confirmDeleteTask && (
+        <div onMouseDown={() => setConfirmDeleteTask(null)} style={{ position:'fixed', inset:0, background:'rgba(30,22,8,.55)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2000, padding:24 }}>
+          <div onMouseDown={e => e.stopPropagation()} style={{ background:C.modal, border:`1px solid ${C.borderM}`, width:'100%', maxWidth:360, borderRadius:24, padding:'28px 22px 24px', boxShadow:'0 8px 40px rgba(0,0,0,.12)' }}>
+            <div style={{ fontSize:32, textAlign:'center', marginBottom:14 }}>🗑️</div>
+            <div style={{ fontSize:16, fontWeight:800, color:C.text, textAlign:'center', marginBottom:8 }}>Zmazať úlohu?</div>
+            <div style={{ fontSize:13, color:C.sub, textAlign:'center', marginBottom:24, lineHeight:1.5 }}>
+              Úloha <span style={{ color:C.gold, fontWeight:600 }}>„{confirmDeleteTask.text}"</span> bude natrvalo odstránená zo zoznamu.
+            </div>
+            <div style={{ display:'flex', gap:10 }}>
+              <button onMouseDown={() => setConfirmDeleteTask(null)} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                Ponechať
+              </button>
+              <button onMouseDown={() => {
+                setTasks({ ...tasks, [subTab]: tasks[subTab].filter(x => x.id !== confirmDeleteTask.id) });
+                setConfirmDeleteTask(null);
+              }} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.err}44`, background:C.errDim, color:C.err, fontWeight:800, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                Áno, zmazať
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── CONFIRM RESET HACCP ──────────────────────────────────────────────── */}
       {confirmResetHaccp && (
         <div onMouseDown={() => setConfirmResetHaccp(false)} style={{ position:'fixed', inset:0, background:'rgba(30,22,8,.55)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2000, padding:24 }}>
@@ -2660,7 +2685,7 @@ export default function App() {
             {/* Delete */}
             <button onMouseDown={e => {
               e.stopPropagation();
-              setTasks({...tasks, [subTab]: tasks[subTab].filter(x => x.id !== quickTask.id)});
+              setConfirmDeleteTask(quickTask);
               setQuickTask(null);
             }} style={{ display:'block', width:'100%', padding:'13px 16px', marginBottom:6, borderRadius:14, border:`1px solid ${C.err}33`, background:C.errDim, textAlign:'left', fontSize:14, fontWeight:700, color:C.err, cursor:'pointer', fontFamily:'inherit' }}>
               🗑 Zmazať úlohu
