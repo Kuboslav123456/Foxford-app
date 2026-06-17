@@ -56,11 +56,28 @@ const BRANCHES = [
 
 const MONTHS = ['Január','Február','Marec','Apríl','Máj','Jún','Júl','August','September','Október','November','December'];
 
+// Zvýš pri zmene denného checklistu — migrácia nahradí denné úlohy na všetkých zariadeniach
+const TASKS_VERSION = '2';
+
 const INIT_TASKS = {
   denné: [
-    { id: 101, text: 'Sanitácia dýz kávovaru',      done: false, time: null, issue: null },
-    { id: 102, text: 'Čistenie mlynčekov',           done: false, time: null, issue: null },
-    { id: 103, text: 'Vyliatie misky pod kávovarom', done: false, time: null, issue: null },
+    { id: 101, text: 'Zapnutie umývačky riadu + vyvešať/zvešať handry', done: false, time: null, issue: null },
+    { id: 102, text: 'Správne otvorenie pokladne (problémy hlásiť VZ alebo Veve)', done: false, time: null, issue: null },
+    { id: 103, text: 'Dať piecť croissanty a praclíky + zapísať teploty chladničiek (návod pri piecke)', done: false, time: null, issue: null },
+    { id: 104, text: 'Zapnúť všetky svetlá na oboch poschodiach (systémovo aj ručne)', done: false, time: null, issue: null },
+    { id: 105, text: 'Vyloženie umývačky riadu v zázemí (Ut / Št / So)', done: false, time: null, issue: null },
+    { id: 106, text: 'Kontrola čistoty rajóna, detského kútika a stolov + poriadok pri kase', done: false, time: null, issue: null },
+    { id: 107, text: 'Doplniť malé aj veľké pásky (terminál + kasa) zo skrine na OO alebo z eventovky', done: false, time: null, issue: null },
+    { id: 108, text: 'Prevzatie koláčov, báglov a kašičiek + nastajlovať do vitríny (správne dátumy)', done: false, time: null, issue: null },
+    { id: 109, text: 'Skontrolovať menu (editácia) + doplniť cashboxy (ceruzka, nálepky, feedbacky)', done: false, time: null, issue: null },
+    { id: 110, text: 'Kontrola a zapísanie čistoty WC + doplnenie hygienických potrieb', done: false, time: null, issue: null },
+    { id: 111, text: 'Kontrola rezervácií — vypísať na post-it + pripraviť na rezervačné tabuľky', done: false, time: null, issue: null },
+    { id: 112, text: 'Zapnutie hudby', done: false, time: null, issue: null },
+    { id: 113, text: 'Utrieť prach (lampy, komody…), narovnať stoličky ku stolom, zarovnať menu a vkladky', done: false, time: null, issue: null },
+    { id: 114, text: 'Pripraviť karafy s vodou a zásobu naskladaných servítok', done: false, time: null, issue: null },
+    { id: 115, text: 'Pripraviť nádoby na bágle (modré mraziace vložky + papier na pečenie)', done: false, time: null, issue: null },
+    { id: 116, text: 'Poriadok pod stolmi, pozmetať omrvinky', done: false, time: null, issue: null },
+    { id: 117, text: 'Očistiť zapisovací hárok z WC', done: false, time: null, issue: null },
   ],
   víkendové: [{ id: 201, text: 'Odvápnenie kanvice',     done: false, time: null, issue: null }],
   mesačné:   [{ id: 301, text: 'Sanitácia mrazničky',    done: false, time: null, issue: null }],
@@ -538,8 +555,16 @@ export default function App() {
     // Catch-up loop nad nami už zapísal reset do localStorage ak preskočili sa dni,
     // takže tu už len bezpečne načítame uložené úlohy.
     const saved = localStorage.getItem('foxford-tasks');
-    if (!saved) return INIT_TASKS;
-    try { return JSON.parse(saved); } catch (_) { return INIT_TASKS; }
+    let parsed = INIT_TASKS;
+    if (saved) { try { parsed = JSON.parse(saved); } catch (_) { parsed = INIT_TASKS; } }
+    // Migrácia denného checklistu: pri novej verzii nahraď denné úlohy novým základom
+    // (víkendové a mesačné zostávajú zachované)
+    if (localStorage.getItem('foxford-tasks-version') !== TASKS_VERSION) {
+      parsed = { ...parsed, denné: INIT_TASKS.denné.map(t => ({ ...t })) };
+      localStorage.setItem('foxford-tasks-version', TASKS_VERSION);
+      localStorage.setItem('foxford-tasks', JSON.stringify(parsed));
+    }
+    return parsed;
   });
 
   const [inspectors, setInspectors] = useState(() => safeParse('foxford-inspectors', { denné: '', víkendové: '', mesačné: '' }));
@@ -1380,7 +1405,7 @@ export default function App() {
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom: t.issue ? 2 : 0 }}>
                         {t.urgent && !t.done && <span style={{ fontSize:9, fontWeight:800, color:C.err, border:`1px solid ${C.err}55`, padding:'1px 5px', borderRadius:5, letterSpacing:.5, flexShrink:0 }}>URGENTNÉ</span>}
-                        <div style={{ fontSize:14, fontWeight:500, color: t.done ? C.sub : C.text, textDecoration: t.done ? 'line-through' : 'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.text}</div>
+                        <div style={{ fontSize:14, fontWeight:500, color: t.done ? C.sub : C.text, textDecoration: t.done ? 'line-through' : 'none', lineHeight:1.4, wordBreak:'break-word' }}>{t.text}</div>
                       </div>
                       {t.issue && <div style={{ fontSize:11, color:C.err, fontWeight:600 }}>⚠ {t.issue}</div>}
                     </div>
