@@ -56,8 +56,8 @@ const BRANCHES = [
 
 const MONTHS = ['Január','Február','Marec','Apríl','Máj','Jún','Júl','August','September','Október','November','December'];
 
-// Zvýš pri zmene denného checklistu — migrácia nahradí denné úlohy na všetkých zariadeniach
-const TASKS_VERSION = '2';
+// Zvýš pri zmene denného/víkendového checklistu — migrácia nahradí úlohy na všetkých zariadeniach
+const TASKS_VERSION = '3';
 
 const INIT_TASKS = {
   denné: [
@@ -79,7 +79,43 @@ const INIT_TASKS = {
     { id: 116, text: 'Poriadok pod stolmi, pozmetať omrvinky', done: false, time: null, issue: null },
     { id: 117, text: 'Očistiť zapisovací hárok z WC', done: false, time: null, issue: null },
   ],
-  víkendové: [{ id: 201, text: 'Odvápnenie kanvice',     done: false, time: null, issue: null }],
+  víkendové: [
+    { id: 200, text: 'Rajón', header: true },
+    { id: 201, text: 'Utrieť od prachu komody pri 306, 310, 501 a všetky lampy', done: false, time: null, issue: null },
+    { id: 202, text: 'Upratať šuflíky v komode pri vitrínke', done: false, time: null, issue: null },
+    { id: 203, text: 'Utrieť bielu skriňu pri 415, skrinku strát a nálezov a detskú stoličku', done: false, time: null, issue: null },
+    { id: 204, text: 'Utrieť lištu pozdĺž okna a stoličky s kvetmi', done: false, time: null, issue: null },
+    { id: 205, text: 'Utrieť nohy coworku, dvere od WC a lampy nad nimi', done: false, time: null, issue: null },
+    { id: 206, text: 'Utrieť kovovú konštrukciu pri 409¾', done: false, time: null, issue: null },
+    { id: 207, text: 'Utrieť lupu pri eventovke', done: false, time: null, issue: null },
+    { id: 208, text: 'Utrieť zábradlie, logo a košík na medziposchodí', done: false, time: null, issue: null },
+    { id: 209, text: 'Upratať eventovú kasu', done: false, time: null, issue: null },
+    { id: 210, text: 'Upratať skrinku s kasou, podopĺňať cashboxy', done: false, time: null, issue: null },
+    { id: 211, text: 'Dať prať koberec', done: false, time: null, issue: null },
+    { id: 212, text: 'Povysávať kreslá', done: false, time: null, issue: null },
+    { id: 213, text: 'Vyliať vodu z vitrínky', done: false, time: null, issue: null },
+    { id: 214, text: 'Poliať a osprchovať všetky kvety', done: false, time: null, issue: null },
+    { id: 215, text: 'Umyť okná', done: false, time: null, issue: null },
+    { id: 220, text: 'Bar', header: true },
+    { id: 221, text: 'Utrieť od prachu všetky police a všetko na nich', done: false, time: null, issue: null },
+    { id: 222, text: 'Utrieť bar pod take-away debničkou, poličky s balenou kávou', done: false, time: null, issue: null },
+    { id: 223, text: 'Utrieť stroj pod šálkami, trúbu na croissanty (aj pod ňou)', done: false, time: null, issue: null },
+    { id: 224, text: 'Utrieť písmená na bare', done: false, time: null, issue: null },
+    { id: 225, text: 'Utrieť diery, kde sú koše na kávu, handry, papier a sklo', done: false, time: null, issue: null },
+    { id: 226, text: 'Utrieť lampy od prachu (tak, aby prach nepadal do pohárov)', done: false, time: null, issue: null },
+    { id: 227, text: 'Utrieť chladničky a umyť zalepené sirupové fľaše', done: false, time: null, issue: null },
+    { id: 228, text: 'Umyť pláta, všetky kýbliky na príbor a nádoby z okna', done: false, time: null, issue: null },
+    { id: 229, text: 'Skontrolovať soľ do zmäkčovača vody umývačky (dosypať)', done: false, time: null, issue: null },
+    { id: 240, text: 'Zázemie a sklad', header: true },
+    { id: 241, text: 'Upratať zrkadlovú skriňu a stôl', done: false, time: null, issue: null },
+    { id: 242, text: 'Utrieť chladničku v zázemí — zhora aj zvnútra', done: false, time: null, issue: null },
+    { id: 243, text: 'Umyť a doplniť WC', done: false, time: null, issue: null },
+    { id: 244, text: 'Vypustiť a odvápniť práčku', done: false, time: null, issue: null },
+    { id: 245, text: 'Umyť podlahy', done: false, time: null, issue: null },
+    { id: 246, text: 'Utrieť všetky chladničky u Harryho aj vo veľkom sklade', done: false, time: null, issue: null },
+    { id: 247, text: 'Umyť výlevku', done: false, time: null, issue: null },
+    { id: 248, text: 'Upratať u Harryho (ak treba, poutierať dvere a pozmývať)', done: false, time: null, issue: null },
+  ],
   mesačné:   [{ id: 301, text: 'Sanitácia mrazničky',    done: false, time: null, issue: null }],
 };
 
@@ -557,10 +593,14 @@ export default function App() {
     const saved = localStorage.getItem('foxford-tasks');
     let parsed = INIT_TASKS;
     if (saved) { try { parsed = JSON.parse(saved); } catch (_) { parsed = INIT_TASKS; } }
-    // Migrácia denného checklistu: pri novej verzii nahraď denné úlohy novým základom
-    // (víkendové a mesačné zostávajú zachované)
+    // Migrácia checklistu: pri novej verzii nahraď denné + víkendové novým základom
+    // (mesačné zostávajú zachované)
     if (localStorage.getItem('foxford-tasks-version') !== TASKS_VERSION) {
-      parsed = { ...parsed, denné: INIT_TASKS.denné.map(t => ({ ...t })) };
+      parsed = {
+        ...parsed,
+        denné: INIT_TASKS.denné.map(t => ({ ...t })),
+        víkendové: INIT_TASKS.víkendové.map(t => ({ ...t })),
+      };
       localStorage.setItem('foxford-tasks-version', TASKS_VERSION);
       localStorage.setItem('foxford-tasks', JSON.stringify(parsed));
     }
@@ -1105,7 +1145,7 @@ export default function App() {
   };
 
   const pct = () => {
-    const t = tasks[subTab] || [];
+    const t = (tasks[subTab] || []).filter(x => !x.header);
     return t.length === 0 ? 0 : Math.round(t.filter(x => x.done).length / t.length * 100);
   };
 
@@ -1122,8 +1162,8 @@ export default function App() {
     setConfirmUndo(null);
   };
 
-  // všetky úlohy sú buď splnené alebo majú zaznamenaný problém
-  const allResolved = (list) => list.length > 0 && list.every(t => t.done || t.issue);
+  // všetky úlohy (okrem nadpisov sekcií) sú buď splnené alebo majú zaznamenaný problém
+  const allResolved = (list) => { const t = list.filter(x => !x.header); return t.length > 0 && t.every(x => x.done || x.issue); };
 
   const autoSend = (updatedList) => {
     if (subTab === 'denné') return;
@@ -1133,7 +1173,7 @@ export default function App() {
       date: new Date().toLocaleDateString('sk-SK'),
       category: subTab,
       inspector: inspectors[subTab],
-      tasks: updatedList.map(t => ({
+      tasks: updatedList.filter(t => !t.header).map(t => ({
         text: t.text,
         done: t.done,
         time: t.time || null,
@@ -1144,6 +1184,7 @@ export default function App() {
   };
 
   const onTaskClick = (t) => {
+    if (t.header) return; // nadpis sekcie nie je klikateľný
     if (longPress.current) { longPress.current = false; return; }
     if (!needInsp()) return;
     if (t.done) { setConfirmUndo(t); return; }
@@ -1189,7 +1230,7 @@ export default function App() {
 
   const doReset = () => {
     if (!inspectors[subTab].trim()) { doShake(setShakeInsp, inspRef); setConfirmReset(false); return; }
-    const taskList = tasks[subTab] || [];
+    const taskList = (tasks[subTab] || []).filter(t => !t.header);
     if (taskList.length > 0) {
       sendToSheets('tasks_summary', {
         date: new Date().toLocaleDateString('sk-SK'),
@@ -1198,7 +1239,7 @@ export default function App() {
         tasks: taskList.map(t => ({ text: t.text, done: t.done, time: t.time || null, date: t.date || null, issue: t.issue || null })),
       });
     }
-    setTasks({ ...tasks, [subTab]: tasks[subTab].map(t => ({ ...t, done: false, time: null, issue: null })) });
+    setTasks({ ...tasks, [subTab]: tasks[subTab].map(t => t.header ? t : ({ ...t, done: false, time: null, issue: null })) });
     setInspectors(prev => ({ ...prev, [subTab]: '' }));
     setConfirmReset(false);
   };
@@ -1347,7 +1388,7 @@ export default function App() {
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
                 <Tag text="Postup" />
                 <span style={{ fontSize:13, fontWeight:800, color: pct()===100 ? C.ok : C.gold }}>
-                  {(tasks[subTab]||[]).filter(t=>t.done).length} / {(tasks[subTab]||[]).length}
+                  {(tasks[subTab]||[]).filter(t=>t.done).length} / {(tasks[subTab]||[]).filter(t=>!t.header).length}
                 </span>
               </div>
               <div style={{ height:7, background:C.muted, borderRadius:4, overflow:'hidden' }}>
@@ -1368,12 +1409,25 @@ export default function App() {
                   style={{ width:42, borderRadius:12, border:`1px solid ${C.border}`, background:C.panelHov, color:C.gold, fontSize:22, fontWeight:300, cursor:'pointer' }}>+</button>
               </div>
 
-              {/* Tasks — urgent first, then pending, then done */}
-              {[...(tasks[subTab]||[])].sort((a,b) => {
-                if (a.done !== b.done) return a.done ? 1 : -1;
-                if (a.urgent !== b.urgent) return a.urgent ? -1 : 1;
-                return 0;
-              }).map(t => (
+              {/* Tasks — pri sekciách (nadpisoch) zachovaj poradie; inak urgentné hore, splnené dole */}
+              {(() => {
+                const list = tasks[subTab] || [];
+                const hasSections = list.some(t => t.header);
+                return hasSections ? list : [...list].sort((a,b) => {
+                  if (a.done !== b.done) return a.done ? 1 : -1;
+                  if (a.urgent !== b.urgent) return a.urgent ? -1 : 1;
+                  return 0;
+                });
+              })().map(t => t.header ? (
+                <div key={t.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'14px 4px 6px', marginTop:2 }}>
+                  <div style={{ width:3, height:14, borderRadius:2, background:C.gold, flexShrink:0 }} />
+                  <span style={{ fontSize:12, fontWeight:800, color:C.gold, letterSpacing:.8, textTransform:'uppercase' }}>{t.text}</span>
+                  {editMode && (
+                    <span onClick={e => { e.stopPropagation(); setConfirmDeleteTask(t); }}
+                      style={{ marginLeft:'auto', color:C.err, fontSize:11, fontWeight:700, cursor:'pointer', padding:'3px 8px', borderRadius:8, background:C.errDim, border:`1px solid ${C.err}33` }}>✕</span>
+                  )}
+                </div>
+              ) : (
                 <div key={t.id} style={{ position:'relative', borderRadius:12, marginBottom:5 }}>
                   <div
                     onMouseDown={e => longStart(t, e)} onMouseUp={longEnd}
