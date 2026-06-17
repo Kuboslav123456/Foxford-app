@@ -662,6 +662,7 @@ export default function App() {
   const [sending, setSending]   = useState(false);
   const [success, setSuccess]   = useState(false);
   const [missingWarning, setMissingWarning] = useState([]);
+  const [haccpMissing, setHaccpMissing] = useState(null); // [labels] nevyplnených teplôt pri odoslaní
   const [savedAt, setSavedAt] = useState(null);
   const savedAtThrottle = useRef(0);
   const [branch, setBranch] = useState(() => localStorage.getItem('foxford-branch') || null);
@@ -1523,6 +1524,28 @@ export default function App() {
           const activeTemps    = haccpShift === 'ranné' ? temps    : tempsVecerne;
           const setActiveTemps = haccpShift === 'ranné' ? setTemps : setTempsVecerne;
           const activeDone     = haccpShift === 'ranné' ? lastHaccpDate === new Date().toDateString() : lastHaccpDateVecerne === new Date().toDateString();
+          // Vlastné odoslanie HACCP kontroly (volané po validácii alebo z "Odoslať aj tak")
+          const submitHaccp = () => {
+            setSending(true);
+            sendToSheets('haccp', {
+              date: new Date().toLocaleDateString('sk-SK'),
+              shift: haccpShift,
+              podpis: controllerName || 'Anonym',
+              readings: tempFields.map(f => ({ label: f.label, value: activeTemps[f.key] || '', max: f.max })),
+            });
+            setTimeout(() => {
+              setSending(false);
+              const today = new Date().toDateString();
+              if (haccpShift === 'ranné') {
+                setLastHaccpDate(today);
+                localStorage.setItem('foxford-haccp-date', today);
+              } else {
+                setLastHaccpDateVecerne(today);
+                localStorage.setItem('foxford-haccp-date-vecerne', today);
+              }
+              setCelebrateHaccp(true);
+            }, 900);
+          };
           return (
           <>
             <Glass accent style={{ padding:'14px 16px' }}>
@@ -1690,25 +1713,10 @@ export default function App() {
               ) : (
                 <button disabled={sending} onClick={() => {
                   if (!needName()) return;
-                  setSending(true);
-                  sendToSheets('haccp', {
-                    date: new Date().toLocaleDateString('sk-SK'),
-                    shift: haccpShift,
-                    podpis: controllerName || 'Anonym',
-                    readings: tempFields.map(f => ({ label: f.label, value: activeTemps[f.key] || '', max: f.max })),
-                  });
-                  setTimeout(() => {
-                    setSending(false);
-                    const today = new Date().toDateString();
-                    if (haccpShift === 'ranné') {
-                      setLastHaccpDate(today);
-                      localStorage.setItem('foxford-haccp-date', today);
-                    } else {
-                      setLastHaccpDateVecerne(today);
-                      localStorage.setItem('foxford-haccp-date-vecerne', today);
-                    }
-                    setCelebrateHaccp(true);
-                  }, 900);
+                  // Validácia — všetky teploty musia byť vyplnené
+                  const missing = tempFields.filter(f => !(activeTemps[f.key] || '').toString().trim());
+                  if (missing.length > 0) { setHaccpMissing(missing.map(f => f.label)); return; }
+                  submitHaccp();
                 }} style={{
                   width:'100%', padding:'13px', marginTop:2,
                   background: C.gold, border:'none',
@@ -1744,6 +1752,39 @@ export default function App() {
                               boxShadow:'0 1px 3px rgba(0,0,0,0.3)' }} />
               </div>
             </div>
+
+            {/* ── UPOZORNENIE — nevyplnené teploty pri odoslaní ── */}
+            {haccpMissing && (
+              <div onPointerDown={() => setHaccpMissing(null)}
+                style={{ position:'fixed', inset:0, background:'rgba(30,22,8,.55)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)',
+                         display:'flex', alignItems:'center', justifyContent:'center', zIndex:3600, padding:24 }}>
+                <div onPointerDown={e => e.stopPropagation()} className="sheet-bounce"
+                  style={{ background:C.modal, border:`1px solid ${C.borderM}`, width:'100%', maxWidth:360, borderRadius:24, padding:'28px 22px 22px', boxShadow:'0 12px 48px rgba(0,0,0,.18)' }}>
+                  <div style={{ fontSize:40, textAlign:'center', marginBottom:12 }}>🌡️</div>
+                  <div style={{ fontSize:17, fontWeight:800, color:C.text, textAlign:'center', marginBottom:10 }}>
+                    Nevyplnené teploty
+                  </div>
+                  <div style={{ fontSize:13, color:C.sub, textAlign:'center', marginBottom:14, lineHeight:1.6 }}>
+                    Tieto zariadenia nemajú zadanú teplotu:
+                  </div>
+                  <div style={{ maxHeight:150, overflowY:'auto', marginBottom:20 }}>
+                    {haccpMissing.map((label, i) => (
+                      <div key={i} style={{ fontSize:13, color:C.err, fontWeight:600, padding:'5px 0', borderBottom:`1px solid ${C.border}`, textAlign:'center' }}>• {label}</div>
+                    ))}
+                  </div>
+                  <div style={{ display:'flex', gap:10 }}>
+                    <button onPointerDown={e => { e.preventDefault(); setHaccpMissing(null); }}
+                      style={{ flex:2, padding:'13px', borderRadius:14, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:800, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                      Doplniť teploty
+                    </button>
+                    <button onPointerDown={e => { e.preventDefault(); setHaccpMissing(null); submitHaccp(); }}
+                      style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.border}`, background:'transparent', color:C.muted, fontWeight:700, fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>
+                      Odoslať aj tak
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
           );
         })()}
