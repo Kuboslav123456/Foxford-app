@@ -411,6 +411,27 @@ function performDailyClose(endingDate) {
       });
     }
 
+    // 2b) Odoslať dennú evidenciu alkoholu končiaceho dňa
+    try {
+      const alkKatalog = JSON.parse(localStorage.getItem('foxford-alkohol-katalog')) || [];
+      const alkData = JSON.parse(localStorage.getItem('foxford-alkohol')) || {};
+      const dayCounts = alkData[endingDayKey] || {};
+      const licencia = localStorage.getItem('foxford-alkohol-licencia') || '';
+      const alkAuthor = localStorage.getItem('foxford-alkohol-author') || '';
+      // Posielame len fľaše s nenulovým počtom otvorených
+      const alkEntries = alkKatalog
+        .map(b => ({ name: b.name, type: b.type || '', ean: b.ean || '', open: parseInt(dayCounts[b.id], 10) || 0 }))
+        .filter(e => e.open > 0);
+      if (alkEntries.length > 0) {
+        sendOrQueue(url, 'alkohol_daily', {
+          date: sendDate,
+          licencia,
+          author: alkAuthor,
+          entries: alkEntries,
+        });
+      }
+    } catch (e) { console.error('alkohol daily close failed:', e); }
+
     // 3) Reset localStorage stavu pre nový deň — zachovať vlastné úlohy, len resetnúť stav
     const baseDenne = (Array.isArray(tasksData.denné) && tasksData.denné.length > 0) ? tasksData.denné : INIT_TASKS.denné;
     const resetTasks = { ...tasksData, denné: baseDenne.map(t => ({ ...t, done: false, time: null, date: null, issue: null })) };
@@ -596,6 +617,15 @@ export default function App() {
   const [odpisySummaryDate, setOdpisySummaryDate] = useState(() => { const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() }; });
   const [odpisyAuthor, setOdpisyAuthor] = useState(() => localStorage.getItem('foxford-odpisy-author') || '');
 
+  // ── EVIDENCIA ALKOHOLU ─────────────────────────────────────────────────────
+  const [alkoholKatalog, setAlkoholKatalog] = useState(() => safeParse('foxford-alkohol-katalog', []));   // [{ id, name, type, ean }]
+  const [alkoholLicencia, setAlkoholLicencia] = useState(() => localStorage.getItem('foxford-alkohol-licencia') || '');
+  const [alkohol, setAlkohol] = useState(() => safeParse('foxford-alkohol', {}));                          // { [dayKey]: { [bottleId]: count } }
+  const [alkoholAuthor, setAlkoholAuthor] = useState(() => localStorage.getItem('foxford-alkohol-author') || '');
+  const [newAlkName, setNewAlkName] = useState('');
+  const [newAlkType, setNewAlkType] = useState('');
+  const [newAlkEan, setNewAlkEan]   = useState('');
+
   // ── DYNAMICKÁ FARBA POBOČKY ───────────────────────────────────────────────
   const branchGold = (branch && BRANCH_COLORS[branch]) || BASE_C.gold;
   const C = {
@@ -663,13 +693,17 @@ export default function App() {
     localStorage.setItem('foxford-notif-settings',  JSON.stringify(notifSettings));
     localStorage.setItem('foxford-odpisy',          JSON.stringify(odpisy));
     localStorage.setItem('foxford-odpisy-author',   odpisyAuthor);
+    localStorage.setItem('foxford-alkohol-katalog', JSON.stringify(alkoholKatalog));
+    localStorage.setItem('foxford-alkohol',         JSON.stringify(alkohol));
+    localStorage.setItem('foxford-alkohol-licencia', alkoholLicencia);
+    localStorage.setItem('foxford-alkohol-author',  alkoholAuthor);
     // Throttle: aktualizuj "uložené o XX:XX" max raz za 30 sekúnd (znižuje zbytočné re-rendery)
     const nowMs = Date.now();
     if (nowMs - savedAtThrottle.current > 30000) {
       savedAtThrottle.current = nowMs;
       setSavedAt(new Date().toLocaleTimeString('sk-SK', { hour:'2-digit', minute:'2-digit' }));
     }
-  }, [tasks, inspectors, tempFields, invData, invQty, invNotes, notes, notifSettings, odpisy, odpisyAuthor]);
+  }, [tasks, inspectors, tempFields, invData, invQty, invNotes, notes, notifSettings, odpisy, odpisyAuthor, alkoholKatalog, alkohol, alkoholLicencia, alkoholAuthor]);
 
   const scriptUrl = BRANCHES.find(b => b.name === branch)?.url || BRANCHES[0].url;
 
@@ -930,6 +964,12 @@ export default function App() {
       setInvNumpad(null);
       return;
     }
+    // Alkohol: numpad zapíše počet otvorených fliaš (rowId = bottle id)
+    if (invNumpad.kind === 'alkohol') {
+      setAlkoholCount(invNumpad.rowId, invNumpad.value);
+      setInvNumpad(null);
+      return;
+    }
     // Potvrdenie prázdnej hodnoty na čerstvo pridanom riadku = riadok netreba
     if (invNumpad.isNew && !invNumpad.value) {
       removeQtyRow(invNumpad.itemId, invNumpad.rowId);
@@ -968,6 +1008,16 @@ export default function App() {
   const removeOdpis       = (key, id)         => setOdpisy(prev => { const d = getDayData(key); return { ...prev, [key]: { ...d, entries: d.entries.filter(e => e.id !== id) } }; });
 
   const parseQty = (val) => parseFloat((val || '').toString().replace(',', '.')) || 0;
+
+  // ── ALKOHOL HELPERS ────────────────────────────────────────────────────────
+  const alkoholDnes = alkohol[todayKey] || {};
+  const setAlkoholCount = (bottleId, count) => setAlkohol(prev => ({ ...prev, [todayKey]: { ...(prev[todayKey] || {}), [bottleId]: count } }));
+  const addAlkoholBottle = () => {
+    if (!newAlkName.trim()) return;
+    setAlkoholKatalog(prev => [...prev, { id: 'a' + Date.now(), name: newAlkName.trim(), type: newAlkType.trim(), ean: newAlkEan.trim() }]);
+    setNewAlkName(''); setNewAlkType(''); setNewAlkEan('');
+  };
+  const removeAlkoholBottle = (id) => setAlkoholKatalog(prev => prev.filter(b => b.id !== id));
 
   const getMonthSummary = (year, month) => {
     const prefix = `${year}-${String(month + 1).padStart(2, '0')}`;
@@ -2089,6 +2139,126 @@ export default function App() {
             </>
           );
         })()}
+
+        {/* ── ALKOHOL ──────────────────────────────────────────────────────── */}
+        {tab === 'alkohol' && (
+          <div onPointerDown={e => { if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } }}>
+            {/* Meno zodpovednej osoby */}
+            <Glass accent style={{ padding:'14px 16px' }}>
+              <Tag text="Zodpovedná osoba" />
+              <Inp type="text" placeholder="Tvoje meno…" value={alkoholAuthor}
+                onChange={e => setAlkoholAuthor(e.target.value)}
+                style={{ marginTop:7, borderColor: alkoholAuthor ? C.ok : C.border }} />
+            </Glass>
+
+            {/* Licencia dodávateľa */}
+            <Glass style={{ padding:'14px 16px' }}>
+              <Tag text="Licencia dodávateľa alkoholu" />
+              {editMode ? (
+                <Inp type="text" placeholder="Názov subjektu / licencie…" value={alkoholLicencia}
+                  onChange={e => setAlkoholLicencia(e.target.value)}
+                  style={{ marginTop:7 }} />
+              ) : (
+                <div style={{ marginTop:7, fontSize:14, fontWeight:600, color: alkoholLicencia ? C.text : C.muted }}>
+                  {alkoholLicencia || 'Nevyplnené — zapni Editáciu nižšie a doplň'}
+                </div>
+              )}
+            </Glass>
+
+            {/* Denný zápis otvorených fliaš */}
+            <Glass style={{ padding:'14px 16px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+                <Tag text="Otvorené fľaše — dnes" />
+                <span style={{ fontSize:11, color:C.muted }}>
+                  {now.toLocaleDateString('sk-SK', { weekday:'long', day:'numeric', month:'long' })}
+                </span>
+              </div>
+
+              {alkoholKatalog.length === 0 ? (
+                <div style={{ textAlign:'center', color:C.muted, fontSize:13, padding:'16px 0', lineHeight:1.5 }}>
+                  Zatiaľ žiadne fľaše.<br />Zapni <b>Editáciu</b> nižšie a pridaj fľaše alkoholu.
+                </div>
+              ) : alkoholKatalog.map((b, idx) => (
+                <div key={b.id} style={{
+                  display:'flex', alignItems:'center', gap:10,
+                  padding:'10px', marginBottom: idx < alkoholKatalog.length-1 ? 8 : 0,
+                  borderRadius:12, background: idx % 2 === 1 ? 'rgba(150,120,80,0.07)' : 'rgba(255,255,255,0.5)',
+                  border:`1px solid ${C.border}`,
+                }}>
+                  {editMode && <span onClick={() => removeAlkoholBottle(b.id)}
+                    style={{ display:'inline-flex', alignItems:'center', color:C.err, fontSize:11, cursor:'pointer', lineHeight:1, flexShrink:0,
+                             padding:'4px 7px', borderRadius:8, background:C.errDim, border:`1px solid ${C.err}33`, fontWeight:700 }}>✕</span>}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:C.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{b.name}</div>
+                    <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>
+                      {b.type && <span style={{ color:C.gold, fontWeight:600 }}>{b.type}</span>}
+                      {b.type && b.ean && ' · '}
+                      {b.ean && <span>EAN {b.ean}</span>}
+                      {!b.type && !b.ean && <span style={{ fontStyle:'italic' }}>bez typu/EAN</span>}
+                    </div>
+                  </div>
+                  {/* Počet otvorených fliaš — tap otvorí numpad */}
+                  <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
+                    <div
+                      onPointerDown={e => { e.preventDefault(); setInvNumpad({ kind:'alkohol', rowId: b.id, value: (alkoholDnes[b.id] || '').toString(), unit: 'ks', itemName: b.name }); }}
+                      style={{
+                        width:64, padding:'9px 8px', borderRadius:12, boxSizing:'border-box',
+                        border:`1px solid ${alkoholDnes[b.id] ? C.goldLine : C.border}`,
+                        background: alkoholDnes[b.id] ? C.goldDim : 'rgba(255,255,255,0.85)',
+                        color: alkoholDnes[b.id] ? C.gold : C.muted,
+                        fontSize:16, fontWeight:800, textAlign:'center',
+                        cursor:'pointer', userSelect:'none', WebkitUserSelect:'none', WebkitTapHighlightColor:'transparent',
+                        minHeight:40, display:'flex', alignItems:'center', justifyContent:'center',
+                      }}>
+                      {alkoholDnes[b.id] || '0'}
+                    </div>
+                    <span style={{ fontSize:11, color:C.muted }}>ks</span>
+                  </div>
+                </div>
+              ))}
+
+              {/* Info o auto-odoslaní */}
+              {alkoholKatalog.length > 0 && Object.values(alkoholDnes).some(v => parseInt(v,10) > 0) && (
+                <div style={{ marginTop:14, padding:'10px 14px', borderRadius:12, background:C.okDim, border:`1px solid ${C.ok}44`, display:'flex', alignItems:'center', gap:8 }}>
+                  <span style={{ fontSize:14 }}>🌙</span>
+                  <span style={{ fontSize:11, color:C.ok, fontWeight:600, lineHeight:1.4 }}>Denná evidencia sa automaticky odošle do tabuľky o polnoci</span>
+                </div>
+              )}
+            </Glass>
+
+            {/* Pridať fľašu — len v editačnom režime */}
+            {editMode && (
+              <Glass style={{ padding:'14px 16px', border:`1px dashed ${C.goldLine}` }}>
+                <Tag text="Pridať fľašu alkoholu" />
+                <Inp placeholder="Názov (napr. Vodka Finlandia)…" value={newAlkName} onChange={e => setNewAlkName(e.target.value)} style={{ marginTop:8, marginBottom:8 }} />
+                <div style={{ display:'flex', gap:8, marginBottom:8 }}>
+                  <Inp placeholder="Typ (vodka…)" value={newAlkType} onChange={e => setNewAlkType(e.target.value)} style={{ flex:1, fontSize:13 }} />
+                  <Inp placeholder="EAN kód" value={newAlkEan} onChange={e => setNewAlkEan(e.target.value)} inputMode="numeric" style={{ flex:1, fontSize:13 }} />
+                </div>
+                <button onClick={addAlkoholBottle} style={{ width:'100%', padding:'11px', background:C.panel, border:`1px solid ${C.border}`, color:C.text, borderRadius:12, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                  + Pridať fľašu
+                </button>
+              </Glass>
+            )}
+
+            {/* Editačný prepínač */}
+            <div onClick={() => setEditMode(v => !v)}
+              style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:10, marginTop:6,
+                       padding:'12px', borderRadius:14, cursor:'pointer', userSelect:'none',
+                       border:`1px solid ${editMode ? C.goldLine : C.border}`,
+                       background: editMode ? C.goldDim : 'transparent' }}>
+              <span style={{ fontSize:13, fontWeight:700, letterSpacing:.5, color: editMode ? C.gold : C.muted }}>
+                {editMode ? '🔓 Editácia zapnutá' : '🔒 Editácia (upraviť fľaše / licenciu)'}
+              </span>
+              <div style={{ width:38, height:22, borderRadius:11, padding:2, transition:'background .2s',
+                            background: editMode ? C.gold : 'rgba(150,120,80,0.25)', flexShrink:0 }}>
+                <div style={{ width:18, height:18, borderRadius:'50%', background:'#fff', transition:'transform .2s',
+                              transform: editMode ? 'translateX(16px)' : 'translateX(0)',
+                              boxShadow:'0 1px 3px rgba(0,0,0,0.3)' }} />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── FLOATING NAV ──────────────────────────────────────────────────────── */}
@@ -2108,6 +2278,7 @@ export default function App() {
           { id:'temps',     emoji:'🌡️',  label:'Teploty' },
           { id:'inventory', emoji:'📦',  label:'Sklad' },
           { id:'odpisy',    emoji:'📝',  label:'Odpisy' },
+          { id:'alkohol',   emoji:'🥃',  label:'Alkohol' },
           { id:'notes',     emoji:'💬',  label:'Správy' },
         ].map(({ id, emoji, label }) => {
           const hasAlert = id === 'temps' && (lastHaccpDate !== new Date().toDateString() || lastHaccpDateVecerne !== new Date().toDateString());
