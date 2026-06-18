@@ -314,10 +314,22 @@ const INIT_INV = [
   ]},
 ];
 
+// Zvýš pri zmene zoznamu chladiacich zariadení — migrácia nahradí polia na všetkých zariadeniach
+const TEMP_FIELDS_VERSION = '1';
+// Chladiace/mraziace zariadenia podľa tabuľky „Kontrola teplôt" (prevádzka Obchodná).
+// Mrazničky majú záporný limit (≤ -18 °C) — tempColor s tým počíta.
 const INIT_TEMP_FIELDS = [
-  { key: 'vitrina',    label: 'Vitrína',    max: '≤ 8 °C' },
-  { key: 'chladnicka', label: 'Chladnička', max: '≤ 5 °C' },
-  { key: 'sklad',      label: 'Sklad',      max: '≤ 25 °C' },
+  { key: 'ch1', label: 'CH1 – biela, sklad (sirupy, koláče)', max: '≤ 5 °C' },
+  { key: 'ch2', label: 'CH2 – chladnička',                    max: '≤ 5 °C' },
+  { key: 'ch3', label: 'CH3 – nerez, sklad (ovocie)',         max: '≤ 5 °C' },
+  { key: 'ch4', label: 'CH4 – malá biela (zelenina, ovocie)', max: '≤ 5 °C' },
+  { key: 'ch5', label: 'CH5 – malá biela (koláče, sirupy)',   max: '≤ 5 °C' },
+  { key: 'ch6', label: 'CH6 – box baristi (za barom)',        max: '≤ 5 °C' },
+  { key: 'ch7', label: 'CH7 – box (ovocie, sirupy)',          max: '≤ 5 °C' },
+  { key: 'm1',  label: 'M1 – veľká mraznička (sklad)',        max: '≤ -18 °C' },
+  { key: 'm2',  label: 'M2 – mraznička (za barom)',           max: '≤ -18 °C' },
+  { key: 'm3',  label: 'M3 – malá nerez mraznička (sklad)',   max: '≤ -18 °C' },
+  { key: 'vt',  label: 'VT – vitrína (sladké)',               max: '≤ 10 °C' },
 ];
 
 const strip = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -609,7 +621,15 @@ export default function App() {
 
   const [inspectors, setInspectors] = useState(() => safeParse('foxford-inspectors', { denné: '', víkendové: '', mesačné: '' }));
   const [newTask, setNewTask]       = useState('');
-  const [tempFields, setTempFields] = useState(() => safeParse('foxford-temp-fields', INIT_TEMP_FIELDS));
+  const [tempFields, setTempFields] = useState(() => {
+    // Migrácia: pri novej verzii nahraď zoznam zariadení na všetkých zariadeniach (prepíše vlastné úpravy)
+    if (localStorage.getItem('foxford-temp-fields-version') !== TEMP_FIELDS_VERSION) {
+      localStorage.setItem('foxford-temp-fields-version', TEMP_FIELDS_VERSION);
+      localStorage.setItem('foxford-temp-fields', JSON.stringify(INIT_TEMP_FIELDS));
+      return INIT_TEMP_FIELDS;
+    }
+    return safeParse('foxford-temp-fields', INIT_TEMP_FIELDS);
+  });
   const [temps, setTemps]           = useState(() => {
     const fields = safeParse('foxford-temp-fields', INIT_TEMP_FIELDS);
     return fields.reduce((a, f) => ({ ...a, [f.key]: '' }), {});
@@ -1261,7 +1281,9 @@ export default function App() {
   const tempColor = (field, val) => {
     const n = parseFloat((val || '').replace(',', '.'));
     if (isNaN(n) || val === '') return null;
-    const maxNum = parseFloat((field.max || '').replace(/[^\d.]/g, ''));
+    // Ponechaj znamienko mínus — mrazničky majú záporný limit (≤ -18 °C).
+    // „≤ X" znamená: hodnota musí byť ≤ X (platí pre chladničky aj mrazničky), inak chyba.
+    const maxNum = parseFloat((field.max || '').replace(/[^\d.-]/g, ''));
     if (isNaN(maxNum)) return 'ok';
     return n > maxNum ? 'err' : 'ok';
   };
