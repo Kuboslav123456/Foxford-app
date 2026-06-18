@@ -1023,9 +1023,10 @@ export default function App() {
     if (!prev) return prev;
     let v = prev.value;
     if (key === '⌫') { v = v.slice(0, -1); }
+    else if (key === '±') { v = v.startsWith('-') ? v.slice(1) : (v === '' || v === '0' ? '-' : '-' + v); }
     else if (key === '.') { if (!v.includes('.')) v += v === '' ? '0.' : '.'; }
     else if (v === '0') { v = key; }
-    else { if (v.length < 8) v += key; }
+    else { if (v.replace('-', '').length < 8) v += key; }
     return { ...prev, value: v };
   });
   const numpadConfirm = () => {
@@ -1047,6 +1048,14 @@ export default function App() {
     // Alkohol: numpad zapíše počet otvorených fliaš (rowId = bottle id)
     if (invNumpad.kind === 'alkohol') {
       setAlkoholCount(invNumpad.rowId, invNumpad.value);
+      setInvNumpad(null);
+      return;
+    }
+    // Teploty: numpad zapíše teplotu do aktívnej smeny (tempKey = field.key)
+    if (invNumpad.kind === 'temp') {
+      const setTempState = haccpShift === 'ranné' ? setTemps : setTempsVecerne;
+      const v = invNumpad.value === '-' ? '' : invNumpad.value; // samotné mínus bez čísla = prázdne
+      setTempState(prev => ({ ...prev, [invNumpad.tempKey]: v }));
       setInvNumpad(null);
       return;
     }
@@ -1408,7 +1417,8 @@ export default function App() {
 
             {/* Task list */}
             <Glass style={{ padding:'10px 10px' }}>
-              {/* Add */}
+              {/* Add — len v editMode (pridávanie aj mazanie sú pod jedným prepínačom) */}
+              {editMode && (
               <div style={{ display:'flex', gap:8, marginBottom:8 }}>
                 <Inp value={newTask} onChange={e => setNewTask(e.target.value)}
                   onKeyDown={e => { if(e.key==='Enter'&&newTask.trim()){setTasks({...tasks,[subTab]:[...(tasks[subTab]||[]),{id:Date.now(),text:newTask,done:false,time:null,issue:null}]});setNewTask('');} }}
@@ -1417,6 +1427,7 @@ export default function App() {
                 <button onClick={() => { if(newTask.trim()){setTasks({...tasks,[subTab]:[...(tasks[subTab]||[]),{id:Date.now(),text:newTask,done:false,time:null,issue:null}]});setNewTask('');} }}
                   style={{ width:42, borderRadius:12, border:`1px solid ${C.border}`, background:C.panelHov, color:C.gold, fontSize:22, fontWeight:300, cursor:'pointer' }}>+</button>
               </div>
+              )}
 
               {/* Tasks — pri sekciách (nadpisoch) zachovaj poradie; inak urgentné hore, splnené dole */}
               {(() => {
@@ -1501,14 +1512,14 @@ export default function App() {
               Resetovať zoznam
             </button>
 
-            {/* Editačný prepínač — odomkne mazanie úloh */}
+            {/* Editačný prepínač — odomkne pridávanie aj mazanie úloh */}
             <div onClick={() => setEditMode(v => !v)}
               style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:10, marginTop:6,
                        padding:'12px', borderRadius:14, cursor:'pointer', userSelect:'none',
                        border:`1px solid ${editMode ? C.goldLine : C.border}`,
                        background: editMode ? C.goldDim : 'transparent' }}>
               <span style={{ fontSize:13, fontWeight:700, letterSpacing:.5, color: editMode ? C.gold : C.muted }}>
-                {editMode ? '🔓 Editácia zapnutá' : '🔒 Editácia (mazanie úloh)'}
+                {editMode ? '🔓 Editácia zapnutá' : '🔒 Editácia (pridať / mazať úlohy)'}
               </span>
               <div style={{ width:38, height:22, borderRadius:11, padding:2, transition:'background .2s',
                             background: editMode ? C.gold : 'rgba(150,120,80,0.25)', flexShrink:0 }}>
@@ -1523,7 +1534,6 @@ export default function App() {
         {/* ── TEMPS ────────────────────────────────────────────────────────── */}
         {tab === 'temps' && (() => {
           const activeTemps    = haccpShift === 'ranné' ? temps    : tempsVecerne;
-          const setActiveTemps = haccpShift === 'ranné' ? setTemps : setTempsVecerne;
           const activeDone     = haccpShift === 'ranné' ? lastHaccpDate === new Date().toDateString() : lastHaccpDateVecerne === new Date().toDateString();
           // Vlastné odoslanie HACCP kontroly (volané po validácii alebo z "Odoslať aj tak")
           const submitHaccp = () => {
@@ -1677,18 +1687,21 @@ export default function App() {
                             {val || '—'}
                           </div>
                         ) : (
-                          <input type="text" inputMode="decimal" placeholder="0.0" value={val}
-                            onChange={e => setActiveTemps(prev => ({ ...prev, [field.key]: e.target.value }))}
+                          <div role="button" tabIndex={-1}
+                            onPointerDown={e => { e.preventDefault(); e.stopPropagation(); setInvNumpad({ kind:'temp', tempKey: field.key, value: (val || '').toString(), unit:'°C', itemName: field.label }); }}
                             style={{
                               width:'100%', padding:'10px 14px', borderRadius:12,
                               border:`1.5px solid ${accentColor}`,
                               background: status === 'ok' ? C.okDim : status === 'err' ? C.errDim : C.panel,
-                              color: status ? accentColor : C.text,
+                              color: status ? accentColor : (val ? C.text : C.muted),
                               fontSize:18, fontWeight:800, textAlign:'center', letterSpacing:1,
-                              outline:'none', boxSizing:'border-box', fontFamily:'inherit',
+                              boxSizing:'border-box', fontFamily:'inherit',
                               boxShadow: status ? `0 0 10px ${accentColor}22` : 'none',
-                              cursor:'text',
-                            }} />
+                              cursor:'pointer', userSelect:'none', WebkitUserSelect:'none',
+                              WebkitTapHighlightColor:'transparent', minHeight: 22,
+                            }}>
+                            {val || '0.0'}
+                          </div>
                         )}
                         {status && (
                           <div style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', fontSize:14, pointerEvents:'none' }}>
@@ -1710,24 +1723,39 @@ export default function App() {
                     Resetovať teraz
                   </button>
                 </div>
-              ) : (
-                <button disabled={sending} onClick={() => {
-                  if (!needName()) return;
-                  // Validácia — všetky teploty musia byť vyplnené
-                  const missing = tempFields.filter(f => !(activeTemps[f.key] || '').toString().trim());
-                  if (missing.length > 0) { setHaccpMissing(missing.map(f => f.label)); return; }
-                  submitHaccp();
-                }} style={{
-                  width:'100%', padding:'13px', marginTop:2,
-                  background: C.gold, border:'none',
-                  color:'#fff', borderRadius:14, fontWeight:800, fontSize:14,
-                  letterSpacing:.8, cursor:'pointer', fontFamily:'inherit',
-                  opacity: sending ? .7 : 1,
-                  boxShadow:`0 4px 18px rgba(184,112,32,0.35)`,
-                }}>
-                  {sending ? 'Odosielam…' : `Odoslať ${haccpShift === 'ranné' ? 'rannú' : 'večernú'} kontrolu`}
-                </button>
-              )}
+              ) : (() => {
+                // Varovanie: rozpísané teploty, ktoré ešte neboli odoslané (o polnoci by sa stratili)
+                const anyTempFilled = tempFields.some(f => (activeTemps[f.key] || '').toString().trim());
+                return (
+                <>
+                  {anyTempFilled && (
+                    <div style={{ display:'flex', alignItems:'flex-start', gap:8, marginBottom:10, padding:'10px 12px',
+                                  borderRadius:12, background:C.errDim, border:`1px solid ${hexToRgba(C.err, 0.3)}` }}>
+                      <span style={{ fontSize:16, lineHeight:1.2 }}>⚠️</span>
+                      <span style={{ fontSize:12, color:C.err, fontWeight:600, lineHeight:1.45 }}>
+                        Máš rozpísané teploty, ktoré ešte <b>nie sú odoslané</b>. Bez stlačenia „Odoslať“ sa o polnoci stratia.
+                      </span>
+                    </div>
+                  )}
+                  <button disabled={sending} onClick={() => {
+                    if (!needName()) return;
+                    // Validácia — všetky teploty musia byť vyplnené
+                    const missing = tempFields.filter(f => !(activeTemps[f.key] || '').toString().trim());
+                    if (missing.length > 0) { setHaccpMissing(missing.map(f => f.label)); return; }
+                    submitHaccp();
+                  }} style={{
+                    width:'100%', padding:'13px', marginTop:2,
+                    background: C.gold, border:'none',
+                    color:'#fff', borderRadius:14, fontWeight:800, fontSize:14,
+                    letterSpacing:.8, cursor:'pointer', fontFamily:'inherit',
+                    opacity: sending ? .7 : 1,
+                    boxShadow:`0 4px 18px rgba(184,112,32,0.35)`,
+                  }}>
+                    {sending ? 'Odosielam…' : `Odoslať ${haccpShift === 'ranné' ? 'rannú' : 'večernú'} kontrolu`}
+                  </button>
+                </>
+                );
+              })()}
             </Glass>
 
             {editMode && (
@@ -2750,11 +2778,16 @@ export default function App() {
 
       {/* ── INVENTORY NUMPAD MODAL ───────────────────────────────────────────── */}
       {invNumpad && (
-        <div onPointerDown={numpadCancel}
-          style={{ position:'fixed', inset:0, background:'rgba(30,22,8,.55)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)',
-                   display:'flex', alignItems:'center', justifyContent:'center', zIndex:3500, padding:24 }}>
-          <div onPointerDown={e => e.stopPropagation()} className="sheet-bounce"
-            style={{ background:C.modal, border:`1px solid ${C.borderM}`, width:'100%', maxWidth:340,
+        <div style={{ position:'fixed', inset:0, zIndex:3500 }}>
+          {/* Blur vrstva — samostatný sibling bez detí: písanie do numpadu ju neinvaliduje,
+              takže prehliadač neprepočítava celoobrazovkový blur na každé ťuknutie => plynulé */}
+          <div onPointerDown={numpadCancel}
+            style={{ position:'absolute', inset:0, background:'rgba(30,22,8,.55)',
+                     backdropFilter:'blur(5px)', WebkitBackdropFilter:'blur(5px)' }} />
+          {/* Obsah nad blur vrstvou */}
+          <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', padding:24, pointerEvents:'none' }}>
+          <div onPointerDown={e => e.stopPropagation()} className="pop-in"
+            style={{ pointerEvents:'auto', background:C.modal, border:`1px solid ${C.borderM}`, width:'100%', maxWidth:340,
                      borderRadius:26, padding:'22px 18px 20px', boxShadow:'0 12px 48px rgba(0,0,0,.2)' }}>
 
             {/* Názov položky */}
@@ -2794,6 +2827,17 @@ export default function App() {
               </div>
             ))}
 
+            {/* ± prepínač — len pre teploty (mrazák/chladnička môžu byť záporné) */}
+            {invNumpad.kind === 'temp' && (
+              <button onPointerDown={e => { e.preventDefault(); numpadPress('±'); }}
+                style={{ width:'100%', padding:'14px 0', borderRadius:14, fontSize:18, fontWeight:700,
+                         border:`1px solid ${C.border}`, background:'rgba(255,255,255,0.9)', color:C.text,
+                         cursor:'pointer', fontFamily:'inherit', WebkitTapHighlightColor:'transparent',
+                         boxShadow:'0 2px 6px rgba(0,0,0,0.06)', userSelect:'none', marginBottom:8 }}>
+                ± plus / mínus
+              </button>
+            )}
+
             {/* Confirm + Cancel */}
             <div style={{ display:'flex', gap:10, marginTop:4 }}>
               <button onPointerDown={e => { e.preventDefault(); numpadCancel(); }}
@@ -2813,6 +2857,7 @@ export default function App() {
               </button>
             </div>
 
+          </div>
           </div>
         </div>
       )}

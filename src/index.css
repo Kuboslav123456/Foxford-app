@@ -48,6 +48,18 @@ input, select, textarea {
   will-change: transform;
 }
 
+/* ── Ľahká scale+fade animácia pre VYCENTROVANÉ dialógy (numpad atď.) ──
+   Krátka dráha = malá plocha na prepočet backdrop-filter blur => plynulé aj na Androide.
+   Na rozdiel od sheetBounceIn (translateY cez celú obrazovku) sa transformuje len lokálne. */
+@keyframes numpadPopIn {
+  0%   { opacity: 0; transform: scale(0.94); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.pop-in {
+  animation: numpadPopIn 160ms ease-out;
+  will-change: transform, opacity;
+}
+
 /* ── Glass progress kruh pri long-press na úlohu ── */
 @keyframes pressRingFill {
   from { stroke-dashoffset: 75.4; }
