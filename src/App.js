@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 
 // ── LIGHT WARM PALETTE ───────────────────────────────────────────────────────
 const BASE_C = {
-  bg:       '#f2ede4',
+  bg:       '#e8e0d0',
   panel:    'rgba(255,255,255,0.80)',
   panelHov: 'rgba(255,255,255,0.97)',
   border:   'rgba(150,120,80,0.18)',
@@ -371,7 +371,7 @@ const Glass = ({ children, style, accent }) => (
 
 // ── PILL LABEL ────────────────────────────────────────────────────────────────
 const Tag = ({ text }) => (
-  <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.2, color: BASE_C.sub }}>{text}</span>
+  <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: 0.3, color: BASE_C.sub }}>{text}</span>
 );
 
 // ── INPUT ─────────────────────────────────────────────────────────────────────

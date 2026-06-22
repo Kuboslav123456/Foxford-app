@@ -46,7 +46,7 @@ if (new URLSearchParams(window.location.search).get('reset') === '1') {
 // ── Automatická detekcia novej verzie ────────────────────────────────────────
 // APP_VERSION musí zodpovedať "v" v public/version.json.
 // Keď deployuješ novú verziu: zvýš číslo TU aj v public/version.json.
-const APP_VERSION = 22;
+const APP_VERSION = 23;
 
 window.addEventListener('load', () => {
   // Oneskorenie 2s aby sa app stihla vyrenderovať pred prípadným reload-om
