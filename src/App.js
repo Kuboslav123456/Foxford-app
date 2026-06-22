@@ -708,6 +708,8 @@ export default function App() {
   const [odpisySearch, setOdpisySearch] = useState('');
   const [odpisySummaryDate, setOdpisySummaryDate] = useState(() => { const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() }; });
   const [odpisyAuthor, setOdpisyAuthor] = useState(() => localStorage.getItem('foxford-odpisy-author') || '');
+  // Denné uzávierky kasy — { [dayKey]: { kasa, meno, A..L, gNote, sent } } (H/J/M sa rátajú)
+  const [uzavierky, setUzavierky] = useState(() => safeParse('foxford-uzavierky', {}));
 
   // ── EVIDENCIA ALKOHOLU ─────────────────────────────────────────────────────
   const [alkoholKatalog, setAlkoholKatalog] = useState(() => safeParse('foxford-alkohol-katalog', []));   // [{ id, name, type, ean }]
@@ -785,6 +787,7 @@ export default function App() {
     localStorage.setItem('foxford-notif-settings',  JSON.stringify(notifSettings));
     localStorage.setItem('foxford-odpisy',          JSON.stringify(odpisy));
     localStorage.setItem('foxford-odpisy-author',   odpisyAuthor);
+    localStorage.setItem('foxford-uzavierky',        JSON.stringify(uzavierky));
     localStorage.setItem('foxford-alkohol-katalog', JSON.stringify(alkoholKatalog));
     localStorage.setItem('foxford-alkohol',         JSON.stringify(alkohol));
     localStorage.setItem('foxford-alkohol-licencia', alkoholLicencia);
@@ -795,7 +798,7 @@ export default function App() {
       savedAtThrottle.current = nowMs;
       setSavedAt(new Date().toLocaleTimeString('sk-SK', { hour:'2-digit', minute:'2-digit' }));
     }
-  }, [tasks, inspectors, tempFields, invData, invQty, invNotes, notes, notifSettings, odpisy, odpisyAuthor, alkoholKatalog, alkohol, alkoholLicencia, alkoholAuthor]);
+  }, [tasks, inspectors, tempFields, invData, invQty, invNotes, notes, notifSettings, odpisy, odpisyAuthor, uzavierky, alkoholKatalog, alkohol, alkoholLicencia, alkoholAuthor]);
 
   const scriptUrl = BRANCHES.find(b => b.name === branch)?.url || BRANCHES[0].url;
 
@@ -870,11 +873,31 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online]);
 
+  // Kľúče dňa (YYYY-MM-DD) — používajú odpisy aj uzávierka; deklarované pred effectmi (TDZ)
+  const todayKey     = localDayKey(new Date());
+  const yesterdayKey = localDayKey(new Date(Date.now() - 86400000));
+
   // Live hodiny — aktualizácia každú sekundu
   useEffect(() => {
     const iv = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(iv);
   }, []);
+
+  // Uzávierka: reset o polnoci. Formulár je viazaný na dnešný deň (todayKey) —
+  // o polnoci sa todayKey zmení => prázdny formulár pre nový deň.
+  // A (zostatok) sa ZÁMERNE NEpredvyplňuje — človek ho ráno reálne prerátava;
+  // minulý zostatok mu svieti nad poľom len ako kontrolná informácia.
+  // Predvyplníme len číslo kasy (z poslednej uzávierky) pre pohodlie.
+  useEffect(() => {
+    if (tab !== 'uzavierka') return;
+    setUzavierky(prev => {
+      if (prev[todayKey]) return prev;
+      const prior = Object.keys(prev).filter(k => k < todayKey).sort();
+      const last = prior.length ? prev[prior[prior.length - 1]] : null;
+      return { ...prev, [todayKey]: { ...UZAV_DEFAULT, kasa: last ? (last.kasa || '') : '' } };
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, todayKey]);
 
   // Responzívna šírka okna
   useEffect(() => {
@@ -1079,6 +1102,13 @@ export default function App() {
       setInvNumpad(null);
       return;
     }
+    // Uzávierka: numpad zapíše sumu do poľa dennej uzávierky (fieldKey = A..L)
+    if (invNumpad.kind === 'uzavierka') {
+      const v = invNumpad.value === '-' ? '' : invNumpad.value;
+      setUzavField(invNumpad.dayKey, invNumpad.fieldKey, v);
+      setInvNumpad(null);
+      return;
+    }
     // Potvrdenie prázdnej hodnoty na čerstvo pridanom riadku = riadok netreba
     if (invNumpad.isNew && !invNumpad.value) {
       removeQtyRow(invNumpad.itemId, invNumpad.rowId);
@@ -1098,8 +1128,6 @@ export default function App() {
 
   // ── ODPISY HELPERS ───────────────────────────────────────────────────────
   const ODPISOVY_DOVODY = ['Spotreba', 'Pokazené', 'Rozbité', 'Ochutnávka'];
-  const todayKey     = localDayKey(new Date());
-  const yesterdayKey = localDayKey(new Date(Date.now() - 86400000));
 
   // backward compat: starý formát bol pole, nový je { entries, note }
   const getDayData = (key) => { const d = odpisy[key]; if (!d) return { entries: [], note: '' }; if (Array.isArray(d)) return { entries: d, note: '' }; return { entries: d.entries || [], note: d.note || '' }; };
@@ -1117,6 +1145,30 @@ export default function App() {
   const removeOdpis       = (key, id)         => setOdpisy(prev => { const d = getDayData(key); return { ...prev, [key]: { ...d, entries: d.entries.filter(e => e.id !== id) } }; });
 
   const parseQty = (val) => parseFloat((val || '').toString().replace(',', '.')) || 0;
+
+  // ── UZÁVIERKA HELPERS ──────────────────────────────────────────────────────
+  const UZAV_DEFAULT = { kasa:'', meno:'', A:'', firstA:'', B:'', C:'', D:'', E:'', sk:'', F:'', G:'', gNote:'', I:'', K:'', L:'', sent:false };
+  const num = (x) => parseFloat((x ?? '').toString().replace(',', '.')) || 0;
+  const getUzav = (key) => ({ ...UZAV_DEFAULT, ...(uzavierky[key] || {}) });
+  // Akákoľvek zmena poľa resetuje "sent" (po úprave treba odoslať znova).
+  // Pri poli A navyše zachytíme PRVÉ reálne prerátanie (firstA) — audit, ostane aj keď ho neskôr prepíše.
+  const setUzavField = (key, field, value) => setUzavierky(prev => {
+    const cur = { ...UZAV_DEFAULT, ...(prev[key] || {}) };
+    const next = { ...cur, [field]: value, sent:false };
+    if (field === 'A' && (value ?? '').toString().trim() !== '' && (cur.firstA ?? '').toString().trim() === '') {
+      next.firstA = value;
+    }
+    return { ...prev, [key]: next };
+  });
+  const markUzavSent = (key) => setUzavierky(prev => ({ ...prev, [key]: { ...UZAV_DEFAULT, ...(prev[key] || {}), sent:true } }));
+  // H = A+B-C-D-E-F-G (mám mať v kase); M = H-K (nový zostatok); J = H-I (tringelt/manko)
+  const uzavH = (d) => num(d.A) + num(d.B) - num(d.C) - num(d.D) - num(d.E) - num(d.F) - num(d.G);
+  const uzavM = (d) => uzavH(d) - num(d.K);
+  // Carry-over: M poslednej skoršej uzávierky → A nového dňa
+  const uzavPrevM = (key) => {
+    const prior = Object.keys(uzavierky).filter(k => k < key).sort();
+    return prior.length ? uzavM(getUzav(prior[prior.length - 1])) : null;
+  };
 
   // ── ALKOHOL HELPERS ────────────────────────────────────────────────────────
   const alkoholDnes = alkohol[todayKey] || {};
@@ -2405,6 +2457,172 @@ export default function App() {
           );
         })()}
 
+        {/* ── UZÁVIERKA ────────────────────────────────────────────────────── */}
+        {tab === 'uzavierka' && (() => {
+          const d = getUzav(todayKey);
+          const H = uzavH(d);
+          const J = H - num(d.I);
+          const M = H - num(d.K);
+          const carry = uzavPrevM(todayKey);
+          // Rozdiel: reálne prerátané A vs to, čo malo zostať (minulý zostatok). Len keď je A vyplnené.
+          const rozdielA = (carry != null && (d.A ?? '') !== '') ? (num(d.A) - carry) : null;
+          // Prvotné prerátanie (audit) — ak prvé zadané A nesedelo, ostáva to zaznamenané aj po oprave
+          const firstRozdiel = (carry != null && (d.firstA ?? '') !== '') ? (num(d.firstA) - carry) : null;
+          const firstMismatch = firstRozdiel != null && Math.abs(firstRozdiel) >= 0.005;
+          const fmt = (n) => (Math.round(n * 100) / 100).toFixed(2);
+          // Vstupné pole sumy — tap otvorí numpad (kind 'uzavierka')
+          const amount = (fieldKey, label, opts = {}) => {
+            const val = d[fieldKey];
+            return (
+              <div style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 0', borderBottom:`1px solid ${C.border}` }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:13, fontWeight:600, color: opts.info ? C.muted : C.text, lineHeight:1.3 }}>{label}</div>
+                  {opts.hint && <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>{opts.hint}</div>}
+                </div>
+                <div onPointerDown={e => { e.preventDefault(); setInvNumpad({ kind:'uzavierka', dayKey: todayKey, fieldKey, value:(val || '').toString(), unit:'€', itemName: label }); }}
+                  style={{ width:100, padding:'9px 8px', borderRadius:12, boxSizing:'border-box',
+                           border:`1px solid ${val ? C.goldLine : C.border}`,
+                           background: val ? C.goldDim : 'rgba(255,255,255,0.85)',
+                           color: val ? C.gold : C.muted,
+                           fontSize:15, fontWeight:800, textAlign:'center',
+                           cursor:'pointer', userSelect:'none', WebkitUserSelect:'none', WebkitTapHighlightColor:'transparent',
+                           minHeight:40, display:'flex', alignItems:'center', justifyContent:'center', gap:3, flexShrink:0 }}>
+                  {val || '0'} <span style={{ fontSize:11, fontWeight:600 }}>€</span>
+                </div>
+              </div>
+            );
+          };
+          // Vypočítaný riadok (H, J, M)
+          const calc = (label, value, formula, color) => (
+            <div style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 12px', borderRadius:12, marginTop:8,
+                          background: color ? hexToRgba(color, 0.1) : C.goldDim, border:`1px solid ${color ? hexToRgba(color, 0.4) : C.goldLine}` }}>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:13, fontWeight:800, color: color || C.gold }}>{label}</div>
+                <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>{formula}</div>
+              </div>
+              <div style={{ fontSize:18, fontWeight:800, color: color || C.gold, flexShrink:0 }}>{value} €</div>
+            </div>
+          );
+          return (
+            <>
+              {/* Hlavička */}
+              <Glass accent style={{ padding:'14px 16px' }}>
+                <Tag text="Denná uzávierka" />
+                <div style={{ display:'flex', gap:10, marginTop:8 }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:10, color:C.muted, marginBottom:3, textTransform:'uppercase', letterSpacing:.5, fontWeight:700 }}>Dátum</div>
+                    <div style={{ fontSize:14, fontWeight:700, color:C.text }}>{now.toLocaleDateString('sk-SK', { weekday:'short', day:'numeric', month:'long' })}</div>
+                  </div>
+                  <div style={{ width:88 }}>
+                    <div style={{ fontSize:10, color:C.muted, marginBottom:3, textTransform:'uppercase', letterSpacing:.5, fontWeight:700 }}>Číslo kasy</div>
+                    <Inp type="text" inputMode="numeric" placeholder="č." value={d.kasa}
+                      onChange={e => setUzavField(todayKey, 'kasa', e.target.value)} style={{ padding:'8px 10px', fontSize:14 }} />
+                  </div>
+                </div>
+                <div style={{ marginTop:10 }}>
+                  <div style={{ fontSize:10, color:C.muted, marginBottom:3, textTransform:'uppercase', letterSpacing:.5, fontWeight:700 }}>Uzávierku vykonal (priezvisko)</div>
+                  <Inp type="text" placeholder="Tvoje meno…" value={d.meno}
+                    onChange={e => setUzavField(todayKey, 'meno', e.target.value)} style={{ borderColor: d.meno ? C.ok : C.border }} />
+                </div>
+              </Glass>
+
+              {/* Vstupy + živé výpočty */}
+              <Glass style={{ padding:'6px 16px 16px' }}>
+                {/* Minulý zostatok — len informácia na overenie pri rannom prerátaní (NEvpisuje sa do A) */}
+                {carry != null && (
+                  <div style={{ display:'flex', alignItems:'center', gap:9, padding:'10px 12px', borderRadius:12, background:C.goldDim, border:`1px solid ${C.goldLine}`, marginTop:8 }}>
+                    <span style={{ fontSize:18, flexShrink:0 }}>📋</span>
+                    <div style={{ lineHeight:1.4 }}>
+                      <span style={{ fontSize:11, color:C.muted, fontWeight:600 }}>Zostatok z minulého dňa</span>
+                      <div style={{ fontSize:16, fontWeight:800, color:C.gold }}>{fmt(carry)} €
+                        <span style={{ fontSize:10.5, color:C.muted, fontWeight:500, marginLeft:6 }}>← ráno prerátaj a over, či ti sedí</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {amount('A', 'A · Zostatok z predch. dňa (prerátaný)', { hint:'zadaj reálne prerátaný stav' })}
+                {/* Kontrola prerátaného A oproti minulému zostatku */}
+                {rozdielA != null && (Math.abs(rozdielA) < 0.005 ? (
+                  <div style={{ display:'flex', alignItems:'center', gap:7, padding:'8px 10px', borderRadius:10, marginTop:6,
+                                background: hexToRgba(C.ok, 0.1), border:`1px solid ${hexToRgba(C.ok, 0.4)}` }}>
+                    <span style={{ fontSize:13 }}>✓</span>
+                    <span style={{ fontSize:11.5, fontWeight:700, color: C.ok }}>Sedí s minulým zostatkom</span>
+                  </div>
+                ) : (
+                  <div style={{ padding:'9px 11px', borderRadius:10, marginTop:6,
+                                background: hexToRgba(C.err, 0.1), border:`1px solid ${hexToRgba(C.err, 0.4)}` }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                      <span style={{ fontSize:14 }}>⚠</span>
+                      <span style={{ fontSize:12, fontWeight:800, color: C.err }}>
+                        Nesedí o {rozdielA > 0 ? '+' : ''}{fmt(rozdielA)} € — najprv prerátaj znova.
+                      </span>
+                    </div>
+                    <div style={{ fontSize:11, color: C.err, lineHeight:1.45, marginTop:6, marginLeft:21 }}>
+                      Ak stále nesedí: <b>zapíš reálny prerátaný stav</b>, ale <b>vklad do kasy urob s {fmt(carry)} €</b> (koľko malo zostať z minula). Manko nahlás zodpovednej osobe — rieši sa na pozadí.
+                    </div>
+                  </div>
+                ))}
+                {/* Trvalý audit záznam — prvotné prerátanie nesedelo (ostáva aj po prepísaní A) */}
+                {firstMismatch && (
+                  <div style={{ display:'flex', gap:7, alignItems:'flex-start', padding:'8px 10px', borderRadius:10, marginTop:6,
+                                background: hexToRgba('#c2700f', 0.1), border:`1px solid ${hexToRgba('#c2700f', 0.4)}` }}>
+                    <span style={{ fontSize:13 }}>📝</span>
+                    <span style={{ fontSize:11, fontWeight:600, color:'#9a560b', lineHeight:1.45 }}>
+                      Zaznamená sa do tabuľky: <b>prvotné prerátanie {d.firstA} €</b> nesedelo o <b>{firstRozdiel > 0 ? '+' : ''}{fmt(firstRozdiel)} €</b> (malo byť {fmt(carry)} €). Záznam ostane aj po oprave.
+                    </span>
+                  </div>
+                )}
+                {amount('B', 'B · Tržba (obrat bez zaokrúhlenia)')}
+                {amount('C', 'C · Platby kartou (+ stravné karty)')}
+                {amount('D', 'D · Platby Qerko (tržba + tringelt)')}
+                {amount('E', 'E · Z toho Qerko tringelt')}
+                {amount('sk', 'Z toho stravná karta', { info:true, hint:'informatívne — neráta sa' })}
+                {amount('F', 'F · Stravné lístky')}
+                {amount('G', 'G · Nákup')}
+                <textarea placeholder="Obsah nákupu (poznámka k G)…" value={d.gNote}
+                  onChange={e => setUzavField(todayKey, 'gNote', e.target.value)} rows={2}
+                  style={{ width:'100%', marginTop:8, padding:'9px 12px', borderRadius:12, border:`1px solid ${d.gNote ? C.goldLine : C.border}`, background:'rgba(255,255,255,0.85)', color:C.text, fontSize:13, lineHeight:1.5, fontFamily:'inherit', outline:'none', resize:'none', boxSizing:'border-box' }} />
+
+                {calc('H · Mám mať v kase', fmt(H), 'A + B − C − D − E − F − G')}
+                {amount('I', 'I · V kase reálne mám', { hint:'mincovka + suma v obálke' })}
+                {calc(J >= 0 ? 'J · Tringelt' : 'J · MANKO', fmt(J), 'H − I', J >= 0 ? C.ok : C.err)}
+                {amount('K', 'K · Odvod tržby')}
+                {amount('L', 'L · Zaokrúhlenie (so znamienkom)')}
+                {calc('M · Nový zostatok', fmt(M), 'H − K  ·  prenáša sa na zajtra')}
+              </Glass>
+
+              {d.sent && (
+                <div style={{ textAlign:'center', padding:'10px 0 2px', color:C.ok, fontSize:13, fontWeight:700 }}>✓ Uzávierka odoslaná</div>
+              )}
+              <button disabled={!d.meno.trim()} onClick={() => {
+                if (!d.meno.trim()) return;
+                sendToSheets('uzavierka_daily', {
+                  date: now.toLocaleDateString('sk-SK'),
+                  kasa: d.kasa, author: d.meno,
+                  A:d.A, B:d.B, C:d.C, D:d.D, E:d.E, stravnaKarta:d.sk, F:d.F, G:d.G, gNote:d.gNote, I:d.I, K:d.K, L:d.L,
+                  H: fmt(H), J: fmt(J), M: fmt(M),
+                  maloByt: carry != null ? fmt(carry) : '',     // koľko malo zostať (M z minula)
+                  rozdielA: rozdielA != null ? fmt(rozdielA) : '',
+                  firstA: d.firstA || '',                        // prvé reálne prerátanie A (audit)
+                  firstRozdiel: firstRozdiel != null ? fmt(firstRozdiel) : '',
+                  nesedeloPrvotne: firstMismatch ? 'ÁNO' : 'NIE',
+                });
+                markUzavSent(todayKey);
+                setSuccess('uzavierka');
+              }} style={{
+                width:'100%', padding:'14px', marginTop:6,
+                background: d.meno.trim() ? C.gold : C.muted, border:'none',
+                color:'#fff', borderRadius:14, fontWeight:800, fontSize:14, letterSpacing:.5,
+                cursor: d.meno.trim() ? 'pointer' : 'default', fontFamily:'inherit',
+                boxShadow: d.meno.trim() ? '0 4px 18px rgba(184,112,32,0.35)' : 'none',
+              }}>
+                {d.sent ? 'Odoslať znova' : 'Odoslať uzávierku'}
+              </button>
+              {!d.meno.trim() && <div style={{ textAlign:'center', fontSize:11, color:C.muted, marginTop:6 }}>Vyplň meno pre odoslanie</div>}
+            </>
+          );
+        })()}
+
         {/* ── ALKOHOL ──────────────────────────────────────────────────────── */}
         {tab === 'alkohol' && (
           <div onPointerDown={e => { if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } }}>
@@ -2544,6 +2762,7 @@ export default function App() {
           { id:'inventory', emoji:'📦',  label:'Sklad' },
           { id:'odpisy',    emoji:'📝',  label:'Odpisy' },
           { id:'alkohol',   emoji:'🥃',  label:'Alkohol' },
+          { id:'uzavierka', emoji:'🧾',  label:'Uzávierka' },
           { id:'notes',     emoji:'💬',  label:'Správy' },
         ].map(({ id, emoji, label }) => {
           const hasAlert = id === 'temps' && (lastHaccpDate !== new Date().toDateString() || lastHaccpDateVecerne !== new Date().toDateString());
@@ -2849,8 +3068,8 @@ export default function App() {
               </div>
             ))}
 
-            {/* ± prepínač — len pre teploty (mrazák/chladnička môžu byť záporné) */}
-            {invNumpad.kind === 'temp' && (
+            {/* ± prepínač — teploty (mrazák) a uzávierka (zaokrúhlenie, manko môžu byť záporné) */}
+            {(invNumpad.kind === 'temp' || invNumpad.kind === 'uzavierka') && (
               <button onPointerDown={e => { e.preventDefault(); numpadPress('±'); }}
                 style={{ width:'100%', padding:'14px 0', borderRadius:14, fontSize:18, fontWeight:700,
                          border:`1px solid ${C.border}`, background:'rgba(255,255,255,0.9)', color:C.text,
@@ -3272,9 +3491,13 @@ export default function App() {
           <div style={{ animation:'popIn 0.5s ease forwards', display:'flex', flexDirection:'column', alignItems:'center' }}>
             <div style={{ fontSize:60, marginBottom:10 }}>🎉</div>
             <div style={{ width:80, height:80, borderRadius:'50%', background:C.okDim, border:`2px solid ${C.ok}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:36, marginBottom:20, boxShadow:`0 0 30px ${C.ok}55` }}>✓</div>
-            <div style={{ fontSize:22, fontWeight:900, color:C.text, letterSpacing:3 }}>INVENTÚRA ODOSLANÁ!</div>
-            <div style={{ marginTop:12, color:C.sub, fontSize:13, textAlign:'center', maxWidth:260, lineHeight:1.6 }}>
-              Údaje zostávajú zapísané až do začatia novej inventúry.
+            <div style={{ fontSize:22, fontWeight:900, color:C.text, letterSpacing:3 }}>
+              {success === 'uzavierka' ? 'UZÁVIERKA ODOSLANÁ!' : 'INVENTÚRA ODOSLANÁ!'}
+            </div>
+            <div style={{ marginTop:12, color:C.sub, fontSize:13, textAlign:'center', maxWidth:280, lineHeight:1.6 }}>
+              {success === 'uzavierka'
+                ? 'Záznam je uložený. O polnoci sa formulár vynuluje a ráno sa nad poľom A zobrazí tento zostatok na overenie pri prerátaní.'
+                : 'Údaje zostávajú zapísané až do začatia novej inventúry.'}
             </div>
             <div style={{ marginTop:24, color:C.muted, fontSize:11 }}>klikni kdekoľvek pre zatvorenie</div>
           </div>
