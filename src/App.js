@@ -2786,10 +2786,10 @@ export default function App() {
         {[
           { id:'tasks',     emoji:'✅',  label:'Úlohy' },
           { id:'temps',     emoji:'🌡️',  label:'Teploty' },
-          { id:'inventory', emoji:'📦',  label:'Sklad' },
-          { id:'odpisy',    emoji:'📝',  label:'Odpisy' },
           { id:'alkohol',   emoji:'🥃',  label:'Alkohol' },
+          { id:'odpisy',    emoji:'📝',  label:'Odpisy' },
           { id:'uzavierka', emoji:'🧾',  label:'Uzávierka' },
+          { id:'inventory', emoji:'📦',  label:'Sklad' },
           { id:'notes',     emoji:'💬',  label:'Správy' },
         ].map(({ id, emoji, label }) => {
           const hasAlert = id === 'temps' && (lastHaccpDate !== new Date().toDateString() || lastHaccpDateVecerne !== new Date().toDateString());
