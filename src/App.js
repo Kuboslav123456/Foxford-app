@@ -2775,7 +2775,7 @@ export default function App() {
               {!d.meno.trim() && <div style={{ textAlign:'center', fontSize:11, color:C.muted, marginTop:6 }}>Vyplň meno pre odoslanie</div>}
 
               <Glass style={{ padding:'14px 16px', marginTop:10 }}>
-                <Tag text="Nacitat udaje z uzavierky Portos / plat. terminalu" />
+                <Tag text="Nacitat udaje z uzavierky Portos / plat. terminalu  · BETA" />
                 <input ref={ocrInputRef} type="file" accept="image/*" capture="environment"
                   style={{ display:'none' }} onChange={handleOcrCapture} />
                 <button
@@ -3261,8 +3261,8 @@ export default function App() {
               </div>
             ))}
 
-            {/* ± prepínač — teploty (mrazák) a uzávierka (zaokrúhlenie, manko môžu byť záporné) */}
-            {(invNumpad.kind === 'temp' || invNumpad.kind === 'uzavierka') && (
+            {/* ± prepínač — teploty (mrazák) a uzávierka len pole L (zaokrúhlenie môže byť záporné) */}
+            {(invNumpad.kind === 'temp' || (invNumpad.kind === 'uzavierka' && invNumpad.fieldKey === 'L')) && (
               <button onPointerDown={e => { e.preventDefault(); numpadPress('±'); }}
                 style={{ width:'100%', padding:'14px 0', borderRadius:14, fontSize:18, fontWeight:700,
                          border:`1px solid ${C.border}`, background:'rgba(255,255,255,0.9)', color:C.text,
