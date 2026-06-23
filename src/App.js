@@ -1194,28 +1194,52 @@ export default function App() {
       .replace(/[ě]/g,'e').replace(/[ľĺ]/g,'l').replace(/[ň]/g,'n')
       .replace(/[ŕ]/g,'r').replace(/[š]/g,'s').replace(/[ť]/g,'t')
       .replace(/[žź]/g,'z');
-    // Extractuje posledné číslo vo formáte X XXX,XX alebo XXXX.XX z riadku
+    // Extractuje posledné číslo vo formáte X XXX,XX alebo XXXX,XX alebo XXXX.XX
+    // POZOR: nepoužívame [\d\s]* — je too greedy a zje medzeru ktorú OCR vyrobí z čiarky
     const extractNum = line => {
-      const matches = line.match(/\d[\d\s]*[.,]\d{2}|\d+/g);
-      if (!matches) return null;
-      return matches[matches.length - 1].replace(/\s/g,'').replace(',','.');
+      const s = line.trim();
+      // 1. Slovenský formát: čiarka ako decimal, medzera/bodka ako tisíce
+      //    Napr: 2254,69 | 2 254,69 | 2.254,69
+      const commaAmts = s.match(/\d{1,3}(?:[. ]\d{3})*,\d{2}(?!\d)|\d+,\d{2}(?!\d)/g);
+      if (commaAmts) {
+        const raw = commaAmts[commaAmts.length - 1];
+        return raw.replace(/[. ]/g, '').replace(',', '.');
+      }
+      // 2. Anglický formát: bodka ako decimal
+      const dotAmts = s.match(/\d+\.\d{2}(?!\d)/g);
+      if (dotAmts) return dotAmts[dotAmts.length - 1];
+      // 3. OCR artefakt — čiarka prečítaná ako medzera: "2254 69" → 2254.69
+      //    Pattern: 3+ číslic + medzera + presne 2 číslice (nesledované ďalšou číslicou)
+      const ocrFix = s.match(/\d{3,}\s\d{2}(?!\d)/g);
+      if (ocrFix) {
+        const last = ocrFix[ocrFix.length - 1].split(' ');
+        return last[0] + '.' + last[1];
+      }
+      // 4. Posledné celé číslo ako záloha
+      const nums = s.match(/\d+/g);
+      return nums ? nums[nums.length - 1] : null;
     };
     const result = {};
     let inObrat = false;
-    let inPlatby = false;
+    let inMealCard = false;   // DOXX alebo MOVEUPSK sekcia → sk pole
+    let inCelkove = false;    // CELKOVÉ SÚČTY → C pole (terminál)
     text.split('\n').map(l => l.trim()).filter(Boolean).forEach(line => {
       const n = norm(line);
       const num = extractNum(line);
-      // Sleduj sekcie
-      if (/\bobrat\b/.test(n)) { inObrat = true; inPlatby = false; }
-      if (/\bplatb/.test(n) || /hotovost/.test(n)) { inObrat = false; inPlatby = true; }
+      // ── Sleduj sekcie ─────────────────────────────────────────────────────
+      if (/\bobrat\b/.test(n)) { inObrat = true; inMealCard = false; inCelkove = false; }
+      if (/\bplatb/.test(n) || /hotovost/.test(n)) { inObrat = false; }
+      if (/\bdoxx\b/.test(n) || /moveupsk|moveup/.test(n) || /noveupsk/.test(n)) {
+        inMealCard = true; inCelkove = false;
+      }
+      if (/celkove sucty/.test(n)) { inCelkove = true; inMealCard = false; }
       if (!num) return;
+      // ── PORTOS Denná uzávierka ─────────────────────────────────────────────
       // B · Tržba = SPOLU v sekcii OBRAT (alebo riadok s "trzb")
       if (!result.B && inObrat && /spolu/.test(n)) result.B = num;
       if (!result.B && /trzb/.test(n)) result.B = num;
-      // C · Platby kartou + stravné karty (electronic)
+      // C · Platby kartou (z PORTOS riadku "Kartou")
       if (!result.C && /kartou/.test(n) && !/stravne/.test(n)) result.C = num;
-      if (!result.C && /stravne kart/.test(n)) result.C = num;
       // D · Qerko
       if (!result.D && /qerko/.test(n) && !/tringelt/.test(n)) result.D = num;
       // E · Qerko tringelt
@@ -1224,6 +1248,14 @@ export default function App() {
       if (!result.F && /stravne l/.test(n)) result.F = num;
       // L · Zaokrúhlenie
       if (!result.L && /zaokr/.test(n)) result.L = num;
+      // ── Platobný terminál (Nets/Nexi výpis) ───────────────────────────────
+      // C · Celkové súčty terminála = všetky kartové platby
+      if (!result.C && inCelkove && /\bcelkom\b/.test(n)) result.C = num;
+      // sk · Z toho stravné karty (DOXX + MOVEUPSK súčet, informatívne)
+      if (inMealCard && /\bcelkom\b/.test(n)) {
+        const prev = parseFloat(result.sk || '0');
+        result.sk = (prev + parseFloat(num)).toFixed(2);
+      }
     });
     return result;
   };
@@ -2743,7 +2775,7 @@ export default function App() {
               {!d.meno.trim() && <div style={{ textAlign:'center', fontSize:11, color:C.muted, marginTop:6 }}>Vyplň meno pre odoslanie</div>}
 
               <Glass style={{ padding:'14px 16px', marginTop:10 }}>
-                <Tag text="Nacitat udaje z blocka" />
+                <Tag text="Nacitat udaje z uzavierky Portos / plat. terminalu" />
                 <input ref={ocrInputRef} type="file" accept="image/*" capture="environment"
                   style={{ display:'none' }} onChange={handleOcrCapture} />
                 <button
