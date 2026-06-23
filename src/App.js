@@ -605,13 +605,21 @@ export default function App() {
     const saved = localStorage.getItem('foxford-tasks');
     let parsed = INIT_TASKS;
     if (saved) { try { parsed = JSON.parse(saved); } catch (_) { parsed = INIT_TASKS; } }
-    // Migrácia checklistu: pri novej verzii nahraď denné + víkendové novým základom
+    // Migrácia checklistu: pri novej verzii nahraď denné + víkendové novým základom.
+    // Zachováva done/time/issue/by pre úlohy s rovnakým ID — len text/štruktúra sa obnoví.
     // (mesačné zostávajú zachované)
     if (localStorage.getItem('foxford-tasks-version') !== TASKS_VERSION) {
+      const mergeDone = (newList, oldList) => {
+        const oldMap = (Array.isArray(oldList) ? oldList : []).reduce((m, t) => { m[t.id] = t; return m; }, {});
+        return newList.map(t => {
+          const old = oldMap[t.id];
+          return old && (old.done || old.issue) ? { ...t, done: old.done, time: old.time ?? null, issue: old.issue ?? null, by: old.by ?? null } : { ...t };
+        });
+      };
       parsed = {
         ...parsed,
-        denné: INIT_TASKS.denné.map(t => ({ ...t })),
-        víkendové: INIT_TASKS.víkendové.map(t => ({ ...t })),
+        denné: mergeDone(INIT_TASKS.denné, parsed.denné),
+        víkendové: mergeDone(INIT_TASKS.víkendové, parsed.víkendové),
       };
       localStorage.setItem('foxford-tasks-version', TASKS_VERSION);
       localStorage.setItem('foxford-tasks', JSON.stringify(parsed));
@@ -1762,7 +1770,7 @@ export default function App() {
                           </div>
                         ) : (
                           <div role="button" tabIndex={-1}
-                            onPointerDown={e => { e.preventDefault(); e.stopPropagation(); setInvNumpad({ kind:'temp', tempKey: field.key, value: (val || '').toString(), unit:'°C', itemName: field.label }); }}
+                            onClick={e => { e.stopPropagation(); setInvNumpad({ kind:'temp', tempKey: field.key, value: (val || '').toString(), unit:'°C', itemName: field.label }); }}
                             style={{
                               width:'100%', padding:'10px 14px', borderRadius:12,
                               border:`1.5px solid ${accentColor}`,
@@ -1771,7 +1779,7 @@ export default function App() {
                               fontSize:18, fontWeight:800, textAlign:'center', letterSpacing:1,
                               boxSizing:'border-box', fontFamily:'inherit',
                               boxShadow: status ? `0 0 10px ${accentColor}22` : 'none',
-                              cursor:'pointer', userSelect:'none', WebkitUserSelect:'none',
+                              touchAction:'manipulation', cursor:'pointer', userSelect:'none', WebkitUserSelect:'none',
                               WebkitTapHighlightColor:'transparent', minHeight: 22,
                             }}>
                             {val || '0.0'}
@@ -2010,14 +2018,14 @@ export default function App() {
                                   <div style={{ display:'flex', gap:5, alignItems:'center' }}>
                                     {/* Qty — tap otvori numpad modal (tablet-friendly) */}
                                     <div
-                                      onPointerDown={e => { e.preventDefault(); setInvNumpad({ itemId: item.id, rowId: row.id, value: row.qty || '', unit: item.unit, itemName: item.name }); }}
+                                      onClick={() => setInvNumpad({ itemId: item.id, rowId: row.id, value: row.qty || '', unit: item.unit, itemName: item.name })}
                                       style={{
                                         width:70, padding:'9px 8px', borderRadius:12, boxSizing:'border-box',
                                         border:`1px solid ${row.qty ? C.goldLine : C.border}`,
                                         background: row.qty ? C.goldDim : 'rgba(255,255,255,0.85)',
                                         color: row.qty ? C.gold : C.muted,
                                         fontSize:16, fontWeight:800, textAlign:'center',
-                                        cursor:'pointer', userSelect:'none', WebkitUserSelect:'none',
+                                        touchAction:'manipulation', cursor:'pointer', userSelect:'none', WebkitUserSelect:'none',
                                         WebkitTapHighlightColor:'transparent',
                                         minHeight:40, display:'flex', alignItems:'center', justifyContent:'center',
                                         flexShrink:0,
@@ -2340,14 +2348,14 @@ export default function App() {
                       <div style={{ flex:1, fontSize:13, fontWeight:600, color:C.text, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{entry.name}</div>
                       {/* Qty — tap otvorí numpad (rovnaký ako v Sklade) */}
                       <div
-                        onPointerDown={e => { e.preventDefault(); setInvNumpad({ kind:'odpis', itemId: todayKey, rowId: entry.id, value: entry.qty || '', unit: entry.unit, itemName: entry.name }); }}
+                        onClick={() => setInvNumpad({ kind:'odpis', itemId: todayKey, rowId: entry.id, value: entry.qty || '', unit: entry.unit, itemName: entry.name })}
                         style={{
                           width:70, padding:'9px 8px', borderRadius:12, boxSizing:'border-box',
                           border:`1px solid ${entry.qty ? C.goldLine : C.border}`,
                           background: entry.qty ? C.goldDim : 'rgba(255,255,255,0.85)',
                           color: entry.qty ? C.gold : C.muted,
                           fontSize:16, fontWeight:800, textAlign:'center',
-                          cursor:'pointer', userSelect:'none', WebkitUserSelect:'none',
+                          touchAction:'manipulation', cursor:'pointer', userSelect:'none', WebkitUserSelect:'none',
                           WebkitTapHighlightColor:'transparent',
                           minHeight:40, display:'flex', alignItems:'center', justifyContent:'center',
                           flexShrink:0,
@@ -2479,13 +2487,13 @@ export default function App() {
                   <div style={{ fontSize:13, fontWeight:600, color: opts.info ? C.muted : C.text, lineHeight:1.3 }}>{label}</div>
                   {opts.hint && <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>{opts.hint}</div>}
                 </div>
-                <div onPointerDown={e => { e.preventDefault(); setInvNumpad({ kind:'uzavierka', dayKey: todayKey, fieldKey, value:(val || '').toString(), unit:'€', itemName: label }); }}
+                <div onClick={() => setInvNumpad({ kind:'uzavierka', dayKey: todayKey, fieldKey, value:(val || '').toString(), unit:'€', itemName: label })}
                   style={{ width:100, padding:'9px 8px', borderRadius:12, boxSizing:'border-box',
                            border:`1px solid ${val ? C.goldLine : C.border}`,
                            background: val ? C.goldDim : 'rgba(255,255,255,0.85)',
                            color: val ? C.gold : C.muted,
                            fontSize:15, fontWeight:800, textAlign:'center',
-                           cursor:'pointer', userSelect:'none', WebkitUserSelect:'none', WebkitTapHighlightColor:'transparent',
+                           touchAction:'manipulation', cursor:'pointer', userSelect:'none', WebkitUserSelect:'none', WebkitTapHighlightColor:'transparent',
                            minHeight:40, display:'flex', alignItems:'center', justifyContent:'center', gap:3, flexShrink:0 }}>
                   {val || '0'} <span style={{ fontSize:11, fontWeight:600 }}>€</span>
                 </div>
@@ -2683,14 +2691,14 @@ export default function App() {
                   {/* Počet otvorených fliaš — tap otvorí numpad */}
                   <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
                     <div
-                      onPointerDown={e => { e.preventDefault(); setInvNumpad({ kind:'alkohol', rowId: b.id, value: (alkoholDnes[b.id] || '').toString(), unit: 'ks', itemName: b.name }); }}
+                      onClick={() => setInvNumpad({ kind:'alkohol', rowId: b.id, value: (alkoholDnes[b.id] || '').toString(), unit: 'ks', itemName: b.name })}
                       style={{
                         width:64, padding:'9px 8px', borderRadius:12, boxSizing:'border-box',
                         border:`1px solid ${alkoholDnes[b.id] ? C.goldLine : C.border}`,
                         background: alkoholDnes[b.id] ? C.goldDim : 'rgba(255,255,255,0.85)',
                         color: alkoholDnes[b.id] ? C.gold : C.muted,
                         fontSize:16, fontWeight:800, textAlign:'center',
-                        cursor:'pointer', userSelect:'none', WebkitUserSelect:'none', WebkitTapHighlightColor:'transparent',
+                        touchAction:'manipulation', cursor:'pointer', userSelect:'none', WebkitUserSelect:'none', WebkitTapHighlightColor:'transparent',
                         minHeight:40, display:'flex', alignItems:'center', justifyContent:'center',
                       }}>
                       {alkoholDnes[b.id] || '0'}
