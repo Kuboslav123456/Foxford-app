@@ -598,8 +598,10 @@ export default function App() {
     input.blur();
     document.body.focus();
   };
-  const touchX      = useRef(null);
-  const tapStartRef = useRef({ x: 0, y: 0 }); // sleduje štart dotyku pre rozlíšenie tap vs swipe
+  const touchX          = useRef(null);
+  const touchY          = useRef(null);
+  const taskTouchMoved  = useRef(false); // true ak sa prst hýbal pri úlohe — blokuje onClick
+  const tapStartRef     = useRef({ x: 0, y: 0 }); // sleduje štart dotyku pre rozlíšenie tap vs swipe
 
   const [tasks, setTasks] = useState(() => {
     // Catch-up loop nad nami už zapísal reset do localStorage ak preskočili sa dni,
@@ -1242,13 +1244,21 @@ export default function App() {
     return t.length === 0 ? 0 : Math.round(t.filter(x => x.done).length / t.length * 100);
   };
 
-  const onTouchStart = (e, id) => { touchX.current = e.targetTouches[0].clientX; };
+  const onTouchStart = (e, id) => {
+    touchX.current = e.targetTouches[0].clientX;
+    touchY.current = e.targetTouches[0].clientY;
+    taskTouchMoved.current = false;
+  };
   const onTouchMove  = (e) => {
     if (touchX.current === null) return;
-    const d = touchX.current - e.targetTouches[0].clientX;
-    if (Math.abs(d) > 10 && timerRef.current) { clearTimeout(timerRef.current); setPressingId(null); }
+    const dx = Math.abs(touchX.current - e.targetTouches[0].clientX);
+    const dy = touchY.current !== null ? Math.abs(touchY.current - e.targetTouches[0].clientY) : 0;
+    if (dx > 10 || dy > 10) {
+      taskTouchMoved.current = true;
+      if (timerRef.current) { clearTimeout(timerRef.current); setPressingId(null); }
+    }
   };
-  const onTouchEnd = () => { touchX.current = null; };
+  const onTouchEnd = () => { touchX.current = null; touchY.current = null; };
 
   const uncheckedTask = (t) => {
     setTasks({ ...tasks, [subTab]: tasks[subTab].map(x => x.id === t.id ? { ...x, done: false, time: null, issue: null, by: null } : x) });
@@ -1278,6 +1288,7 @@ export default function App() {
   };
 
   const onTaskClick = (t) => {
+    if (taskTouchMoved.current) { taskTouchMoved.current = false; return; } // swipe — ignoruj
     if (t.header) return; // nadpis sekcie nie je klikateľný
     if (longPress.current) { longPress.current = false; return; }
     if (!needInsp()) return;
