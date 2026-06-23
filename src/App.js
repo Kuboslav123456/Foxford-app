@@ -562,6 +562,7 @@ export default function App() {
   const [confirmUndo, setConfirmUndo] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmDeleteTask, setConfirmDeleteTask] = useState(null); // úloha na zmazanie (potvrdenie)
+  const [confirmEditMode, setConfirmEditMode] = useState(false);   // potvrdenie pred prepnutím editácie
   const [lastHaccpDate, setLastHaccpDate] = useState(localStorage.getItem('foxford-haccp-date') || '');
   const [lastHaccpDateVecerne, setLastHaccpDateVecerne] = useState(localStorage.getItem('foxford-haccp-date-vecerne') || '');
   const [haccpShift, setHaccpShift] = useState('ranné');
@@ -1595,7 +1596,7 @@ export default function App() {
             </button>
 
             {/* Editačný prepínač — odomkne pridávanie aj mazanie úloh */}
-            <div onClick={() => setEditMode(v => !v)}
+            <div onClick={() => setConfirmEditMode(true)}
               style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:10, marginTop:6,
                        padding:'12px', borderRadius:14, cursor:'pointer', userSelect:'none',
                        border:`1px solid ${editMode ? C.goldLine : C.border}`,
@@ -1847,7 +1848,7 @@ export default function App() {
             )}
 
             {/* Editačný prepínač — odomkne úpravu zariadení a teplôt */}
-            <div onClick={() => setEditMode(v => !v)}
+            <div onClick={() => setConfirmEditMode(true)}
               style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:10, marginTop:6,
                        padding:'12px', borderRadius:14, cursor:'pointer', userSelect:'none',
                        border:`1px solid ${editMode ? C.goldLine : C.border}`,
@@ -2176,7 +2177,7 @@ export default function App() {
             )}
 
             {/* Editačný režim prepínač — úplne dole */}
-            <div onClick={() => setEditMode(v => !v)}
+            <div onClick={() => setConfirmEditMode(true)}
               style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:10, marginTop:6,
                        padding:'12px', borderRadius:14, cursor:'pointer', userSelect:'none',
                        border:`1px solid ${editMode ? C.goldLine : C.border}`,
@@ -2733,7 +2734,7 @@ export default function App() {
             )}
 
             {/* Editačný prepínač */}
-            <div onClick={() => setEditMode(v => !v)}
+            <div onClick={() => setConfirmEditMode(true)}
               style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:10, marginTop:6,
                        padding:'12px', borderRadius:14, cursor:'pointer', userSelect:'none',
                        border:`1px solid ${editMode ? C.goldLine : C.border}`,
@@ -3463,6 +3464,29 @@ export default function App() {
                 setSuccess(true);
               }} style={{ flex:2, padding:'13px', borderRadius:12, background:C.goldDim, border:`1px solid ${C.goldLine}`, color:C.gold, fontWeight:800, cursor:'pointer', fontFamily:'inherit', fontSize:13 }}>
                 Odoslať aj tak
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── CONFIRM EDIT MODE ────────────────────────────────────────────────── */}
+      {confirmEditMode && (
+        <div onMouseDown={() => setConfirmEditMode(false)} style={{ position:'fixed', inset:0, background:'rgba(30,22,8,.55)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2000, padding:24 }}>
+          <div onMouseDown={e => e.stopPropagation()} style={{ background:C.modal, border:`1px solid ${C.borderM}`, width:'100%', maxWidth:360, borderRadius:24, padding:'28px 22px 24px', boxShadow:'0 8px 40px rgba(0,0,0,.12)' }}>
+            <div style={{ fontSize:32, textAlign:'center', marginBottom:14 }}>{editMode ? '🔒' : '🔓'}</div>
+            <div style={{ fontSize:16, fontWeight:800, color:C.text, textAlign:'center', marginBottom:8 }}>
+              {editMode ? 'Vypnúť editáciu?' : 'Zapnúť editáciu?'}
+            </div>
+            <div style={{ fontSize:13, color:C.sub, textAlign:'center', marginBottom:24, lineHeight:1.5 }}>
+              {editMode ? 'Editačný režim sa vypne a zmeny zostanú uložené.' : 'Editačný režim umožňuje pridávať a mazať položky.'}
+            </div>
+            <div style={{ display:'flex', gap:10 }}>
+              <button onMouseDown={() => setConfirmEditMode(false)} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                Zrušiť
+              </button>
+              <button onMouseDown={() => { setEditMode(v => !v); setConfirmEditMode(false); }} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:800, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                Áno
               </button>
             </div>
           </div>
