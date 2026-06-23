@@ -598,7 +598,8 @@ export default function App() {
     input.blur();
     document.body.focus();
   };
-  const touchX   = useRef(null);
+  const touchX      = useRef(null);
+  const tapStartRef = useRef({ x: 0, y: 0 }); // sleduje štart dotyku pre rozlíšenie tap vs swipe
 
   const [tasks, setTasks] = useState(() => {
     // Catch-up loop nad nami už zapísal reset do localStorage ak preskočili sa dni,
@@ -1771,7 +1772,8 @@ export default function App() {
                           </div>
                         ) : (
                           <div role="button" tabIndex={-1}
-                            onClick={e => { e.stopPropagation(); setInvNumpad({ kind:'temp', tempKey: field.key, value: (val || '').toString(), unit:'°C', itemName: field.label }); }}
+                            onPointerDown={e => { tapStartRef.current = { x: e.clientX, y: e.clientY }; }}
+                            onPointerUp={e => { if (Math.abs(e.clientX - tapStartRef.current.x) + Math.abs(e.clientY - tapStartRef.current.y) < 10) { e.stopPropagation(); setInvNumpad({ kind:'temp', tempKey: field.key, value: (val || '').toString(), unit:'°C', itemName: field.label }); } }}
                             style={{
                               width:'100%', padding:'10px 14px', borderRadius:12,
                               border:`1.5px solid ${accentColor}`,
@@ -2019,7 +2021,8 @@ export default function App() {
                                   <div style={{ display:'flex', gap:5, alignItems:'center' }}>
                                     {/* Qty — tap otvori numpad modal (tablet-friendly) */}
                                     <div
-                                      onClick={() => setInvNumpad({ itemId: item.id, rowId: row.id, value: row.qty || '', unit: item.unit, itemName: item.name })}
+                                      onPointerDown={e => { tapStartRef.current = { x: e.clientX, y: e.clientY }; }}
+                                      onPointerUp={e => { if (Math.abs(e.clientX - tapStartRef.current.x) + Math.abs(e.clientY - tapStartRef.current.y) < 10) setInvNumpad({ itemId: item.id, rowId: row.id, value: row.qty || '', unit: item.unit, itemName: item.name }); }}
                                       style={{
                                         width:70, padding:'9px 8px', borderRadius:12, boxSizing:'border-box',
                                         border:`1px solid ${row.qty ? C.goldLine : C.border}`,
@@ -2349,7 +2352,8 @@ export default function App() {
                       <div style={{ flex:1, fontSize:13, fontWeight:600, color:C.text, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{entry.name}</div>
                       {/* Qty — tap otvorí numpad (rovnaký ako v Sklade) */}
                       <div
-                        onClick={() => setInvNumpad({ kind:'odpis', itemId: todayKey, rowId: entry.id, value: entry.qty || '', unit: entry.unit, itemName: entry.name })}
+                        onPointerDown={e => { tapStartRef.current = { x: e.clientX, y: e.clientY }; }}
+                        onPointerUp={e => { if (Math.abs(e.clientX - tapStartRef.current.x) + Math.abs(e.clientY - tapStartRef.current.y) < 10) setInvNumpad({ kind:'odpis', itemId: todayKey, rowId: entry.id, value: entry.qty || '', unit: entry.unit, itemName: entry.name }); }}
                         style={{
                           width:70, padding:'9px 8px', borderRadius:12, boxSizing:'border-box',
                           border:`1px solid ${entry.qty ? C.goldLine : C.border}`,
@@ -2488,7 +2492,9 @@ export default function App() {
                   <div style={{ fontSize:13, fontWeight:600, color: opts.info ? C.muted : C.text, lineHeight:1.3 }}>{label}</div>
                   {opts.hint && <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>{opts.hint}</div>}
                 </div>
-                <div onClick={() => setInvNumpad({ kind:'uzavierka', dayKey: todayKey, fieldKey, value:(val || '').toString(), unit:'€', itemName: label })}
+                <div
+                  onPointerDown={e => { tapStartRef.current = { x: e.clientX, y: e.clientY }; }}
+                  onPointerUp={e => { if (Math.abs(e.clientX - tapStartRef.current.x) + Math.abs(e.clientY - tapStartRef.current.y) < 10) setInvNumpad({ kind:'uzavierka', dayKey: todayKey, fieldKey, value:(val || '').toString(), unit:'€', itemName: label }); }}
                   style={{ width:100, padding:'9px 8px', borderRadius:12, boxSizing:'border-box',
                            border:`1px solid ${val ? C.goldLine : C.border}`,
                            background: val ? C.goldDim : 'rgba(255,255,255,0.85)',
@@ -2692,7 +2698,8 @@ export default function App() {
                   {/* Počet otvorených fliaš — tap otvorí numpad */}
                   <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
                     <div
-                      onClick={() => setInvNumpad({ kind:'alkohol', rowId: b.id, value: (alkoholDnes[b.id] || '').toString(), unit: 'ks', itemName: b.name })}
+                      onPointerDown={e => { tapStartRef.current = { x: e.clientX, y: e.clientY }; }}
+                      onPointerUp={e => { if (Math.abs(e.clientX - tapStartRef.current.x) + Math.abs(e.clientY - tapStartRef.current.y) < 10) setInvNumpad({ kind:'alkohol', rowId: b.id, value: (alkoholDnes[b.id] || '').toString(), unit: 'ks', itemName: b.name }); }}
                       style={{
                         width:64, padding:'9px 8px', borderRadius:12, boxSizing:'border-box',
                         border:`1px solid ${alkoholDnes[b.id] ? C.goldLine : C.border}`,
