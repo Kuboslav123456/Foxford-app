@@ -603,6 +603,7 @@ export default function App() {
   const touchY          = useRef(null);
   const taskTouchMoved  = useRef(false); // true ak sa prst hýbal pri úlohe — blokuje onClick
   const tapStartRef     = useRef({ x: 0, y: 0 }); // sleduje štart dotyku pre rozlíšenie tap vs swipe
+  const ocrInputRef     = useRef(null);
 
   const [tasks, setTasks] = useState(() => {
     // Catch-up loop nad nami už zapísal reset do localStorage ak preskočili sa dni,
@@ -694,6 +695,10 @@ export default function App() {
   const [confirmResetHaccp, setConfirmResetHaccp] = useState(false);
   const [sending, setSending]   = useState(false);
   const [success, setSuccess]   = useState(false);
+  const [ocrStatus, setOcrStatus]   = useState(null);
+  const [ocrImage, setOcrImage]     = useState(null);
+  const [ocrRawText, setOcrRawText] = useState('');
+  const [ocrFilledCount, setOcrFilledCount] = useState(0);
   const [missingWarning, setMissingWarning] = useState([]);
   const [haccpMissing, setHaccpMissing] = useState(null); // [labels] nevyplnených teplôt pri odoslaní
   const [confirmExportPdf, setConfirmExportPdf] = useState(false); // potvrdenie PDF exportu odpisov
@@ -1180,6 +1185,80 @@ export default function App() {
     return { ...prev, [key]: next };
   });
   const markUzavSent = (key) => setUzavierky(prev => ({ ...prev, [key]: { ...UZAV_DEFAULT, ...(prev[key] || {}), sent:true } }));
+
+  const parseUzavOcr = (text) => {
+    const norm = s => s.toLowerCase()
+      .replace(/[áàâ]/g,'a').replace(/[éèê]/g,'e').replace(/[íìî]/g,'i')
+      .replace(/[óòô]/g,'o').replace(/[úùû]/g,'u').replace(/[ý]/g,'y')
+      .replace(/[ä]/g,'a').replace(/[č]/g,'c').replace(/[ď]/g,'d')
+      .replace(/[ě]/g,'e').replace(/[ľĺ]/g,'l').replace(/[ň]/g,'n')
+      .replace(/[ŕ]/g,'r').replace(/[š]/g,'s').replace(/[ť]/g,'t')
+      .replace(/[žź]/g,'z');
+    // Extractuje posledné číslo vo formáte X XXX,XX alebo XXXX.XX z riadku
+    const extractNum = line => {
+      const matches = line.match(/\d[\d\s]*[.,]\d{2}|\d+/g);
+      if (!matches) return null;
+      return matches[matches.length - 1].replace(/\s/g,'').replace(',','.');
+    };
+    const result = {};
+    let inObrat = false;
+    let inPlatby = false;
+    text.split('\n').map(l => l.trim()).filter(Boolean).forEach(line => {
+      const n = norm(line);
+      const num = extractNum(line);
+      // Sleduj sekcie
+      if (/\bobrat\b/.test(n)) { inObrat = true; inPlatby = false; }
+      if (/\bplatb/.test(n) || /hotovost/.test(n)) { inObrat = false; inPlatby = true; }
+      if (!num) return;
+      // B · Tržba = SPOLU v sekcii OBRAT (alebo riadok s "trzb")
+      if (!result.B && inObrat && /spolu/.test(n)) result.B = num;
+      if (!result.B && /trzb/.test(n)) result.B = num;
+      // C · Platby kartou + stravné karty (electronic)
+      if (!result.C && /kartou/.test(n) && !/stravne/.test(n)) result.C = num;
+      if (!result.C && /stravne kart/.test(n)) result.C = num;
+      // D · Qerko
+      if (!result.D && /qerko/.test(n) && !/tringelt/.test(n)) result.D = num;
+      // E · Qerko tringelt
+      if (!result.E && /tringelt/.test(n)) result.E = num;
+      // F · Stravné lístky (papierové)
+      if (!result.F && /stravne l/.test(n)) result.F = num;
+      // L · Zaokrúhlenie
+      if (!result.L && /zaokr/.test(n)) result.L = num;
+    });
+    return result;
+  };
+
+  const handleOcrCapture = async (e) => {
+    const file = e.target.files ? e.target.files[0] : null;
+    if (!file) return;
+    const blobUrl = URL.createObjectURL(file);
+    setOcrImage(blobUrl);
+    setOcrRawText('');
+    setOcrFilledCount(0);
+    setOcrStatus('loading');
+    if (ocrInputRef.current) ocrInputRef.current.value = '';
+    try {
+      const { createWorker } = await import('tesseract.js');
+      const worker = await createWorker('slk+eng');
+      const { data: { text } } = await worker.recognize(blobUrl);
+      await worker.terminate();
+      setOcrRawText(text);
+      const filled = parseUzavOcr(text);
+      const key = localDayKey(new Date());
+      let count = 0;
+      Object.entries(filled).forEach(([field, val]) => {
+        if (val !== '' && val !== null && val !== undefined) {
+          setUzavField(key, field, val);
+          count++;
+        }
+      });
+      setOcrFilledCount(count);
+      setOcrStatus('done');
+    } catch (err) {
+      setOcrStatus('error');
+    }
+  };
+
   // H = A+B-C-D-E-F-G (mám mať v kase); M = H-K (nový zostatok); J = H-I (tringelt/manko)
   const uzavH = (d) => num(d.A) + num(d.B) - num(d.C) - num(d.D) - num(d.E) - num(d.F) - num(d.G);
   const uzavM = (d) => uzavH(d) - num(d.K);
@@ -2618,7 +2697,7 @@ export default function App() {
                 {amount('B', 'B · Tržba (obrat bez zaokrúhlenia)')}
                 {amount('C', 'C · Platby kartou (+ stravné karty)')}
                 {amount('D', 'D · Platby Qerko (tržba + tringelt)')}
-                {amount('E', 'E · Z toho Qerko tringelt')}
+                {amount('E', 'E · Z toho Qerko tringelt', { hint:'reálne vyber a vhoď medzi tringelty' })}
                 {amount('sk', 'Z toho stravná karta', { info:true, hint:'informatívne — neráta sa' })}
                 {amount('F', 'F · Stravné lístky')}
                 {amount('G', 'G · Nákup')}
@@ -2662,6 +2741,44 @@ export default function App() {
                 {d.sent ? 'Odoslať znova' : 'Odoslať uzávierku'}
               </button>
               {!d.meno.trim() && <div style={{ textAlign:'center', fontSize:11, color:C.muted, marginTop:6 }}>Vyplň meno pre odoslanie</div>}
+
+              <Glass style={{ padding:'14px 16px', marginTop:10 }}>
+                <Tag text="Nacitat udaje z blocka" />
+                <input ref={ocrInputRef} type="file" accept="image/*" capture="environment"
+                  style={{ display:'none' }} onChange={handleOcrCapture} />
+                <button
+                  onClick={() => { if (ocrInputRef.current) ocrInputRef.current.click(); }}
+                  disabled={ocrStatus === 'loading'}
+                  style={{
+                    width:'100%', padding:'11px', marginTop:8,
+                    background: ocrStatus === 'loading' ? C.muted : C.goldDim,
+                    border:`1px solid ${C.goldLine}`, color:C.gold, borderRadius:12,
+                    fontWeight:700, fontSize:13,
+                    cursor: ocrStatus === 'loading' ? 'default' : 'pointer',
+                    fontFamily:'inherit',
+                  }}>
+                  {ocrStatus === 'loading' ? 'Rozpoznavam text...' : 'Nafotit blocek'}
+                </button>
+                {ocrImage && (
+                  <img src={ocrImage} alt="" style={{ width:'100%', marginTop:8, borderRadius:8, maxHeight:180, objectFit:'contain' }} />
+                )}
+                {ocrStatus === 'done' && (
+                  <div style={{ marginTop:8 }}>
+                    <div style={{ textAlign:'center', fontSize:12, color:C.ok, fontWeight:700 }}>
+                      {ocrFilledCount > 0 ? `Vyplnilo sa ${ocrFilledCount} pol${ocrFilledCount === 1 ? 'e' : ocrFilledCount < 5 ? 'ia' : 'i'}` : 'Text rozpoznany, zhoda nenajdena'}
+                    </div>
+                    {ocrRawText && (
+                      <details style={{ marginTop:8 }}>
+                        <summary style={{ fontSize:11, color:C.muted, cursor:'pointer' }}>Rozpoznany text (klikni na detail)</summary>
+                        <pre style={{ fontSize:10, color:C.sub, background:'rgba(0,0,0,0.04)', borderRadius:8, padding:8, marginTop:6, whiteSpace:'pre-wrap', wordBreak:'break-word', maxHeight:200, overflowY:'auto', lineHeight:1.5 }}>{ocrRawText}</pre>
+                      </details>
+                    )}
+                  </div>
+                )}
+                {ocrStatus === 'error' && (
+                  <div style={{ textAlign:'center', marginTop:6, fontSize:12, color:C.err }}>Chyba rozpoznavania — skus znova</div>
+                )}
+              </Glass>
             </>
           );
         })()}
