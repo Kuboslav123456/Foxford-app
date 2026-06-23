@@ -549,6 +549,7 @@ export default function App() {
 
   const [loading, setLoading]   = useState(true);
   const [online, setOnline]     = useState(navigator.onLine);
+  const [uiZoom, setUiZoom]     = useState(() => parseFloat(localStorage.getItem('foxford-zoom') || '1'));
   const [tab, setTab]           = useState('tasks');
   const [subTab, setSubTab]     = useState('denné');
   const [expCat, setExpCat]     = useState(null);
@@ -748,6 +749,11 @@ export default function App() {
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
   }, []);
 
+  useEffect(() => {
+    document.documentElement.style.zoom = uiZoom;
+    localStorage.setItem('foxford-zoom', uiZoom.toString());
+  }, [uiZoom]);
+
   // ── MIDNIGHT AUTO-RESET + AUTO-SEND DENNÝCH ÚLOH + ODPISOV ────────────────
   // Self-rearming: po každom polnočnom resete sa znovu naplánuje na ďalšiu polnoc.
   // Pri zatvorenej appke catch-up beží pri otvorení (viď začiatok komponentu App).
@@ -762,7 +768,7 @@ export default function App() {
         performDailyClose(new Date());
         localStorage.setItem('foxford-last-reset-date', new Date().toDateString());
         // 2) Aktualizuj React state (kópia z localStorage)
-        setTasks(prev => ({ ...prev, denné: prev.denné.map(t => ({ ...t, done: false, time: null, issue: null, by: null })) }));
+        setTasks(prev => ({ ...prev, denné: prev.denné.map(t => ({ ...t, done: false, time: null, date: null, issue: null, by: null })) }));
         setInspectors(prev => ({ ...prev, denné: '' }));
         setLastHaccpDate('');
         setLastHaccpDateVecerne('');
@@ -833,8 +839,9 @@ export default function App() {
       return;
     }
     if (!navigator.onLine) {
-      // Uložiť do fronty na neskôr (aj s URL pobočky)
-      const q = [...offlineQueue, { type, payload, url: scriptUrl, ts: Date.now() }];
+      // Uložiť do fronty na neskôr (aj s URL pobočky) — čítame z localStorage nie z closure (stale ref)
+      const current = safeParse('foxford-offline-queue', []);
+      const q = [...current, { type, payload, url: scriptUrl, ts: Date.now() }];
       setOfflineQueue(q);
       localStorage.setItem('foxford-offline-queue', JSON.stringify(q));
       return;
@@ -1435,6 +1442,16 @@ export default function App() {
               ✓ {offlineFlushed} odoslaných
             </div>
           )}
+          <div style={{ display:'flex', alignItems:'center', gap:3, marginLeft:2 }}>
+            <button onClick={() => setUiZoom(z => Math.max(0.8, +((z - 0.1).toFixed(1))))}
+              style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, color:C.sub,
+                       fontSize:10, fontWeight:800, cursor:'pointer', padding:'2px 5px', lineHeight:1.4,
+                       fontFamily:'inherit', userSelect:'none' }}>A−</button>
+            <button onClick={() => setUiZoom(z => Math.min(1.5, +((z + 0.1).toFixed(1))))}
+              style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, color:C.sub,
+                       fontSize:10, fontWeight:800, cursor:'pointer', padding:'2px 5px', lineHeight:1.4,
+                       fontFamily:'inherit', userSelect:'none' }}>A+</button>
+          </div>
         </div>
         <img src={`${process.env.PUBLIC_URL}/foxford-logo.png.png`} alt="Foxford" style={{ height:44, objectFit:'contain' }} />
         <div style={{ flex:1, display:'flex', justifyContent:'flex-end', alignItems:'center', gap:14 }}>
@@ -2279,7 +2296,7 @@ export default function App() {
                 </div>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:8 }}>
                   <span style={{ fontSize:11, fontWeight:700, color:C.gold, opacity:.8 }}>{n.author || 'Anonym'}</span>
-                  <span style={{ fontSize:10, color:C.muted }}>{n.time}</span>
+                  <span style={{ fontSize:10, color:C.muted }}>{n.time || new Date(n.id).toLocaleString('sk-SK', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}</span>
                 </div>
               </Glass>
             ))}
