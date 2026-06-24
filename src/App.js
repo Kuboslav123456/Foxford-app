@@ -725,6 +725,7 @@ export default function App() {
   const [odpisy, setOdpisy] = useState(() => safeParse('foxford-odpisy', {}));
   const [odpisySearch, setOdpisySearch] = useState('');
   const [odpisySummaryDate, setOdpisySummaryDate] = useState(() => { const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() }; });
+  const [odpisyBrowseKey, setOdpisyBrowseKey] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 1); return localDayKey(d); }); // prehliadač dní — default včera (DST-safe)
   const [odpisyAuthor, setOdpisyAuthor] = useState(() => localStorage.getItem('foxford-odpisy-author') || '');
   // Denné uzávierky kasy — { [dayKey]: { kasa, meno, A..L, gNote, sent } } (H/J/M sa rátajú)
   const [uzavierky, setUzavierky] = useState(() => safeParse('foxford-uzavierky', {}));
@@ -898,8 +899,9 @@ export default function App() {
   }, [online]);
 
   // Kľúče dňa (YYYY-MM-DD) — používajú odpisy aj uzávierka; deklarované pred effectmi (TDZ)
+  // Kalendárová aritmetika (setDate) je DST-safe — odčítanie 86400000 ms zlyháva v ~1h okne po jarnom prechode na letný čas.
   const todayKey     = localDayKey(new Date());
-  const yesterdayKey = localDayKey(new Date(Date.now() - 86400000));
+  const yesterdayKey = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return localDayKey(d); })();
 
   // Live hodiny — aktualizácia každú sekundu
   useEffect(() => {
@@ -2427,6 +2429,15 @@ export default function App() {
           const { year, month } = odpisySummaryDate;
           const summary = getMonthSummary(year, month);
           const dovorColors = { 'Spotreba': C.ok, 'Pokazené': C.err, 'Rozbité': '#d07010', 'Ochutnávka': '#7a60b0' };
+          // ── Prehliadač po dňoch ──────────────────────────────────────────────
+          const keyToDate = (key) => { const [y, m, dd] = key.split('-').map(Number); return new Date(y, m - 1, dd); };
+          const shiftBrowse = (delta) => setOdpisyBrowseKey(k => { const dt = keyToDate(k); dt.setDate(dt.getDate() + delta); return localDayKey(dt); });
+          const beforeYesterdayKey = (() => { const dt = keyToDate(todayKey); dt.setDate(dt.getDate() - 2); return localDayKey(dt); })();
+          const browseData = getDayData(odpisyBrowseKey);
+          const browseEntries = browseData.entries.filter(e => e.qty && parseQty(e.qty) !== 0);
+          const browseRel = odpisyBrowseKey === todayKey ? 'Dnes' : odpisyBrowseKey === yesterdayKey ? 'Včera' : odpisyBrowseKey === beforeYesterdayKey ? 'Predvčerom' : null;
+          const browseDateLabel = (() => { const s = keyToDate(odpisyBrowseKey).toLocaleDateString('sk-SK', { weekday:'long', day:'numeric', month:'long' }); return s.charAt(0).toUpperCase() + s.slice(1); })();
+          const browseCanNext = odpisyBrowseKey < todayKey;
           return (
             <>
               {/* Meno zodpovedného */}
@@ -2551,6 +2562,69 @@ export default function App() {
                     <span style={{ fontSize:14 }}>🌙</span>
                     <span style={{ fontSize:11, color:C.ok, fontWeight:600, lineHeight:1.4 }}>Odpisy sa automaticky odošlú do tabuľky o polnoci</span>
                   </div>
+                )}
+              </Glass>
+
+              {/* Prehľad po dňoch (len na čítanie) */}
+              <Glass style={{ padding:'14px 16px', marginTop:8 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+                  <Tag text="Prehľad po dňoch" />
+                  <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <span onClick={() => shiftBrowse(-1)} style={{ color:C.gold, cursor:'pointer', fontSize:16, padding:'0 4px' }}>◀</span>
+                    <span style={{ fontSize:12, fontWeight:700, color:C.sub, minWidth:74, textAlign:'center' }}>
+                      {browseRel || keyToDate(odpisyBrowseKey).toLocaleDateString('sk-SK', { day:'2-digit', month:'2-digit' })}
+                    </span>
+                    <span onClick={() => browseCanNext && shiftBrowse(1)} style={{ color: browseCanNext ? C.gold : C.muted, cursor: browseCanNext ? 'pointer' : 'default', fontSize:16, padding:'0 4px', opacity: browseCanNext ? 1 : 0.35 }}>▶</span>
+                  </div>
+                </div>
+
+                {/* Plný dátum vybraného dňa */}
+                <div style={{ fontSize:11, color:C.muted, marginBottom:10 }}>{browseDateLabel}</div>
+
+                {/* Rýchle skoky */}
+                <div style={{ display:'flex', gap:6, marginBottom:12 }}>
+                  {[{ k: todayKey, l: 'Dnes' }, { k: yesterdayKey, l: 'Včera' }, { k: beforeYesterdayKey, l: 'Predvčerom' }].map(({ k, l }) => {
+                    const active = odpisyBrowseKey === k;
+                    return (
+                      <button key={k} onClick={() => setOdpisyBrowseKey(k)} style={{
+                        padding:'5px 12px', borderRadius:20, border:`1px solid ${active ? C.goldLine : C.border}`,
+                        background: active ? C.goldDim : 'transparent', color: active ? C.gold : C.muted,
+                        fontSize:11, fontWeight: active ? 700 : 500, cursor:'pointer', fontFamily:'inherit', transition:'all .15s',
+                      }}>{l}</button>
+                    );
+                  })}
+                </div>
+
+                {/* Zoznam odpisov daného dňa */}
+                {browseEntries.length === 0 ? (
+                  <div style={{ textAlign:'center', color:C.muted, fontSize:13, padding:'16px 0' }}>
+                    Žiadne odpisy v tento deň
+                  </div>
+                ) : (
+                  <>
+                    {browseEntries.map(entry => {
+                      const col = dovorColors[entry.reason || 'Spotreba'] || C.muted;
+                      return (
+                        <div key={entry.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 0', borderBottom:`1px solid ${C.border}` }}>
+                          <span style={{ flex:1, fontSize:13, color:C.text, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{entry.name}</span>
+                          <span style={{ fontSize:10, fontWeight:700, color:col, border:`1px solid ${hexToRgba(col, 0.4)}`, background:hexToRgba(col, 0.1), padding:'2px 8px', borderRadius:20, flexShrink:0 }}>{entry.reason || 'Spotreba'}</span>
+                          <div style={{ display:'flex', alignItems:'baseline', gap:4, flexShrink:0, minWidth:50, justifyContent:'flex-end' }}>
+                            <span style={{ fontSize:15, fontWeight:800, color:C.gold }}>{entry.qty}</span>
+                            <span style={{ fontSize:11, color:C.muted }}>{entry.unit}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {browseData.note && (
+                      <div style={{ marginTop:10, padding:'10px 12px', borderRadius:12, background:C.goldDim, border:`1px solid ${C.goldLine}`, display:'flex', gap:8, alignItems:'flex-start' }}>
+                        <span style={{ fontSize:14, flexShrink:0 }}>💬</span>
+                        <span style={{ fontSize:12, color:C.text, lineHeight:1.5 }}>{browseData.note}</span>
+                      </div>
+                    )}
+                    <div style={{ marginTop:8, padding:'8px 0 0', fontSize:11, color:C.muted, textAlign:'right' }}>
+                      {browseEntries.length} položiek
+                    </div>
+                  </>
                 )}
               </Glass>
 
