@@ -1519,7 +1519,7 @@ export default function App() {
   if (!branch) {
     return (
       <div style={{ maxWidth:500, margin:'0 auto', minHeight:'100vh', fontFamily:'-apple-system,sans-serif', color:C.text, background:C.bg, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'0 24px' }}>
-        <Logo size={64} />
+        <img src={`${process.env.PUBLIC_URL}/foxford-symbol.png`} alt="Foxford" style={{ height:78, width:'auto', display:'block' }} />
         <div style={{ marginTop:20, fontSize:22, fontWeight:900, letterSpacing:3 }}>FOXFORD</div>
         <div style={{ fontSize:9, color:C.gold, letterSpacing:2.5, fontWeight:700, textTransform:'uppercase', marginTop:2, marginBottom:32, opacity:.75 }}>Vyber prevádzku</div>
         {BRANCHES.map(b => (
