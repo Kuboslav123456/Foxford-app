@@ -1123,7 +1123,8 @@ export default function App() {
     // Teploty: numpad zapíše teplotu do aktívnej smeny (tempKey = field.key)
     if (invNumpad.kind === 'temp') {
       const setTempState = haccpShift === 'ranné' ? setTemps : setTempsVecerne;
-      const v = invNumpad.value === '-' ? '' : invNumpad.value; // samotné mínus bez čísla = prázdne
+      // Nečíselné medzistavy (samotné '-', '-.', '.') uložiť ako prázdne — inak by gauge ukázal falošný status
+      const v = isNaN(parseFloat((invNumpad.value || '').replace(',', '.'))) ? '' : invNumpad.value;
       setTempState(prev => ({ ...prev, [invNumpad.tempKey]: v }));
       setInvNumpad(null);
       return;
@@ -1479,6 +1480,14 @@ export default function App() {
     const maxNum = parseFloat((field.max || '').replace(/[^\d.-]/g, ''));
     if (isNaN(maxNum)) return 'ok';
     return n > maxNum ? 'err' : 'ok';
+  };
+  // Percento naplnenia gauge baru — chladnička: rozsah -10..+15 (25°), mraznička (záporný max): -30..0 (30°)
+  const tempGaugePct = (field, val) => {
+    const n = parseFloat((val || '').toString().replace(',', '.'));
+    if (isNaN(n) || val === '') return 0;
+    const maxNum = parseFloat((field.max || '').replace(/[^\d.-]/g, ''));
+    if (maxNum < 0) return Math.min(100, Math.max(0, (n + 30) / 30 * 100));
+    return Math.min(100, Math.max(0, (n + 10) / 25 * 100));
   };
 
   // ── TEPLOTY — editácia názvu a max teploty zariadenia ──────────────────────
@@ -1866,75 +1875,59 @@ export default function App() {
                     </div>
                   );
                 }
+                // ── HACCP gauge karta ──────────────────────────────────────────
                 const val = activeTemps[field.key] || '';
-                const status = tempColor(field, val);
-                const accentColor = status === 'ok' ? C.ok : status === 'err' ? C.err : C.border;
-                const fillPct = (() => {
-                  if (!status) return 0;
-                  if (status === 'err') return 100;
-                  const v = parseFloat((val || '').replace(',','.'));
-                  const m = parseFloat((field.max || '').replace(/[^\d.]/g, ''));
-                  if (isNaN(v) || isNaN(m) || m <= 0) return 55;
-                  return Math.max(10, Math.min(85, (Math.abs(v) / m) * 65));
-                })();
-                const thermoColor = status === 'ok' ? C.ok : status === 'err' ? C.err : C.muted;
+                const status = tempColor(field, val);                 // 'ok' | 'err' | null
+                const pct = tempGaugePct(field, val);
+                const color     = status === 'ok' ? C.ok    : status === 'err' ? C.err    : C.muted;
+                const colorDim  = status === 'ok' ? C.okDim : status === 'err' ? C.errDim : 'transparent';
+                const colorLine = status === 'ok' ? `${C.ok}44` : status === 'err' ? `${C.err}44` : C.border;
+                const statusText = !status ? 'Nevyplnené' : status === 'ok' ? 'V norme ✓' : 'Nad limitom!';
+                const isFreezer  = parseFloat((field.max || '').replace(/[^\d.-]/g, '')) < 0;
+                const maxLabel   = (field.max || '').replace(/^≤\s*/, ''); // "≤ 5 °C" → "5 °C"
                 return (
-                  <div key={field.key} style={{ display:'flex', alignItems:'center', gap:10, marginBottom: isTablet ? 0 : 10 }}>
-                    <div className="thermo" title={`${val || '—'} ${field.max || ''}`}>
-                      <div className="thermo-fill" style={{ height: `${fillPct}%`, background: `linear-gradient(180deg, ${thermoColor}, ${thermoColor}cc)`, '--fill': `${fillPct}%` }} />
-                      <div className="thermo-bulb" style={{ background: thermoColor, boxShadow: status ? `0 0 6px ${thermoColor}88` : 'none' }} />
+                  <div key={field.key} role="button" tabIndex={-1}
+                    onPointerDown={e => { if (!activeDone) tapStartRef.current = { x: e.clientX, y: e.clientY }; }}
+                    onPointerUp={e => {
+                      if (activeDone) { e.preventDefault(); e.stopPropagation(); setLockedAlert({ shift: haccpShift }); return; }
+                      if (Math.abs(e.clientX - tapStartRef.current.x) + Math.abs(e.clientY - tapStartRef.current.y) < 10) {
+                        e.stopPropagation();
+                        setInvNumpad({ kind:'temp', tempKey: field.key, value: (val || '').toString(), unit:'°C', itemName: field.label });
+                      }
+                    }}
+                    style={{
+                      background: status ? colorDim : 'rgba(255,255,255,0.7)',
+                      border: `1px solid ${colorLine}`,
+                      borderRadius: 14,
+                      padding: '14px 14px 12px',
+                      cursor: 'pointer',
+                      marginBottom: isTablet ? 0 : 10,
+                      transition: 'background 0.3s, border-color 0.3s',
+                      userSelect: 'none', WebkitUserSelect: 'none', WebkitTapHighlightColor: 'transparent',
+                    }}>
+                    {/* Header: názov + max pill */}
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8, marginBottom:10 }}>
+                      <span style={{ fontSize:13, fontWeight:600, color:C.text, lineHeight:1.35, flex:1 }}>{field.label}</span>
+                      <span style={{ fontSize:11, fontWeight:700, color, background:colorDim, border:`1px solid ${colorLine}`, borderRadius:99, padding:'2px 9px', whiteSpace:'nowrap', flexShrink:0, transition:'color 0.3s, background 0.3s' }}>{field.max || '—'}</span>
                     </div>
-                    <div style={{ flex:1 }}>
-                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
-                        <span style={{ fontSize:11, fontWeight:700, letterSpacing:.5, color: status ? accentColor : C.sub, textTransform:'uppercase' }}>{field.label}</span>
-                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                          {field.max && <span style={{ fontSize:10, color:C.muted }}>{field.max}</span>}
-                        </div>
+                    {/* Value row */}
+                    <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+                      <span style={{ fontSize:32, fontWeight:900, color, lineHeight:1, minWidth:50, transition:'color 0.3s', fontVariantNumeric:'tabular-nums' }}>{val || '—'}</span>
+                      <span style={{ fontSize:16, color:C.muted, alignSelf:'flex-end', paddingBottom:3 }}>°C</span>
+                      <div style={{ flex:1, textAlign:'right' }}>
+                        <span style={{ fontSize:12, fontWeight:700, color, display:'block', transition:'color 0.3s' }}>{statusText}</span>
+                        <span style={{ fontSize:10, color:C.muted, display:'block', marginTop:2 }}>{activeDone ? 'Uzamknuté 🔒' : 'Klepni pre zadanie'}</span>
                       </div>
-                      <div style={{ position:'relative' }}>
-                        {activeDone ? (
-                          /* Uzamknutý stav — namiesto inputu obyčajný div (žiadny scroll/keyboard/focus) */
-                          <div role="button" tabIndex={-1}
-                            onPointerDown={e => { e.preventDefault(); e.stopPropagation(); setLockedAlert({ shift: haccpShift }); }}
-                            style={{
-                              width:'100%', padding:'10px 14px', borderRadius:12,
-                              border:`1.5px solid ${accentColor}`,
-                              background: status === 'ok' ? C.okDim : status === 'err' ? C.errDim : C.panel,
-                              color: status ? accentColor : C.text,
-                              fontSize:18, fontWeight:800, textAlign:'center', letterSpacing:1,
-                              boxSizing:'border-box', fontFamily:'inherit',
-                              boxShadow: status ? `0 0 10px ${accentColor}22` : 'none',
-                              cursor:'pointer',
-                              userSelect:'none', WebkitUserSelect:'none',
-                              WebkitTapHighlightColor:'transparent',
-                              minHeight: 22,
-                            }}>
-                            {val || '—'}
-                          </div>
-                        ) : (
-                          <div role="button" tabIndex={-1}
-                            onPointerDown={e => { tapStartRef.current = { x: e.clientX, y: e.clientY }; }}
-                            onPointerUp={e => { if (Math.abs(e.clientX - tapStartRef.current.x) + Math.abs(e.clientY - tapStartRef.current.y) < 10) { e.stopPropagation(); setInvNumpad({ kind:'temp', tempKey: field.key, value: (val || '').toString(), unit:'°C', itemName: field.label }); } }}
-                            style={{
-                              width:'100%', padding:'10px 14px', borderRadius:12,
-                              border:`1.5px solid ${accentColor}`,
-                              background: status === 'ok' ? C.okDim : status === 'err' ? C.errDim : C.panel,
-                              color: status ? accentColor : (val ? C.text : C.muted),
-                              fontSize:18, fontWeight:800, textAlign:'center', letterSpacing:1,
-                              boxSizing:'border-box', fontFamily:'inherit',
-                              boxShadow: status ? `0 0 10px ${accentColor}22` : 'none',
-                              touchAction:'manipulation', cursor:'pointer', userSelect:'none', WebkitUserSelect:'none',
-                              WebkitTapHighlightColor:'transparent', minHeight: 22,
-                            }}>
-                            {val || '0.0'}
-                          </div>
-                        )}
-                        {status && (
-                          <div style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', fontSize:14, pointerEvents:'none' }}>
-                            {status === 'ok' ? '✓' : '⚠'}
-                          </div>
-                        )}
-                      </div>
+                    </div>
+                    {/* Gauge bar */}
+                    <div style={{ height:8, background:'rgba(150,120,80,0.15)', borderRadius:4, overflow:'hidden' }}>
+                      <div style={{ height:'100%', width:`${pct}%`, background:color, borderRadius:4, transition:'width 0.4s ease, background 0.3s', boxShadow: status ? `0 0 8px ${color}55` : 'none' }} />
+                    </div>
+                    {/* Scale labels */}
+                    <div style={{ display:'flex', justifyContent:'space-between', marginTop:4 }}>
+                      <span style={{ fontSize:9, color:C.muted }}>{isFreezer ? '−30 °C' : '−10 °C'}</span>
+                      <span style={{ fontSize:9, color:C.ok, fontWeight:700 }}>{maxLabel ? `${maxLabel} ✓` : '✓'}</span>
+                      <span style={{ fontSize:9, color:C.err }}>{isFreezer ? '0 °C ✗' : '+15 °C ✗'}</span>
                     </div>
                   </div>
                 );
