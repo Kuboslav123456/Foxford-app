@@ -337,23 +337,6 @@ const strip = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 // Horné limity pre odpisy podľa jednotky — nad limit appka vyzve na kontrolu jednotky (napr. 20 kg kávy = omyl, myslel g)
 const ODPIS_UNIT_LIMITS = { kg: 10, l: 15, g: 1000, ml: 2000, ks: 100, bal: 30 };
 
-// ── LOGO ─────────────────────────────────────────────────────────────────────
-const Logo = ({ size = 40 }) => (
-  <div style={{
-    width: size, height: size, borderRadius: Math.round(size * 0.26),
-    background: 'linear-gradient(145deg, #2e1f0e, #4a3218)',
-    border: `1.5px solid ${BASE_C.goldLine}`,
-    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-    boxShadow: `0 0 20px rgba(224,160,58,0.15), 0 4px 12px rgba(0,0,0,0.5)`,
-  }}>
-    <svg width={size} height={size} viewBox="0 0 60 60" fill="none">
-      <path d="M30 3L57 18.5V41.5L30 57L3 41.5V18.5Z" fill={BASE_C.gold} opacity="0.95" />
-      <path d="M30 15L46 24.5V40.5L30 50L14 40.5V24.5Z" fill="rgba(0,0,0,0.5)" />
-      <text x="30" y="37" textAnchor="middle" fill="white" fontSize="20" fontWeight="800" fontFamily="-apple-system,sans-serif">F</text>
-    </svg>
-  </div>
-);
-
 // ── GLASS CARD ────────────────────────────────────────────────────────────────
 const Glass = ({ children, style, accent }) => (
   <div style={{
@@ -705,6 +688,7 @@ export default function App() {
   const [savedAt, setSavedAt] = useState(null);
   const savedAtThrottle = useRef(0);
   const [branch, setBranch] = useState(() => localStorage.getItem('foxford-branch') || null);
+  const [pickedBranch, setPickedBranch] = useState(null); // krátky "selected" stav pred vstupom do appky
   const [showBranchSelect, setShowBranchSelect] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
@@ -738,6 +722,10 @@ export default function App() {
   const [newAlkName, setNewAlkName] = useState('');
   const [newAlkType, setNewAlkType] = useState('');
   const [newAlkEan, setNewAlkEan]   = useState('');
+  const [newAlkObjem, setNewAlkObjem]   = useState('');   // objem fľaše (l)
+  const [newAlkAlk, setNewAlkAlk]       = useState('');   // % alkoholu
+  const [newAlkDodav, setNewAlkDodav]   = useState('');   // dodávateľ
+  const [newAlkOprav, setNewAlkOprav]   = useState('');   // číslo oprávnenia dodávateľa
 
   // ── DYNAMICKÁ FARBA POBOČKY ───────────────────────────────────────────────
   const branchGold = (branch && BRANCH_COLORS[branch]) || BASE_C.gold;
@@ -748,7 +736,7 @@ export default function App() {
     goldLine: hexToRgba(branchGold, 0.45),
   };
 
-  useEffect(() => { const t = setTimeout(() => setLoading(false), 500); return () => clearTimeout(t); }, []);
+  useEffect(() => { const t = setTimeout(() => setLoading(false), 2000); return () => clearTimeout(t); }, []);
   useEffect(() => {
     const on = () => setOnline(true), off = () => setOnline(false);
     window.addEventListener('online', on); window.addEventListener('offline', off);
@@ -1308,10 +1296,105 @@ export default function App() {
   const setAlkoholCount = (bottleId, count) => setAlkohol(prev => ({ ...prev, [todayKey]: { ...(prev[todayKey] || {}), [bottleId]: count } }));
   const addAlkoholBottle = () => {
     if (!newAlkName.trim()) return;
-    setAlkoholKatalog(prev => [...prev, { id: 'a' + Date.now(), name: newAlkName.trim(), type: newAlkType.trim(), ean: newAlkEan.trim() }]);
+    setAlkoholKatalog(prev => [...prev, {
+      id: 'a' + Date.now(), name: newAlkName.trim(), type: newAlkType.trim(), ean: newAlkEan.trim(),
+      objem: newAlkObjem.trim(), alk: newAlkAlk.trim(), dodavatel: newAlkDodav.trim(), cisloOpravnenia: newAlkOprav.trim(),
+    }]);
     setNewAlkName(''); setNewAlkType(''); setNewAlkEan('');
+    setNewAlkObjem(''); setNewAlkAlk(''); setNewAlkDodav(''); setNewAlkOprav('');
   };
+  const updateAlkoholBottle = (id, field, value) => setAlkoholKatalog(prev => prev.map(b => b.id === id ? { ...b, [field]: value } : b));
   const removeAlkoholBottle = (id) => setAlkoholKatalog(prev => prev.filter(b => b.id !== id));
+
+  // ── EXPORT EVIDENCIE LIEHU (XLSX) ──────────────────────────────────────────
+  // Vyplní stále údaje z katalógu (A–F) + vzorce (M, N, Q); mesačné pohyby (G–L, O, P) ostávajú na ručné doplnenie.
+  const exportAlkoholXLSX = async () => {
+    if (alkoholKatalog.length === 0) { alert('Žiadne fľaše v evidencii. Najprv pridaj fľaše alkoholu.'); return; }
+    const mod = await import('exceljs');
+    const ExcelJS = mod.default || mod;
+    const wb = new ExcelJS.Workbook();
+    const d = new Date();
+    const mIdx = d.getMonth();
+    const yr = d.getFullYear();
+    const mUpper = MONTHS[mIdx].toUpperCase();
+    const ws = wb.addWorksheet(`${MONTHS[mIdx]} ${yr}`);
+
+    ws.columns = [
+      { width: 30 }, { width: 16 }, { width: 18 }, { width: 24 }, { width: 12 }, { width: 9 },
+      { width: 14 }, { width: 16 }, { width: 10 }, { width: 10 }, { width: 14 }, { width: 15 },
+      { width: 18 }, { width: 10 }, { width: 16 }, { width: 18 }, { width: 18 },
+    ];
+
+    // Riadok 1 — MESIAC
+    ws.getRow(1).getCell(1).value = { richText: [
+      { text: 'MESIAC: ', font: { bold: true, size: 15, name: 'Arial' } },
+      { text: `${mUpper} ${yr}`, font: { bold: true, size: 15, color: { argb: 'FFFF0000' }, name: 'Arial' } },
+    ]};
+    ws.getRow(1).height = 22;
+
+    // Riadok 2 — skupinové hlavičky
+    const groups = { 1: 'Základné údaje o liehu', 7: 'Pohyby zásob', 13: 'Výsledky' };
+    Object.entries(groups).forEach(([col, txt]) => {
+      const c = ws.getRow(2).getCell(Number(col));
+      c.value = txt; c.font = { bold: true, size: 12 };
+    });
+
+    // Riadok 3 — stĺpcové hlavičky
+    const headers = ['Názov alkoholu','EAN Kód','Dodávateľ','Číslo oprávnenia dodávateľa','Objem fľaše (l)','% Alk.','Počiatočný stav ks','Počiatočný stav v litroch','Príjem ks','Predaj ks','Predaj v litroch','Manká / Rozbitie ks','Očakávaný zostatok v litroch','Rozdiel','Inventúrny zostatok fliaš ks','Inventúrny stav v litroch (ZOSTATOK)','Celkový objem LAA na konci mesiaca'];
+    const hr = ws.getRow(3);
+    headers.forEach((h, i) => {
+      const c = hr.getCell(i + 1);
+      c.value = h;
+      c.font = { bold: true, size: 10 };
+      c.alignment = { wrapText: true, vertical: 'middle', horizontal: 'center' };
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2E8D8' } };
+      c.border = { top:{style:'thin'}, bottom:{style:'thin'}, left:{style:'thin'}, right:{style:'thin'} };
+    });
+    hr.height = 44;
+
+    const thin = { top:{style:'thin'}, bottom:{style:'thin'}, left:{style:'thin'}, right:{style:'thin'} };
+    alkoholKatalog.forEach((b, i) => {
+      const r = i + 4;
+      const row = ws.getRow(r);
+      row.getCell(1).value = b.name || '';
+      row.getCell(2).value = (b.ean || '').toString();          // EAN ako text (nie vedecká notácia)
+      row.getCell(3).value = b.dodavatel || '';
+      row.getCell(4).value = (b.cisloOpravnenia || '').toString();
+      if ((b.objem ?? '').toString().trim()) row.getCell(5).value = num(b.objem);
+      if ((b.alk ?? '').toString().trim()) {
+        // Toleruj percento ("40") aj zlomok ("0,4") — inak by sa "0,4" zapísalo ako 0,4 % (100x menej LAA)
+        const a = num(b.alk);
+        const frac = a > 1 ? a / 100 : a;
+        if (a > 0) { row.getCell(6).value = frac; row.getCell(6).numFmt = '0.0%'; }
+      }
+      // G–L: počiatočný stav, príjem, predaj, manká — ručné doplnenie
+      row.getCell(13).value = { formula: `H${r}+I${r}*E${r}-K${r}-L${r}*E${r}` };  // M očakávaný zostatok (l)
+      row.getCell(14).value = { formula: `P${r}-M${r}` };                          // N rozdiel
+      // O, P: inventúrny zostatok — ručné doplnenie
+      row.getCell(17).value = { formula: `P${r}*F${r}` };                          // Q LAA
+      for (let c = 1; c <= 17; c++) row.getCell(c).border = thin;
+    });
+
+    // Súčtový riadok — SPOLU LAA
+    const totalR = alkoholKatalog.length + 4;
+    const tr = ws.getRow(totalR);
+    tr.getCell(1).value = 'SPOLU';
+    tr.getCell(1).font = { bold: true };
+    tr.getCell(17).value = { formula: `SUM(Q4:Q${totalR - 1})` };
+    tr.getCell(17).font = { bold: true };
+    tr.getCell(17).border = thin;
+
+    ws.views = [{ state: 'frozen', ySplit: 3 }];
+
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Evidencia_liehu_${mUpper}_${yr}.xlsx`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   const getMonthSummary = (year, month) => {
     const prefix = `${year}-${String(month + 1).padStart(2, '0')}`;
@@ -1499,18 +1582,43 @@ export default function App() {
     return (
       <div style={{ background: C.bg, height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: '-apple-system,sans-serif', position: 'relative', overflow: 'hidden' }}>
         <style>{`
-          @keyframes spin   { to { transform: rotate(360deg); } }
-          @keyframes glow   { 0%,100% { opacity:.4; transform:scale(1); } 50% { opacity:.9; transform:scale(1.06); } }
-          @keyframes rise   { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:none; } }
-          @keyframes shake  { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-5px)} 75%{transform:translateX(5px)} }
+          @keyframes ldGlow   { 0%,100% { opacity:.3; transform:translate(-50%,-50%) scale(1); } 50% { opacity:.65; transform:translate(-50%,-50%) scale(1.14); } }
+          @keyframes ldLogoIn { 0% { opacity:0; transform:translateY(18px) scale(.84); } 60% { opacity:1; transform:translateY(-3px) scale(1.04); } 100% { opacity:1; transform:translateY(0) scale(1); } }
+          @keyframes ldFloat  { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-7px); } }
+          @keyframes ldShine  { 0% { transform:translateX(-120%); } 55% { transform:translateX(320%); } 100% { transform:translateX(320%); } }
+          @keyframes ldRise   { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
+          @keyframes ldBar    { 0% { width:0; } 100% { width:100%; } }
+          @keyframes shake    { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-5px)} 75%{transform:translateX(5px)} }
           .shake { animation: shake .4s ease-in-out; border-color: ${C.err} !important; }
         `}</style>
-        {/* ambient glow */}
-        <div style={{ position:'absolute', width:300, height:300, borderRadius:'50%', background:`radial-gradient(circle, rgba(224,160,58,.12) 0%, transparent 70%)`, pointerEvents:'none' }} />
-        <div style={{ animation:'glow 2.4s ease-in-out infinite' }}><Logo size={80} /></div>
-        <div style={{ marginTop:22, fontSize:24, fontWeight:900, letterSpacing:5, color:C.text, animation:'rise .6s .2s both' }}>FOXFORD</div>
-        <div style={{ marginTop:4, fontSize:9, color:C.gold, letterSpacing:3, fontWeight:700, textTransform:'uppercase', opacity:.8, animation:'rise .6s .35s both' }}>Akadémia kontrológie</div>
-        <div style={{ marginTop:40, width:26, height:26, border:`2.5px solid rgba(150,120,80,0.25)`, borderTopColor:C.gold, borderRadius:'50%', animation:'spin .7s linear infinite' }} />
+
+        {/* dýchajúci ambient glow */}
+        <div style={{ position:'absolute', left:'50%', top:'44%', width:380, height:380, borderRadius:'50%',
+          background:'radial-gradient(circle, rgba(196,71,43,.13) 0%, rgba(224,160,58,.08) 42%, transparent 70%)',
+          animation:'ldGlow 3s ease-in-out infinite', pointerEvents:'none' }} />
+
+        {/* wordmark — vstup s overshoot + jemné plávanie + shine sweep */}
+        <div style={{ animation:'ldLogoIn .85s cubic-bezier(.34,1.45,.64,1) both' }}>
+          <div style={{ animation:'ldFloat 3.2s ease-in-out .85s infinite' }}>
+            <div style={{ position:'relative', display:'inline-block', lineHeight:0 }}>
+              <img src={`${process.env.PUBLIC_URL}/foxford-wordmark.png`} alt="Foxford — Coffee Campus by Martinus"
+                style={{ width:'min(72vw, 290px)', height:'auto', display:'block' }} />
+              {/* svetelný prechod zľava doprava — clipnutý maskou na tvar písmen */}
+              <div style={{ position:'absolute', inset:0, overflow:'hidden', pointerEvents:'none',
+                WebkitMaskImage:`url(${process.env.PUBLIC_URL}/foxford-wordmark.png)`, maskImage:`url(${process.env.PUBLIC_URL}/foxford-wordmark.png)`,
+                WebkitMaskSize:'100% 100%', maskSize:'100% 100%', WebkitMaskRepeat:'no-repeat', maskRepeat:'no-repeat' }}>
+                <div style={{ position:'absolute', top:0, bottom:0, left:0, width:'55%',
+                  background:'linear-gradient(90deg, transparent 0%, rgba(255,255,255,.75) 50%, transparent 100%)',
+                  animation:'ldShine 2.4s ease-in-out .5s infinite' }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* plniaci sa progress bar */}
+        <div style={{ marginTop:40, width:150, height:4, borderRadius:2, background:'rgba(60,30,10,.1)', overflow:'hidden', animation:'ldRise .5s .35s both' }}>
+          <div style={{ height:'100%', borderRadius:2, background:'linear-gradient(90deg, #C4472B, #e0903a)', animation:'ldBar 1.9s ease-in-out forwards' }} />
+        </div>
       </div>
     );
   }
@@ -1520,13 +1628,28 @@ export default function App() {
     return (
       <div style={{ maxWidth:500, margin:'0 auto', minHeight:'100vh', fontFamily:'-apple-system,sans-serif', color:C.text, background:C.bg, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'0 24px' }}>
         <img src={`${process.env.PUBLIC_URL}/foxford-wordmark.png`} alt="Foxford — Coffee Campus by Martinus" style={{ width:'min(80%, 300px)', height:'auto', display:'block' }} />
-        <div style={{ fontSize:9, color:C.gold, letterSpacing:2.5, fontWeight:700, textTransform:'uppercase', marginTop:18, marginBottom:32, opacity:.75 }}>Vyber prevádzku</div>
-        {BRANCHES.map(b => (
-          <button key={b.name} onClick={() => { localStorage.setItem('foxford-branch', b.name); setBranch(b.name); }}
-            style={{ width:'100%', padding:'16px', marginBottom:10, borderRadius:14, border:`1px solid ${C.border}`, background:C.panel, color:C.text, fontSize:15, fontWeight:600, cursor:'pointer', fontFamily:'inherit', textAlign:'left' }}>
-            🏪 {b.name}
-          </button>
-        ))}
+        <div style={{ fontSize:10, color:'#9A8F85', letterSpacing:1.5, fontWeight:600, textTransform:'uppercase', marginTop:18, marginBottom:18 }}>Vyber prevádzku</div>
+        <div style={{ display:'flex', flexDirection:'column', gap:8, width:'100%' }}>
+          {BRANCHES.map(b => (
+            <button key={b.name} type="button"
+              className={`store-btn${pickedBranch === b.name ? ' selected' : ''}`}
+              onClick={() => {
+                if (pickedBranch) return;            // ignoruj dalsie kliky pocas prechodu
+                setPickedBranch(b.name);
+                localStorage.setItem('foxford-branch', b.name);
+                setTimeout(() => setBranch(b.name), 220); // necha dobehnut press-bar animaciu
+              }}>
+              <span className="pin">
+                <svg width="13" height="17" viewBox="0 0 13 17" fill="currentColor" aria-hidden="true">
+                  <path d="M6.5 0C2.91 0 0 2.91 0 6.5C0 11.375 6.5 17 6.5 17S13 11.375 13 6.5C13 2.91 10.09 0 6.5 0ZM6.5 8.775C5.14 8.775 4.04 7.67 4.04 6.5C4.04 5.14 5.14 4.04 6.5 4.04C7.86 4.04 8.96 5.14 8.96 6.5C8.96 7.67 7.86 8.775 6.5 8.775Z"/>
+                </svg>
+              </span>
+              <span className="nm">{b.name}</span>
+              <span className="chev">›</span>
+              <span className="bar" />
+            </button>
+          ))}
+        </div>
       </div>
     );
   }
@@ -2921,11 +3044,11 @@ export default function App() {
                 </div>
               ) : alkoholKatalog.map((b, idx) => (
                 <div key={b.id} style={{
-                  display:'flex', alignItems:'center', gap:10,
                   padding:'10px', marginBottom: idx < alkoholKatalog.length-1 ? 8 : 0,
                   borderRadius:12, background: idx % 2 === 1 ? 'rgba(150,120,80,0.07)' : 'rgba(255,255,255,0.5)',
                   border:`1px solid ${C.border}`,
                 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                   {editMode && <span onClick={() => removeAlkoholBottle(b.id)}
                     style={{ display:'inline-flex', alignItems:'center', color:C.err, fontSize:11, cursor:'pointer', lineHeight:1, flexShrink:0,
                              padding:'4px 7px', borderRadius:8, background:C.errDim, border:`1px solid ${C.err}33`, fontWeight:700 }}>✕</span>}
@@ -2956,6 +3079,15 @@ export default function App() {
                     </div>
                     <span style={{ fontSize:11, color:C.muted }}>ks</span>
                   </div>
+                  </div>
+                  {editMode && (
+                    <div style={{ marginTop:10, display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
+                      <Inp placeholder="Objem fľaše (l)" value={b.objem || ''} onChange={e => updateAlkoholBottle(b.id, 'objem', e.target.value)} inputMode="decimal" style={{ fontSize:12 }} />
+                      <Inp placeholder="% Alk. (napr. 40)" value={b.alk || ''} onChange={e => updateAlkoholBottle(b.id, 'alk', e.target.value)} inputMode="decimal" style={{ fontSize:12 }} />
+                      <Inp placeholder="Dodávateľ" value={b.dodavatel || ''} onChange={e => updateAlkoholBottle(b.id, 'dodavatel', e.target.value)} style={{ fontSize:12 }} />
+                      <Inp placeholder="Číslo oprávnenia" value={b.cisloOpravnenia || ''} onChange={e => updateAlkoholBottle(b.id, 'cisloOpravnenia', e.target.value)} style={{ fontSize:12 }} />
+                    </div>
+                  )}
                 </div>
               ))}
 
@@ -2968,6 +3100,19 @@ export default function App() {
               )}
             </Glass>
 
+            {/* Export evidencie liehu (XLSX) */}
+            {alkoholKatalog.length > 0 && (
+              <Glass style={{ padding:'14px 16px' }}>
+                <Tag text="Evidencia liehu — export" />
+                <div style={{ fontSize:11, color:C.muted, marginTop:6, lineHeight:1.5 }}>
+                  Stiahne mesačný <b>.xlsx</b> v oficiálnom formáte. Vyplní názov, EAN, dodávateľa, číslo oprávnenia, objem a % z katalógu + vzorce (očakávaný zostatok, rozdiel, LAA). Mesačné pohyby (počiatočný stav, príjem, predaj, manká, inventúra) doplníš ručne v Exceli.
+                </div>
+                <button onClick={exportAlkoholXLSX} style={{ width:'100%', marginTop:10, padding:'13px', borderRadius:14, background:C.gold, border:'none', color:'#fff', fontWeight:800, fontSize:14, letterSpacing:.5, cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:8, boxShadow:'0 4px 18px rgba(184,112,32,0.35)' }}>
+                  <span>📊</span> Export evidencie liehu (XLSX)
+                </button>
+              </Glass>
+            )}
+
             {/* Pridať fľašu — len v editačnom režime */}
             {editMode && (
               <Glass style={{ padding:'14px 16px', border:`1px dashed ${C.goldLine}` }}>
@@ -2976,6 +3121,14 @@ export default function App() {
                 <div style={{ display:'flex', gap:8, marginBottom:8 }}>
                   <Inp placeholder="Typ (vodka…)" value={newAlkType} onChange={e => setNewAlkType(e.target.value)} style={{ flex:1, fontSize:13 }} />
                   <Inp placeholder="EAN kód" value={newAlkEan} onChange={e => setNewAlkEan(e.target.value)} inputMode="numeric" style={{ flex:1, fontSize:13 }} />
+                </div>
+                <div style={{ display:'flex', gap:8, marginBottom:8 }}>
+                  <Inp placeholder="Objem fľaše (l)" value={newAlkObjem} onChange={e => setNewAlkObjem(e.target.value)} inputMode="decimal" style={{ flex:1, fontSize:13 }} />
+                  <Inp placeholder="% Alk. (napr. 40)" value={newAlkAlk} onChange={e => setNewAlkAlk(e.target.value)} inputMode="decimal" style={{ flex:1, fontSize:13 }} />
+                </div>
+                <div style={{ display:'flex', gap:8, marginBottom:8 }}>
+                  <Inp placeholder="Dodávateľ" value={newAlkDodav} onChange={e => setNewAlkDodav(e.target.value)} style={{ flex:1, fontSize:13 }} />
+                  <Inp placeholder="Číslo oprávnenia" value={newAlkOprav} onChange={e => setNewAlkOprav(e.target.value)} style={{ flex:1, fontSize:13 }} />
                 </div>
                 <button onClick={addAlkoholBottle} style={{ width:'100%', padding:'11px', background:C.panel, border:`1px solid ${C.border}`, color:C.text, borderRadius:12, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
                   + Pridať fľašu
@@ -3668,16 +3821,26 @@ export default function App() {
       {/* ── BRANCH SELECT MODAL ───────────────────────────────────────────────── */}
       {showBranchSelect && (
         <div style={{ position:'fixed', inset:0, background:'rgba(6,4,2,.95)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', zIndex:4000, padding:24 }}>
-          <div style={{ width:'100%', maxWidth:460 }}>
-            <div style={{ fontSize:15, fontWeight:800, color:C.text, marginBottom:4, textAlign:'center' }}>Vyber prevádzku</div>
-            <div style={{ fontSize:12, color:C.sub, marginBottom:20, textAlign:'center' }}>Aktuálna: <span style={{ color:C.gold }}>{branch}</span></div>
-            {BRANCHES.map(b => (
-              <button key={b.name} onClick={() => { localStorage.setItem('foxford-branch', b.name); setBranch(b.name); setShowBranchSelect(false); }}
-                style={{ width:'100%', padding:'15px 16px', marginBottom:8, borderRadius:14, border:`1px solid ${b.name === branch ? C.goldLine : C.border}`, background: b.name === branch ? C.goldDim : C.panel, color: b.name === branch ? C.gold : C.text, fontSize:14, fontWeight: b.name === branch ? 700 : 500, cursor:'pointer', fontFamily:'inherit', textAlign:'left' }}>
-                🏪 {b.name}
-              </button>
-            ))}
-            <button onClick={() => setShowBranchSelect(false)} style={{ width:'100%', padding:'13px', marginTop:4, borderRadius:12, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, cursor:'pointer', fontFamily:'inherit', fontSize:13 }}>Zrušiť</button>
+          <div style={{ width:'100%', maxWidth:420, maxHeight:'85vh', overflowY:'auto', background:'#FAF6F0', borderRadius:16, padding:'22px 20px', boxShadow:'0 12px 48px rgba(0,0,0,.4)' }}>
+            <div style={{ fontSize:10, color:'#9A8F85', letterSpacing:1.5, fontWeight:600, textTransform:'uppercase', marginBottom:4 }}>Vyber prevádzku</div>
+            <div style={{ fontSize:12, color:'#5C5650', marginBottom:16 }}>Aktuálna: <span style={{ color:'#C4472B', fontWeight:700 }}>{branch}</span></div>
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              {BRANCHES.map(b => (
+                <button key={b.name} type="button"
+                  className={`store-btn${b.name === branch ? ' selected' : ''}`}
+                  onClick={() => { localStorage.setItem('foxford-branch', b.name); setBranch(b.name); setShowBranchSelect(false); }}>
+                  <span className="pin">
+                    <svg width="13" height="17" viewBox="0 0 13 17" fill="currentColor" aria-hidden="true">
+                      <path d="M6.5 0C2.91 0 0 2.91 0 6.5C0 11.375 6.5 17 6.5 17S13 11.375 13 6.5C13 2.91 10.09 0 6.5 0ZM6.5 8.775C5.14 8.775 4.04 7.67 4.04 6.5C4.04 5.14 5.14 4.04 6.5 4.04C7.86 4.04 8.96 5.14 8.96 6.5C8.96 7.67 7.86 8.775 6.5 8.775Z"/>
+                    </svg>
+                  </span>
+                  <span className="nm">{b.name}</span>
+                  <span className="chev">›</span>
+                  <span className="bar" />
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setShowBranchSelect(false)} style={{ width:'100%', padding:'13px', marginTop:12, borderRadius:12, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, cursor:'pointer', fontFamily:'inherit', fontSize:13 }}>Zrušiť</button>
           </div>
         </div>
       )}
