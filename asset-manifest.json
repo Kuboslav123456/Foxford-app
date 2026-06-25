@@ -1,17 +1,19 @@
 {
   "files": {
-    "main.css": "/Foxford-app/static/css/main.c52a0b59.css",
-    "main.js": "/Foxford-app/static/js/main.2f4ad4c9.js",
+    "main.css": "/Foxford-app/static/css/main.e059338e.css",
+    "main.js": "/Foxford-app/static/js/main.a0783333.js",
     "static/js/257.bf5ccc04.chunk.js": "/Foxford-app/static/js/257.bf5ccc04.chunk.js",
+    "static/js/223.1cbd6435.chunk.js": "/Foxford-app/static/js/223.1cbd6435.chunk.js",
     "static/js/453.1fdb7a78.chunk.js": "/Foxford-app/static/js/453.1fdb7a78.chunk.js",
     "index.html": "/Foxford-app/index.html",
-    "main.c52a0b59.css.map": "/Foxford-app/static/css/main.c52a0b59.css.map",
-    "main.2f4ad4c9.js.map": "/Foxford-app/static/js/main.2f4ad4c9.js.map",
+    "main.e059338e.css.map": "/Foxford-app/static/css/main.e059338e.css.map",
+    "main.a0783333.js.map": "/Foxford-app/static/js/main.a0783333.js.map",
     "257.bf5ccc04.chunk.js.map": "/Foxford-app/static/js/257.bf5ccc04.chunk.js.map",
+    "223.1cbd6435.chunk.js.map": "/Foxford-app/static/js/223.1cbd6435.chunk.js.map",
     "453.1fdb7a78.chunk.js.map": "/Foxford-app/static/js/453.1fdb7a78.chunk.js.map"
   },
   "entrypoints": [
-    "static/css/main.c52a0b59.css",
-    "static/js/main.2f4ad4c9.js"
+    "static/css/main.e059338e.css",
+    "static/js/main.a0783333.js"
   ]
 }
