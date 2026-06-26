@@ -1925,7 +1925,17 @@ export default function App() {
               date: new Date().toLocaleDateString('sk-SK'),
               shift: haccpShift,
               podpis: controllerName || 'Anonym',
-              readings: tempFields.map(f => ({ label: f.label, value: activeTemps[f.key] || '', max: f.max })),
+              readings: tempFields.map(f => {
+        const v = activeTemps[f.key] || '';
+        const st = tempColor(f, v);                 // 'ok' | 'err' | null
+        return {
+          label: f.label,
+          value: v,
+          max: f.max,
+          status: st === 'err' ? 'NAD LIMITOM' : st === 'ok' ? 'OK' : '',
+          poznamka: st === 'err' ? 'Nahlásené VZ' : '',
+        };
+      }),
             });
             setTimeout(() => {
               setSending(false);
@@ -2078,6 +2088,14 @@ export default function App() {
                       <span style={{ fontSize:9, color:C.ok, fontWeight:700 }}>{maxLabel ? `${maxLabel} ✓` : '✓'}</span>
                       <span style={{ fontSize:9, color:C.err }}>{isFreezer ? '0 °C ✗' : '+15 °C ✗'}</span>
                     </div>
+                    {/* Nad limitom → automaticky nahlásené vedúcemu zmeny */}
+                    {status === 'err' && (
+                      <div style={{ marginTop:8, display:'flex', alignItems:'center', gap:6, padding:'5px 9px',
+                                    borderRadius:8, background:C.errDim, border:`1px solid ${C.err}44` }}>
+                        <span style={{ fontSize:12 }}>🔴</span>
+                        <span style={{ fontSize:11, fontWeight:700, color:C.err }}>Nahlásené VZ</span>
+                      </div>
+                    )}
                   </div>
                 );
               })}
