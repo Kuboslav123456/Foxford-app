@@ -394,6 +394,14 @@ function localDayKey(d) {
   return `${y}-${m}-${day}`;
 }
 
+// Kľúč týždňa = dátum pondelka daného týždňa (YYYY-MM-DD). Slúži na dedup víkendového flushu.
+function weekMondayKey(d) {
+  const x = new Date(d || new Date());
+  const back = (x.getDay() + 6) % 7; // dni od pondelka (Po=0 … Ne=6)
+  x.setDate(x.getDate() - back);
+  return localDayKey(x);
+}
+
 // ── Safe JSON.parse — defenzívne čítanie localStorage (predchádza white-screen pri poškodenom kľúči) ──
 function safeParse(key, fallback) {
   try {
@@ -499,11 +507,38 @@ function performDailyClose(endingDate) {
       }
     } catch (e) { console.error('alkohol daily close failed:', e); }
 
+    // 2c) Víkendové: na konci pondelka (Po→Ut) odošli súhrn (hotové aj nehotové) + priprav reset — raz za týždeň
+    const endDow = endingDate.getDay(); // 0 Ne … 6 So
+    let flushVikend = false;
+    if (endDow === 1 || endDow === 2) { // catch-up zatvára Pondelok (1); real-time o polnoci posiela Utorok (2)
+      const wk = weekMondayKey(endingDate);
+      if (localStorage.getItem('foxford-vikend-week-done') !== wk) {
+        flushVikend = true;
+        const vik = Array.isArray(tasksData.víkendové) ? tasksData.víkendové : [];
+        const vikList = vik.filter(t => !t.header);
+        const inspVik = (inspectorsData.víkendové || '').trim();
+        if (vikList.length > 0 && (vikList.some(t => t.done || t.issue) || inspVik)) {
+          sendOrQueue(url, 'tasks_summary', {
+            date: sendDate,
+            category: 'víkendové',
+            inspector: inspVik || 'Anonym',
+            tasks: vikList.map(t => ({ text: t.text, done: !!t.done, time: t.time || null, date: t.date || null, issue: t.issue || null, by: t.by || null })),
+          });
+        }
+        localStorage.setItem('foxford-vikend-week-done', wk);
+      }
+    }
+
     // 3) Reset localStorage stavu pre nový deň — zachovať vlastné úlohy, len resetnúť stav
     const baseDenne = (Array.isArray(tasksData.denné) && tasksData.denné.length > 0) ? tasksData.denné : INIT_TASKS.denné;
     const resetTasks = { ...tasksData, denné: baseDenne.map(t => ({ ...t, done: false, time: null, date: null, issue: null, by: null })) };
+    if (flushVikend) {
+      const baseVik = (Array.isArray(tasksData.víkendové) && tasksData.víkendové.length > 0) ? tasksData.víkendové : INIT_TASKS.víkendové;
+      resetTasks.víkendové = baseVik.map(t => t.header ? t : ({ ...t, done: false, time: null, date: null, issue: null, by: null }));
+    }
     localStorage.setItem('foxford-tasks', JSON.stringify(resetTasks));
     const resetInspectors = { ...inspectorsData, denné: '' };
+    if (flushVikend) resetInspectors.víkendové = '';
     localStorage.setItem('foxford-inspectors', JSON.stringify(resetInspectors));
     localStorage.setItem('foxford-haccp-date', '');
     localStorage.setItem('foxford-haccp-date-vecerne', '');
@@ -561,6 +596,7 @@ export default function App() {
   const [qtyWarn, setQtyWarn]         = useState(null); // { itemId, rowId, value, unit, itemName } — odpis nad limit jednotky
   const [confirmUndo, setConfirmUndo] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [vikendPrompt, setVikendPrompt] = useState(null); // pondelkové upozornenie na nedokončené víkendové úlohy
   const [confirmDeleteTask, setConfirmDeleteTask] = useState(null); // úloha na zmazanie (potvrdenie)
   const [confirmEditMode, setConfirmEditMode] = useState(false);   // potvrdenie pred prepnutím editácie
   const [lastHaccpDate, setLastHaccpDate] = useState(localStorage.getItem('foxford-haccp-date') || '');
@@ -777,9 +813,9 @@ export default function App() {
         // 1) Odošli denné úlohy a odpisy končiaceho dňa + zapíš reset do localStorage
         performDailyClose(new Date());
         localStorage.setItem('foxford-last-reset-date', new Date().toDateString());
-        // 2) Aktualizuj React state (kópia z localStorage)
-        setTasks(prev => ({ ...prev, denné: prev.denné.map(t => ({ ...t, done: false, time: null, date: null, issue: null, by: null })) }));
-        setInspectors(prev => ({ ...prev, denné: '' }));
+        // 2) Aktualizuj React state — načítaj čerstvý stav z localStorage (performDailyClose ho zapísal, vrátane príp. víkendového resetu)
+        setTasks(safeParse('foxford-tasks', INIT_TASKS));
+        setInspectors(safeParse('foxford-inspectors', { denné: '', víkendové: '', mesačné: '' }));
         setLastHaccpDate('');
         setLastHaccpDateVecerne('');
         // Reset všetkých temp polí — vrátane akýchkoľvek čo boli pridané po mount-e
@@ -795,6 +831,18 @@ export default function App() {
     arm();
     return () => { if (timer) clearTimeout(timer); };
   }, []);
+
+  // Pondelkové upozornenie: pri otvorení tabu Úlohy, ak ostali nedokončené víkendové úlohy
+  useEffect(() => {
+    if (tab !== 'tasks') return;
+    if (new Date().getDay() !== 1) return;               // len pondelok
+    if (localStorage.getItem('foxford-vikend-prompt-day') === new Date().toDateString()) return;
+    const vik = tasks.víkendové || [];
+    const someDone = vik.some(t => !t.header && (t.done || t.issue));
+    const unfinished = vik.filter(t => !t.header && !t.done && !t.issue);
+    if (someDone && unfinished.length > 0) setVikendPrompt({ count: unfinished.length });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
   useEffect(() => {
     localStorage.setItem('foxford-tasks',           JSON.stringify(tasks));
     localStorage.setItem('foxford-inspectors',      JSON.stringify(inspectors));
@@ -1489,7 +1537,8 @@ export default function App() {
   const allResolved = (list) => { const t = list.filter(x => !x.header); return t.length > 0 && t.every(x => x.done || x.issue); };
 
   const autoSend = (updatedList) => {
-    if (subTab === 'denné') return;
+    // denné rieši polnočná uzávierka; víkendové idú cez pondelkový/nočný/ručný flush (žiadne okamžité odoslanie)
+    if (subTab === 'denné' || subTab === 'víkendové') return;
     if (!allResolved(updatedList)) return;
     if (!inspectors[subTab].trim()) return;
     sendToSheets('tasks_summary', {
@@ -1568,7 +1617,24 @@ export default function App() {
     }
     setTasks({ ...tasks, [subTab]: tasks[subTab].map(t => t.header ? t : ({ ...t, done: false, time: null, issue: null, by: null })) });
     setInspectors(prev => ({ ...prev, [subTab]: '' }));
+    if (subTab === 'víkendové') localStorage.setItem('foxford-vikend-week-done', weekMondayKey(new Date()));
     setConfirmReset(false);
+  };
+
+  // Pondelkový/ručný flush víkendových: odošle aktuálny stav (ak bola aktivita) + vyčistí + označí týždeň
+  const flushVikendNow = () => {
+    const list = (tasks.víkendové || []).filter(t => !t.header);
+    if (list.length > 0 && (list.some(t => t.done || t.issue) || (inspectors.víkendové || '').trim())) {
+      sendToSheets('tasks_summary', {
+        date: new Date().toLocaleDateString('sk-SK'),
+        category: 'víkendové',
+        inspector: (inspectors.víkendové || '').trim() || 'Anonym',
+        tasks: list.map(t => ({ text: t.text, done: t.done, time: t.time || null, date: t.date || null, issue: t.issue || null, by: t.by || null })),
+      });
+    }
+    setTasks(prev => ({ ...prev, víkendové: (prev.víkendové || []).map(t => t.header ? t : ({ ...t, done: false, time: null, date: null, issue: null, by: null })) }));
+    setInspectors(prev => ({ ...prev, víkendové: '' }));
+    localStorage.setItem('foxford-vikend-week-done', weekMondayKey(new Date()));
   };
 
   const tempColor = (field, val) => {
@@ -3445,6 +3511,29 @@ export default function App() {
               </button>
               <button onMouseDown={doReset} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.err}44`, background:C.errDim, color:C.err, fontWeight:800, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
                 Áno, resetovať
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── PONDELKOVÉ UPOZORNENIE — nedokončené víkendové úlohy ─────────────── */}
+      {vikendPrompt && (
+        <div onMouseDown={() => { setVikendPrompt(null); localStorage.setItem('foxford-vikend-prompt-day', new Date().toDateString()); }} style={{ position:'fixed', inset:0, background:'rgba(30,22,8,.55)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2000, padding:24 }}>
+          <div onMouseDown={e => e.stopPropagation()} style={{ background:C.modal, border:`1px solid ${C.borderM}`, width:'100%', maxWidth:380, borderRadius:24, padding:'28px 22px 24px', boxShadow:'0 8px 40px rgba(0,0,0,.12)' }}>
+            <div style={{ fontSize:32, textAlign:'center', marginBottom:14 }}>🧹</div>
+            <div style={{ fontSize:16, fontWeight:800, color:C.text, textAlign:'center', marginBottom:10 }}>Nedokončené víkendové úlohy</div>
+            <div style={{ fontSize:13, color:C.sub, textAlign:'center', lineHeight:1.65, marginBottom:24, padding:'0 4px' }}>
+              Cez víkend ostalo <span style={{ color:C.gold, fontWeight:800 }}>{vikendPrompt.count}</span> {vikendPrompt.count === 1 ? 'nesplnená úloha' : (vikendPrompt.count >= 2 && vikendPrompt.count <= 4) ? 'nesplnené úlohy' : 'nesplnených úloh'}.<br />Chceš ich dokončiť, alebo resetovať zoznam na ďalší víkend?
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+              <button onMouseDown={() => { setVikendPrompt(null); localStorage.setItem('foxford-vikend-prompt-day', new Date().toDateString()); setSubTab('víkendové'); }}
+                style={{ width:'100%', padding:'14px', borderRadius:14, border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold, fontWeight:800, fontSize:14, cursor:'pointer', fontFamily:'inherit' }}>
+                Dokončiť úlohy
+              </button>
+              <button onMouseDown={() => { flushVikendNow(); setVikendPrompt(null); localStorage.setItem('foxford-vikend-prompt-day', new Date().toDateString()); }}
+                style={{ width:'100%', padding:'13px', borderRadius:14, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                Resetovať zoznam na ďalší víkend
               </button>
             </div>
           </div>
