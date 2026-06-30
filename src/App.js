@@ -1774,83 +1774,79 @@ export default function App() {
       <div className="bg-parallax" />
       <style>{`.shake{animation:shake .4s ease-in-out;border-color:${C.err}!important;} @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}`}</style>
 
-      {/* HEADER */}
+      {/* HEADER — logo vľavo, čistý rad akcií vpravo, dátum+čas zlúčený dnu */}
       <header style={{
-        padding: isTablet ? '18px 36px 14px' : '18px 20px 14px', display:'flex', alignItems:'center',
+        padding: isTablet ? '16px 36px 0' : '14px 16px 0',
         position:'sticky', top:0, zIndex:50,
         background:'rgba(242,237,228,0.93)',
         backdropFilter:'blur(18px)', WebkitBackdropFilter:'blur(18px)',
         boxShadow:'0 1px 0 rgba(150,120,80,0.13)',
       }}>
-        <div style={{ flex:1, display:'flex', justifyContent:'flex-start', alignItems:'center', gap:8 }}>
-          {/* Bug report button */}
-          <div onClick={() => { setShowBugModal(true); setBugSent(false); setBugText(''); }}
-            style={{ display:'flex', flexDirection:'column', alignItems:'center', cursor:'pointer', opacity:.55, transition:'opacity .15s' }}
-            title="Nahlásiť chybu">
-            <span style={{ fontSize: isTablet ? 20 : 17 }}>🐛</span>
-            <span style={{ fontSize:7, color:C.sub, fontWeight:700, letterSpacing:.3, marginTop:1, lineHeight:1 }}>CHYBA</span>
-          </div>
-          {!online && (
-            <div className="dot-pulse-red" style={{ fontSize:9, fontWeight:800, color:C.err, border:`1px solid ${C.err}`, padding:'3px 9px', borderRadius:20, letterSpacing:.5 }}>
-              OFFLINE{offlineQueue.length > 0 ? ` (${offlineQueue.length})` : ''}
+        {/* Riadok 1: logo + utility ikony */}
+        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+          <img src={`${process.env.PUBLIC_URL}/foxford-logo.png.png`} alt="Foxford — Coffee Campus by Martinus"
+            style={{ height: isTablet ? 40 : 32, width:'auto', objectFit:'contain', flexShrink:0 }} />
+          <div style={{ flex:1 }} />
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            {!online && (
+              <div className="dot-pulse-red" style={{ fontSize:9, fontWeight:800, color:C.err, border:`1px solid ${C.err}`, padding:'3px 9px', borderRadius:20, letterSpacing:.5 }}>
+                OFFLINE{offlineQueue.length > 0 ? ` (${offlineQueue.length})` : ''}
+              </div>
+            )}
+            {online && offlineFlushed > 0 && (
+              <div style={{ fontSize:9, fontWeight:800, color:C.ok, border:`1px solid ${C.ok}`, padding:'3px 9px', borderRadius:20, letterSpacing:.5 }}>
+                ✓ {offlineFlushed} odoslaných
+              </div>
+            )}
+            {/* zoom − / + */}
+            <button onClick={() => setUiZoom(z => Math.max(0.8, +((z - 0.1).toFixed(1))))} title="Zmenšiť text"
+              style={{ width:32, height:32, borderRadius:9, border:`1px solid ${C.border}`, background:'rgba(255,255,255,0.6)', color:C.sub, fontSize:11, fontWeight:800, cursor:'pointer', fontFamily:'inherit', userSelect:'none' }}>A−</button>
+            <button onClick={() => setUiZoom(z => Math.min(1.5, +((z + 0.1).toFixed(1))))} title="Zväčšiť text"
+              style={{ width:32, height:32, borderRadius:9, border:`1px solid ${C.border}`, background:'rgba(255,255,255,0.6)', color:C.sub, fontSize:13, fontWeight:800, cursor:'pointer', fontFamily:'inherit', userSelect:'none' }}>A+</button>
+            {/* nahlásiť chybu */}
+            <button onClick={() => { setShowBugModal(true); setBugSent(false); setBugText(''); }} title="Nahlásiť chybu"
+              style={{ width:32, height:32, borderRadius:9, border:`1px solid ${C.border}`, background:'rgba(255,255,255,0.6)', color:C.sub, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', padding:0 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/><path d="M12 20v-9"/><path d="M6.53 9C4.6 8.8 3 7.1 3 5"/><path d="M6 13H2"/><path d="M3 21c0-2.1 1.7-3.9 3.8-4"/><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"/><path d="M22 13h-4"/><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"/></svg>
+            </button>
+            {/* notifikácie */}
+            <button onClick={() => setShowNotifModal(true)} title="Notifikácie"
+              style={{ position:'relative', width:32, height:32, borderRadius:9, border:`1px solid ${C.border}`, background:'rgba(255,255,255,0.6)', color:C.sub, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', padding:0 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+              {notifSettings.enabled && notifPermission === 'granted' && (
+                <span style={{ position:'absolute', top:-3, right:-3, width:9, height:9, borderRadius:'50%', background:C.ok, border:'1.5px solid #f2ede4' }} />
+              )}
+            </button>
+            {/* pobočka */}
+            <div onClick={() => { setPinInput(''); setPinError(false); setPinStep(true); }} title="Zmeniť prevádzku"
+              style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 11px 6px 9px', borderRadius:99, background:C.goldDim, border:`1px solid ${C.goldLine}`, cursor:'pointer' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.gold} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+              <span style={{ fontSize:11, fontWeight:800, color:C.gold, letterSpacing:.2, maxWidth:90, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{branch}</span>
             </div>
-          )}
-          {online && offlineFlushed > 0 && (
-            <div style={{ fontSize:9, fontWeight:800, color:C.ok, border:`1px solid ${C.ok}`, padding:'3px 9px', borderRadius:20, letterSpacing:.5 }}>
-              ✓ {offlineFlushed} odoslaných
-            </div>
-          )}
-          <div style={{ display:'flex', alignItems:'center', gap:3, marginLeft:2 }}>
-            <button onClick={() => setUiZoom(z => Math.max(0.8, +((z - 0.1).toFixed(1))))}
-              style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, color:C.sub,
-                       fontSize:10, fontWeight:800, cursor:'pointer', padding:'2px 5px', lineHeight:1.4,
-                       fontFamily:'inherit', userSelect:'none' }}>A−</button>
-            <button onClick={() => setUiZoom(z => Math.min(1.5, +((z + 0.1).toFixed(1))))}
-              style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:6, color:C.sub,
-                       fontSize:10, fontWeight:800, cursor:'pointer', padding:'2px 5px', lineHeight:1.4,
-                       fontFamily:'inherit', userSelect:'none' }}>A+</button>
           </div>
         </div>
-        <img src={`${process.env.PUBLIC_URL}/foxford-logo.png.png`} alt="Foxford" style={{ height:44, objectFit:'contain' }} />
-        <div style={{ flex:1, display:'flex', justifyContent:'flex-end', alignItems:'center', gap:14 }}>
-          {/* Bell notification icon */}
-          <div onClick={() => setShowNotifModal(true)} style={{ cursor:'pointer', position:'relative', display:'flex', flexDirection:'column', alignItems:'center', opacity: notifSettings.enabled && notifPermission === 'granted' ? 0.85 : 0.45 }}>
-            <span style={{ fontSize:18 }}>🔔</span>
-            {notifSettings.enabled && notifPermission === 'granted' && (
-              <div style={{ position:'absolute', top:-2, right:-3, width:7, height:7, borderRadius:'50%', background:C.ok, boxShadow:`0 0 5px ${C.ok}` }} />
-            )}
+        {/* Riadok 2: dátum + meniny + čas */}
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 0 12px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:7, minWidth:0 }}>
+            <span style={{ fontSize: isTablet ? 14 : 12, fontWeight:700, color:C.text, textTransform:'capitalize' }}>
+              {now.toLocaleDateString('sk-SK', { weekday:'long', day:'numeric', month:'long' })}
+            </span>
+            <span style={{ width:4, height:4, borderRadius:'50%', background:'rgba(150,120,80,0.4)', flexShrink:0 }} />
+            {(() => {
+              const mk = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+              const meno = MENINY[mk];
+              return (
+                <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize: isTablet ? 12 : 11, fontWeight:600, color:C.sub, minWidth:0 }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.gold} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink:0 }}><path d="M20 21v-7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7"/><path d="M4 16s.7-1 2-1 2.5 2 4 2 2.7-2 4-2 2.5 2 4 2 2-1 2-1"/><path d="M2 21h20"/><path d="M7 8v3M12 8v3M17 8v3"/></svg>
+                  <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{meno ? `Meniny má ${meno}` : 'Dnes meniny nemá nikto'}</span>
+                </span>
+              );
+            })()}
           </div>
-          <div onClick={() => { setPinInput(''); setPinError(false); setPinStep(true); }}
-            style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', cursor:'pointer', opacity:.6 }}>
-            <span style={{ fontSize:16 }}>🏪</span>
-            <span style={{ fontSize:8, color:C.gold, fontWeight:700, letterSpacing:.5, maxWidth:80, textAlign:'right', lineHeight:1.2, marginTop:1 }}>{branch}</span>
-          </div>
+          <span style={{ fontSize: isTablet ? 18 : 16, fontWeight:800, color:C.gold, letterSpacing:1, fontVariantNumeric:'tabular-nums', flexShrink:0 }}>
+            {now.toLocaleTimeString('sk-SK', { hour:'2-digit', minute:'2-digit', second:'2-digit' })}
+          </span>
         </div>
       </header>
-
-      {/* thin gold rule */}
-      <div style={{ height:1, background:`linear-gradient(to right, transparent, ${C.goldLine}, transparent)`, margin: isTablet ? '0 36px 12px' : '0 20px 12px' }} />
-
-      {/* ── DATETIME BAR ────────────────────────────────────────────────────── */}
-      <div style={{ margin: isTablet ? '0 24px 8px' : '0 14px 8px', display:'flex', justifyContent:'space-between', alignItems:'center', padding: isTablet ? '10px 22px' : '8px 16px', borderRadius:12, background:C.panel, border:`1px solid ${C.border}` }}>
-        <div style={{ display:'flex', flexDirection:'column', gap:2, minWidth:0 }}>
-          <span style={{ fontSize: isTablet ? 14 : 12, fontWeight:600, color:C.sub }}>
-            {now.toLocaleDateString('sk-SK', { weekday:'long', day:'numeric', month:'long' })}
-          </span>
-          {(() => {
-            const mk = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-            const meno = MENINY[mk];
-            return (
-              <span style={{ fontSize: isTablet ? 11 : 10, fontWeight:600, color:C.gold }}>
-                🎂 {meno ? `Meniny má ${meno}` : 'Dnes meniny nemá nikto'}
-              </span>
-            );
-          })()}
-        </div>
-        <span style={{ fontSize: isTablet ? 18 : 16, fontWeight:800, color:C.gold, letterSpacing:1, fontVariantNumeric:'tabular-nums', flexShrink:0 }}>
-          {now.toLocaleTimeString('sk-SK', { hour:'2-digit', minute:'2-digit', second:'2-digit' })}
-        </span>
-      </div>
 
 <div style={{ padding: isTablet ? '0 24px' : '0 14px' }}>
 
