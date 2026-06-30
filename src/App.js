@@ -1150,19 +1150,46 @@ export default function App() {
     else { if (v.replace('-', '').length < 8) v += key; }
     return { ...prev, value: v };
   });
+  const numpadToggleUnit = () => {
+    setInvNumpad(prev => {
+      if (!prev || prev.kind !== 'odpis' || !['kg','g','l','ml'].includes(prev.unit)) return prev;
+      const curDisplay = prev.displayUnit || prev.unit;
+      const isKgGroup = ['kg','g'].includes(prev.unit);
+      const [unitLarge, unitSmall] = isKgGroup ? ['kg','g'] : ['l','ml'];
+      const newDisplay = curDisplay === unitLarge ? unitSmall : unitLarge;
+      const raw = parseFloat((prev.value || '').replace(',', '.'));
+      let newValue = '';
+      if (!isNaN(raw) && raw !== 0) {
+        if (newDisplay === unitSmall) {
+          newValue = String(Math.round(raw * 1000));
+        } else {
+          newValue = String(parseFloat((raw / 1000).toFixed(4)));
+        }
+      }
+      return { ...prev, displayUnit: newDisplay, value: newValue };
+    });
+  };
+
   const numpadConfirm = () => {
     if (!invNumpad) return;
     // Odpisy: numpad zapíše množstvo do dnešného odpisu (itemId = dayKey, rowId = entry id)
     if (invNumpad.kind === 'odpis') {
-      const num = parseFloat((invNumpad.value || '').toString().replace(',', '.')) || 0;
+      const displayUnit = invNumpad.displayUnit || invNumpad.unit;
+      const rawNum = parseFloat((invNumpad.value || '').toString().replace(',', '.')) || 0;
+      // zadal v malej jednotke (g/ml), ukladáme vo veľkej (kg/l)
+      const isDisplaySmall = (displayUnit === 'g' && invNumpad.unit === 'kg') || (displayUnit === 'ml' && invNumpad.unit === 'l');
+      // zadal vo veľkej jednotke (kg/l), ukladáme v malej (g/ml)
+      const isDisplayLarge = (displayUnit === 'kg' && invNumpad.unit === 'g') || (displayUnit === 'l' && invNumpad.unit === 'ml');
+      const storedNum = isDisplaySmall ? rawNum / 1000 : isDisplayLarge ? rawNum * 1000 : rawNum;
+      const storedValue = isDisplaySmall ? String(parseFloat(storedNum.toFixed(4))) : isDisplayLarge ? String(Math.round(storedNum)) : invNumpad.value;
       const limit = ODPIS_UNIT_LIMITS[invNumpad.unit];
-      // Nad limit jednotky → vyzvi na kontrolu (pravdepodobný omyl kg vs g a pod.)
-      if (limit && num > limit) {
-        setQtyWarn({ itemId: invNumpad.itemId, rowId: invNumpad.rowId, value: invNumpad.value, unit: invNumpad.unit, itemName: invNumpad.itemName });
+      // Nad limit (porovnávame vždy v uloženej jednotke)
+      if (limit && storedNum > limit) {
+        setQtyWarn({ itemId: invNumpad.itemId, rowId: invNumpad.rowId, value: storedValue, unit: invNumpad.unit, itemName: invNumpad.itemName });
         setInvNumpad(null);
         return;
       }
-      updateOdpisQty(invNumpad.itemId, invNumpad.rowId, invNumpad.value);
+      updateOdpisQty(invNumpad.itemId, invNumpad.rowId, storedValue);
       setInvNumpad(null);
       return;
     }
@@ -2729,7 +2756,7 @@ export default function App() {
                       {/* Qty — tap otvorí numpad (rovnaký ako v Sklade) */}
                       <div
                         onPointerDown={e => { tapStartRef.current = { x: e.clientX, y: e.clientY }; }}
-                        onPointerUp={e => { if (Math.abs(e.clientX - tapStartRef.current.x) + Math.abs(e.clientY - tapStartRef.current.y) < 10) setInvNumpad({ kind:'odpis', itemId: todayKey, rowId: entry.id, value: entry.qty || '', unit: entry.unit, itemName: entry.name }); }}
+                        onPointerUp={e => { if (Math.abs(e.clientX - tapStartRef.current.x) + Math.abs(e.clientY - tapStartRef.current.y) < 10) setInvNumpad({ kind:'odpis', itemId: todayKey, rowId: entry.id, value: entry.qty || '', unit: entry.unit, itemName: entry.name, displayUnit: entry.unit }); }}
                         style={{
                           width:70, padding:'9px 8px', borderRadius:12, boxSizing:'border-box',
                           border:`1px solid ${entry.qty ? C.goldLine : C.border}`,
@@ -3267,42 +3294,55 @@ export default function App() {
         )}
       </div>
 
-      {/* ── FLOATING NAV ──────────────────────────────────────────────────────── */}
+      {/* ── SEGMENTED NAV ─────────────────────────────────────────────────────── */}
       <nav style={{
         position:'fixed', bottom: isTablet ? 24 : 18, left:'50%', transform:'translateX(-50%)',
-        width: isTablet ? '70%' : '88%', maxWidth: isTablet ? 560 : 390,
-        background:'rgba(255,255,255,0.92)',
-        backdropFilter:'blur(24px)', WebkitBackdropFilter:'blur(24px)',
-        border:`1px solid ${C.border}`,
-        borderRadius:50, height: isTablet ? 70 : 62,
-        display:'flex', alignItems:'center',
-        boxShadow:'0 8px 32px rgba(0,0,0,.10), 0 0 0 1px rgba(150,120,80,.12)',
+        width: isTablet ? '70%' : '92%', maxWidth: isTablet ? 560 : 500,
+        background:'#F3EEE5',
+        borderRadius:16, padding:6,
+        display:'flex', gap:4,
+        boxShadow:'0 4px 24px rgba(0,0,0,.13)',
         zIndex:100,
       }}>
         {[
-          { id:'tasks',     emoji:'✅',  label:'Úlohy' },
-          { id:'temps',     emoji:'🌡️',  label:'Teploty' },
-          { id:'alkohol',   emoji:'🥃',  label:'Alkohol' },
-          { id:'odpisy',    emoji:'📝',  label:'Odpisy' },
-          { id:'uzavierka', emoji:'🧾',  label:'Uzávierka' },
-          { id:'inventory', emoji:'📦',  label:'Sklad' },
-          { id:'notes',     emoji:'💬',  label:'Správy' },
-        ].map(({ id, emoji, label }) => {
+          { id:'tasks',     label:'Úlohy' },
+          { id:'temps',     label:'Teploty' },
+          { id:'alkohol',   label:'Alkohol' },
+          { id:'odpisy',    label:'Odpisy' },
+          { id:'uzavierka', label:'Uzávierka' },
+          { id:'inventory', label:'Sklad' },
+          { id:'notes',     label:'Správy' },
+        ].map(({ id, label }) => {
           const hasAlert = id === 'temps' && (lastHaccpDate !== new Date().toDateString() || lastHaccpDateVecerne !== new Date().toDateString());
           const active = tab === id;
+          const clr = active ? '#FFFFFF' : '#7C766B';
+          const sp = { viewBox:'0 0 24 24', width:19, height:19, stroke:clr, strokeWidth:1.8, strokeLinecap:'round', strokeLinejoin:'round', fill:'none', style:{display:'block',transition:'stroke .18s ease-in-out'} };
+          const icons = {
+            tasks:     <svg {...sp}><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>,
+            temps:     <svg {...sp}><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>,
+            alkohol:   <svg {...sp}><path d="M8 22h8"/><path d="M7 10h10"/><path d="M12 15v7"/><path d="M12 15a5 5 0 0 0 5-5c0-2-.5-4-2-8H9c-1.5 4-2 6-2 8a5 5 0 0 0 5 5z"/></svg>,
+            odpisy:    <svg {...sp}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>,
+            uzavierka: <svg {...sp}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
+            inventory: <svg {...sp}><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>,
+            notes:     <svg {...sp}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
+          };
           return (
-            <div key={id} onClick={() => setTab(id)} style={{
-              flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-              cursor:'pointer', gap:3, position:'relative', padding:'6px 4px',
-            }}>
-              {active && (
-                <div style={{ position:'absolute', inset:'4px 6px', background:C.goldDim, borderRadius:12 }} />
-              )}
-              <div style={{ position:'relative', fontSize: isTablet ? 24 : 20, zIndex:1, transition:'transform .15s', transform: active ? 'scale(1.12)' : 'scale(1)' }}>
-                {emoji}
-                {hasAlert && <div className="dot-pulse-red" style={{ position:'absolute', top:-2, right:-4, width:7, height:7, borderRadius:'50%', background:C.err, color:C.err, boxShadow:`0 0 6px ${C.err}` }} />}
+            <div key={id}
+              className={active ? undefined : 'seg-nav-item'}
+              onClick={() => setTab(id)}
+              style={{
+                flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:6,
+                padding:'11px 4px', borderRadius:11, cursor:'pointer', position:'relative',
+                background: active ? '#9f6b4b' : 'transparent',
+                boxShadow: active ? '0 3px 10px rgba(159,107,75,.35)' : 'none',
+                transition:'all .18s ease-in-out',
+                WebkitTapHighlightColor:'transparent',
+              }}>
+              <div style={{ position:'relative', lineHeight:0 }}>
+                {icons[id]}
+                {hasAlert && <div className="dot-pulse-red" style={{ position:'absolute', top:-2, right:-3, width:7, height:7, borderRadius:'50%', background:'#E5484D', boxShadow:`0 0 0 2px ${active ? '#9f6b4b' : '#F3EEE5'}` }} />}
               </div>
-              <div style={{ fontSize: isTablet ? 11 : 9, fontWeight: active ? 700 : 500, letterSpacing:.3, color: active ? C.gold : C.muted, transition:'color .15s', zIndex:1 }}>{label}</div>
+              <div style={{ fontSize: isTablet ? 11 : 10, fontWeight: active ? 600 : 500, letterSpacing:'0.1px', color:clr, fontFamily:"'DM Sans', sans-serif", transition:'all .18s ease-in-out', whiteSpace:'nowrap' }}>{label}</div>
             </div>
           );
         })}
@@ -3589,7 +3629,7 @@ export default function App() {
               <span style={{ fontSize:42, fontWeight:800, color:C.gold, letterSpacing:1, fontVariantNumeric:'tabular-nums' }}>
                 {invNumpad.value || '0'}
               </span>
-              <span style={{ fontSize:16, color:C.sub, fontWeight:600 }}>{invNumpad.unit}</span>
+              <span style={{ fontSize:16, color:C.sub, fontWeight:600 }}>{invNumpad.displayUnit || invNumpad.unit}</span>
             </div>
 
             {/* Numpad mriežka */}
@@ -3613,6 +3653,21 @@ export default function App() {
                 ))}
               </div>
             ))}
+
+            {/* kg↔g / l↔ml prepínač — pre odpisy s jednotkou kg, g, l alebo ml */}
+            {invNumpad.kind === 'odpis' && ['kg','g','l','ml'].includes(invNumpad.unit) && (
+              <button onPointerDown={e => { e.preventDefault(); numpadToggleUnit(); }}
+                style={{ width:'100%', padding:'13px 0', borderRadius:14, fontSize:14, fontWeight:700,
+                         border:`1px solid ${C.border}`, background:'rgba(255,255,255,0.9)', color:C.text,
+                         cursor:'pointer', fontFamily:'inherit', WebkitTapHighlightColor:'transparent',
+                         boxShadow:'0 2px 6px rgba(0,0,0,0.06)', userSelect:'none', marginBottom:8 }}>
+                {(() => { const d = invNumpad.displayUnit || invNumpad.unit;
+                  return d === 'kg' ? '↔ zadať v gramoch (g)'
+                       : d === 'g'  ? '↔ zadať v kilogramoch (kg)'
+                       : d === 'l'  ? '↔ zadať v mililitroch (ml)'
+                       :              '↔ zadať v litroch (l)'; })()}
+              </button>
+            )}
 
             {/* ± prepínač — teploty (mrazák) a uzávierka len pole L (zaokrúhlenie môže byť záporné) */}
             {(invNumpad.kind === 'temp' || (invNumpad.kind === 'uzavierka' && invNumpad.fieldKey === 'L')) && (

@@ -304,3 +304,11 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* ── Segmented nav — hover pre neaktívne položky ── */
+.seg-nav-item {
+  transition: all .18s ease-in-out;
+}
+.seg-nav-item:hover {
+  background: rgba(159,107,75,.09) !important;
+}
