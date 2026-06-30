@@ -1724,8 +1724,13 @@ export default function App() {
           </div>
         </div>
 
+        {/* podtitul */}
+        <div style={{ marginTop:18, fontSize:11, fontWeight:500, letterSpacing:'0.18em', color:'rgba(60,30,10,.38)', textTransform:'uppercase', animation:'ldRise .5s .5s both' }}>
+          Akadémia kontrológie
+        </div>
+
         {/* plniaci sa progress bar */}
-        <div style={{ marginTop:40, width:150, height:4, borderRadius:2, background:'rgba(60,30,10,.1)', overflow:'hidden', animation:'ldRise .5s .35s both' }}>
+        <div style={{ marginTop:22, width:150, height:4, borderRadius:2, background:'rgba(60,30,10,.1)', overflow:'hidden', animation:'ldRise .5s .35s both' }}>
           <div style={{ height:'100%', borderRadius:2, background:'linear-gradient(90deg, #C4472B, #e0903a)', animation:'ldBar 1.9s ease-in-out forwards' }} />
         </div>
       </div>
