@@ -748,7 +748,7 @@ export default function App() {
   const [shakeName, setShakeName] = useState(false);
   const [shakeInsp, setShakeInsp] = useState(false);
   const [notifPermission, setNotifPermission] = useState(() => 'Notification' in window ? Notification.permission : 'unsupported');
-  const [notifSettings, setNotifSettings] = useState(() => safeParse('foxford-notif-settings', { enabled: false, time: '09:00' }));
+  const [notifSettings, setNotifSettings] = useState(() => safeParse('foxford-notif-settings', { enabled: false, time: '09:00', vikend: false, vikendTime: '10:00', teploty: false, teplotyMorning: '08:00', teplotyEvening: '20:00', alkohol: false, alkoholTime: '21:00' }));
   const [showNotifModal, setShowNotifModal] = useState(false);
   const [showBugModal, setShowBugModal] = useState(false);
   const [bugText, setBugText] = useState('');
@@ -1059,6 +1059,83 @@ export default function App() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Víkendové úlohy — iba sobota/nedeľa
+  useEffect(() => {
+    if (!notifSettings.vikend || notifPermission !== 'granted') return;
+    if (!/^\d{1,2}:\d{2}$/.test(notifSettings.vikendTime || '')) return;
+    const [h, m] = (notifSettings.vikendTime || '10:00').split(':').map(Number);
+    let timer;
+    const arm = () => {
+      const now = new Date();
+      const target = new Date(); target.setHours(h, m, 0, 0);
+      if (target <= now) target.setDate(target.getDate() + 1);
+      timer = setTimeout(() => {
+        const dow = new Date().getDay();
+        if (dow === 0 || dow === 6) {
+          const tasksData = safeParse('foxford-tasks', INIT_TASKS);
+          const vk = Array.isArray(tasksData['víkendové']) ? tasksData['víkendové'] : [];
+          const done = vk.filter(t => t.done || t.issue).length;
+          if (done < vk.length) showNotification('Foxford ☕', `Víkendové úlohy čakajú! (${done}/${vk.length} hotovo)`);
+        }
+        arm();
+      }, target - now);
+    };
+    arm();
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notifSettings.vikend, notifSettings.vikendTime, notifPermission]);
+
+  // Teploty — ranná pripomienka
+  useEffect(() => {
+    if (!notifSettings.teploty || notifPermission !== 'granted') return;
+    if (!/^\d{1,2}:\d{2}$/.test(notifSettings.teplotyMorning || '')) return;
+    const [h, m] = (notifSettings.teplotyMorning || '08:00').split(':').map(Number);
+    let timer;
+    const arm = () => {
+      const now = new Date();
+      const target = new Date(); target.setHours(h, m, 0, 0);
+      if (target <= now) target.setDate(target.getDate() + 1);
+      timer = setTimeout(() => { showNotification('Foxford ☕', 'Čas na ranný zápis teplôt ☀️'); arm(); }, target - now);
+    };
+    arm();
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notifSettings.teploty, notifSettings.teplotyMorning, notifPermission]);
+
+  // Teploty — večerná pripomienka
+  useEffect(() => {
+    if (!notifSettings.teploty || notifPermission !== 'granted') return;
+    if (!/^\d{1,2}:\d{2}$/.test(notifSettings.teplotyEvening || '')) return;
+    const [h, m] = (notifSettings.teplotyEvening || '20:00').split(':').map(Number);
+    let timer;
+    const arm = () => {
+      const now = new Date();
+      const target = new Date(); target.setHours(h, m, 0, 0);
+      if (target <= now) target.setDate(target.getDate() + 1);
+      timer = setTimeout(() => { showNotification('Foxford ☕', 'Čas na večerný zápis teplôt 🌙'); arm(); }, target - now);
+    };
+    arm();
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notifSettings.teploty, notifSettings.teplotyEvening, notifPermission]);
+
+  // Alkohol — večerná pripomienka
+  useEffect(() => {
+    if (!notifSettings.alkohol || notifPermission !== 'granted') return;
+    if (!/^\d{1,2}:\d{2}$/.test(notifSettings.alkoholTime || '')) return;
+    const [h, m] = (notifSettings.alkoholTime || '21:00').split(':').map(Number);
+    let timer;
+    const arm = () => {
+      const now = new Date();
+      const target = new Date(); target.setHours(h, m, 0, 0);
+      if (target <= now) target.setDate(target.getDate() + 1);
+      timer = setTimeout(() => { showNotification('Foxford ☕', 'Nezabudni na večerný zápis alkoholu 🍷'); arm(); }, target - now);
+    };
+    arm();
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notifSettings.alkohol, notifSettings.alkoholTime, notifPermission]);
 
   const exportPortos = () => {
     const lines = [];
@@ -1812,7 +1889,7 @@ export default function App() {
             <button onClick={() => setShowNotifModal(true)} title="Notifikácie"
               style={{ position:'relative', width:32, height:32, borderRadius:9, border:`1px solid ${C.border}`, background:'rgba(255,255,255,0.6)', color:C.sub, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', padding:0 }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
-              {notifSettings.enabled && notifPermission === 'granted' && (
+              {(notifSettings.enabled || notifSettings.vikend || notifSettings.teploty || notifSettings.alkohol) && notifPermission === 'granted' && (
                 <span style={{ position:'absolute', top:-3, right:-3, width:9, height:9, borderRadius:'50%', background:C.ok, border:'1.5px solid #f2ede4' }} />
               )}
             </button>
@@ -3838,7 +3915,7 @@ export default function App() {
           <div onMouseDown={e => e.stopPropagation()} style={{ background:C.modal, border:`1px solid ${C.borderM}`, width:'100%', borderRadius:24, padding:'28px 22px 24px', boxShadow:'0 8px 40px rgba(0,0,0,.12)' }}>
             <div style={{ fontSize:30, textAlign:'center', marginBottom:10 }}>🔔</div>
             <div style={{ fontSize:16, fontWeight:800, color:C.text, textAlign:'center', marginBottom:4 }}>Notifikácie</div>
-            <div style={{ fontSize:12, color:C.sub, textAlign:'center', marginBottom:22, lineHeight:1.5 }}>Pripomienky na denné úlohy</div>
+            <div style={{ fontSize:12, color:C.sub, textAlign:'center', marginBottom:22, lineHeight:1.5 }}>Nastavenie pripomienok</div>
 
             {notifPermission === 'unsupported' && (
               <div style={{ padding:'12px 14px', borderRadius:12, background:C.errDim, border:`1px solid ${C.err}33`, fontSize:12, color:C.err, marginBottom:16, textAlign:'center', lineHeight:1.5 }}>
@@ -3860,43 +3937,116 @@ export default function App() {
             )}
 
             {notifPermission === 'granted' && (
-              <>
-                {/* Toggle */}
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'14px 16px', borderRadius:14, border:`1px solid ${C.border}`, background:C.panel, marginBottom:10 }}>
-                  <div>
-                    <div style={{ fontSize:13, fontWeight:700, color:C.text }}>Zapnúť pripomienky</div>
-                    <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>Denné úlohy a HACCP kontrola</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                {/* Denné úlohy */}
+                {(() => { const on = !!notifSettings.enabled; return (
+                  <div style={{ borderRadius:14, border:`1px solid ${on ? C.goldLine : C.border}`, background: on ? C.goldDim : C.panel, transition:'all .2s' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 16px' }}>
+                      <div>
+                        <div style={{ fontSize:13, fontWeight:700, color:C.text }}>Denné úlohy</div>
+                        <div style={{ fontSize:11, color:C.muted, marginTop:1 }}>Pripomienka počas dna</div>
+                      </div>
+                      <div onClick={() => setNotifSettings(p => ({ ...p, enabled: !p.enabled }))}
+                        style={{ width:42, height:24, borderRadius:12, background: on ? C.ok : 'rgba(150,120,80,0.22)', position:'relative', cursor:'pointer', transition:'background .2s', flexShrink:0 }}>
+                        <div style={{ position:'absolute', top:2, left: on ? 20 : 2, width:20, height:20, borderRadius:'50%', background:'white', boxShadow:'0 1px 4px rgba(0,0,0,0.2)', transition:'left .2s' }} />
+                      </div>
+                    </div>
+                    {on && (
+                      <div style={{ padding:'0 16px 12px', display:'flex', alignItems:'center', gap:8 }}>
+                        <span style={{ fontSize:11, color:C.muted }}>Čas:</span>
+                        <input type="time" value={notifSettings.time}
+                          onChange={e => setNotifSettings(p => ({ ...p, time: e.target.value }))}
+                          style={{ fontSize:15, fontWeight:700, color:C.gold, background:'transparent', border:'none', outline:'none', cursor:'pointer', fontFamily:'inherit', padding:0 }} />
+                      </div>
+                    )}
                   </div>
-                  <div onClick={() => setNotifSettings(prev => ({ ...prev, enabled: !prev.enabled }))}
-                    style={{ width:46, height:26, borderRadius:13, background: notifSettings.enabled ? C.ok : 'rgba(150,120,80,0.25)', position:'relative', cursor:'pointer', transition:'background .2s', flexShrink:0 }}>
-                    <div style={{ position:'absolute', top:3, left: notifSettings.enabled ? 23 : 3, width:20, height:20, borderRadius:'50%', background:'white', boxShadow:'0 1px 4px rgba(0,0,0,0.2)', transition:'left .2s' }} />
+                ); })()}
+
+                {/* Víkendové úlohy */}
+                {(() => { const on = !!notifSettings.vikend; return (
+                  <div style={{ borderRadius:14, border:`1px solid ${on ? C.goldLine : C.border}`, background: on ? C.goldDim : C.panel, transition:'all .2s' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 16px' }}>
+                      <div>
+                        <div style={{ fontSize:13, fontWeight:700, color:C.text }}>Víkendové úlohy</div>
+                        <div style={{ fontSize:11, color:C.muted, marginTop:1 }}>Iba sobota a nedeľa</div>
+                      </div>
+                      <div onClick={() => setNotifSettings(p => ({ ...p, vikend: !p.vikend }))}
+                        style={{ width:42, height:24, borderRadius:12, background: on ? C.ok : 'rgba(150,120,80,0.22)', position:'relative', cursor:'pointer', transition:'background .2s', flexShrink:0 }}>
+                        <div style={{ position:'absolute', top:2, left: on ? 20 : 2, width:20, height:20, borderRadius:'50%', background:'white', boxShadow:'0 1px 4px rgba(0,0,0,0.2)', transition:'left .2s' }} />
+                      </div>
+                    </div>
+                    {on && (
+                      <div style={{ padding:'0 16px 12px', display:'flex', alignItems:'center', gap:8 }}>
+                        <span style={{ fontSize:11, color:C.muted }}>Čas:</span>
+                        <input type="time" value={notifSettings.vikendTime || '10:00'}
+                          onChange={e => setNotifSettings(p => ({ ...p, vikendTime: e.target.value }))}
+                          style={{ fontSize:15, fontWeight:700, color:C.gold, background:'transparent', border:'none', outline:'none', cursor:'pointer', fontFamily:'inherit', padding:0 }} />
+                      </div>
+                    )}
                   </div>
-                </div>
+                ); })()}
 
-                {/* Time picker */}
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'14px 16px', borderRadius:14, border:`1px solid ${C.border}`, background:C.panel, marginBottom:10, opacity: notifSettings.enabled ? 1 : 0.45, transition:'opacity .2s' }}>
-                  <div>
-                    <div style={{ fontSize:13, fontWeight:700, color:C.text }}>Čas pripomienky</div>
-                    <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>Každý deň o tomto čase</div>
+                {/* Zápis teplôt */}
+                {(() => { const on = !!notifSettings.teploty; return (
+                  <div style={{ borderRadius:14, border:`1px solid ${on ? C.goldLine : C.border}`, background: on ? C.goldDim : C.panel, transition:'all .2s' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 16px' }}>
+                      <div>
+                        <div style={{ fontSize:13, fontWeight:700, color:C.text }}>Zápis teplôt</div>
+                        <div style={{ fontSize:11, color:C.muted, marginTop:1 }}>Ráno aj večer</div>
+                      </div>
+                      <div onClick={() => setNotifSettings(p => ({ ...p, teploty: !p.teploty }))}
+                        style={{ width:42, height:24, borderRadius:12, background: on ? C.ok : 'rgba(150,120,80,0.22)', position:'relative', cursor:'pointer', transition:'background .2s', flexShrink:0 }}>
+                        <div style={{ position:'absolute', top:2, left: on ? 20 : 2, width:20, height:20, borderRadius:'50%', background:'white', boxShadow:'0 1px 4px rgba(0,0,0,0.2)', transition:'left .2s' }} />
+                      </div>
+                    </div>
+                    {on && (
+                      <div style={{ padding:'0 16px 12px', display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+                        <span style={{ fontSize:11, color:C.muted }}>Ráno:</span>
+                        <input type="time" value={notifSettings.teplotyMorning || '08:00'}
+                          onChange={e => setNotifSettings(p => ({ ...p, teplotyMorning: e.target.value }))}
+                          style={{ fontSize:15, fontWeight:700, color:C.gold, background:'transparent', border:'none', outline:'none', cursor:'pointer', fontFamily:'inherit', padding:0 }} />
+                        <span style={{ fontSize:11, color:C.muted }}>Večer:</span>
+                        <input type="time" value={notifSettings.teplotyEvening || '20:00'}
+                          onChange={e => setNotifSettings(p => ({ ...p, teplotyEvening: e.target.value }))}
+                          style={{ fontSize:15, fontWeight:700, color:C.gold, background:'transparent', border:'none', outline:'none', cursor:'pointer', fontFamily:'inherit', padding:0 }} />
+                      </div>
+                    )}
                   </div>
-                  <input type="time" value={notifSettings.time} disabled={!notifSettings.enabled}
-                    onChange={e => setNotifSettings(prev => ({ ...prev, time: e.target.value }))}
-                    style={{ fontSize:16, fontWeight:800, color:C.gold, background:'transparent', border:'none', outline:'none', cursor: notifSettings.enabled ? 'pointer' : 'default', fontFamily:'inherit', padding:0 }} />
-                </div>
+                ); })()}
 
-                {/* Info */}
-                <div style={{ padding:'11px 14px', borderRadius:12, background:C.goldDim, border:`1px solid ${C.goldLine}`, fontSize:11, color:C.sub, lineHeight:1.6, marginBottom:14 }}>
-                  💡 Notifikácia sa zobrazí ak nie sú splnené všetky denné úlohy. Funguje keď je aplikácia otvorená v prehliadači.
-                </div>
+                {/* Zápis alkoholu */}
+                {(() => { const on = !!notifSettings.alkohol; return (
+                  <div style={{ borderRadius:14, border:`1px solid ${on ? C.goldLine : C.border}`, background: on ? C.goldDim : C.panel, transition:'all .2s' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 16px' }}>
+                      <div>
+                        <div style={{ fontSize:13, fontWeight:700, color:C.text }}>Zápis alkoholu</div>
+                        <div style={{ fontSize:11, color:C.muted, marginTop:1 }}>Večerná pripomienka</div>
+                      </div>
+                      <div onClick={() => setNotifSettings(p => ({ ...p, alkohol: !p.alkohol }))}
+                        style={{ width:42, height:24, borderRadius:12, background: on ? C.ok : 'rgba(150,120,80,0.22)', position:'relative', cursor:'pointer', transition:'background .2s', flexShrink:0 }}>
+                        <div style={{ position:'absolute', top:2, left: on ? 20 : 2, width:20, height:20, borderRadius:'50%', background:'white', boxShadow:'0 1px 4px rgba(0,0,0,0.2)', transition:'left .2s' }} />
+                      </div>
+                    </div>
+                    {on && (
+                      <div style={{ padding:'0 16px 12px', display:'flex', alignItems:'center', gap:8 }}>
+                        <span style={{ fontSize:11, color:C.muted }}>Čas:</span>
+                        <input type="time" value={notifSettings.alkoholTime || '21:00'}
+                          onChange={e => setNotifSettings(p => ({ ...p, alkoholTime: e.target.value }))}
+                          style={{ fontSize:15, fontWeight:700, color:C.gold, background:'transparent', border:'none', outline:'none', cursor:'pointer', fontFamily:'inherit', padding:0 }} />
+                      </div>
+                    )}
+                  </div>
+                ); })()}
 
-                {/* Test */}
-                {notifSettings.enabled && (
-                  <button onClick={() => { showNotification('Foxford ☕', 'Toto je testovacia notifikácia. Všetko funguje! 🎉'); }}
-                    style={{ width:'100%', padding:'12px', borderRadius:12, background:'transparent', border:`1px solid ${C.border}`, color:C.sub, fontWeight:600, fontSize:13, cursor:'pointer', fontFamily:'inherit', marginBottom:10 }}>
-                    🧪 Otestovať notifikáciu
-                  </button>
-                )}
-              </>
+                {/* Info + test */}
+                <div style={{ padding:'10px 14px', borderRadius:12, background:C.goldDim, border:`1px solid ${C.goldLine}`, fontSize:11, color:C.sub, lineHeight:1.6 }}>
+                  💡 Funguje keď je aplikácia otvorená v prehliadači.
+                </div>
+                <button onClick={() => showNotification('Foxford ☕', 'Toto je testovacia notifikácia. Všetko funguje! 🎉')}
+                  style={{ width:'100%', padding:'11px', borderRadius:12, background:'transparent', border:`1px solid ${C.border}`, color:C.sub, fontWeight:600, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                  🧪 Otestovať notifikáciu
+                </button>
+              </div>
             )}
 
             <button onClick={() => setShowNotifModal(false)} style={{ width:'100%', padding:'13px', borderRadius:14, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit', marginTop:4 }}>
