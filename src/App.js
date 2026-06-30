@@ -351,7 +351,7 @@ const INIT_TEMP_FIELDS = [
 const strip = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 // Horné limity pre odpisy podľa jednotky — nad limit appka vyzve na kontrolu jednotky (napr. 20 kg kávy = omyl, myslel g)
-const ODPIS_UNIT_LIMITS = { kg: 10, l: 15, g: 1000, ml: 2000, ks: 100, bal: 30 };
+const ODPIS_UNIT_LIMITS = { kg: 1, l: 15, g: 1000, ml: 2000, ks: 100, bal: 30 };
 
 // ── GLASS CARD ────────────────────────────────────────────────────────────────
 const Glass = ({ children, style, accent }) => (
