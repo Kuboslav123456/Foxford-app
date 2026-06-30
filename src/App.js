@@ -1854,7 +1854,7 @@ export default function App() {
         {tab === 'tasks' && (
           <>
             {/* Sub-tab switcher — full width */}
-            <div style={{ display:'flex', gap:6, marginBottom:10 }}>
+            <div style={{ display:'flex', gap:6, marginTop:12, marginBottom:10 }}>
               {['denné','víkendové','mesačné'].map(id => (
                 <button key={id} onClick={() => setSubTab(id)} style={{
                   flex:1, padding: isTablet ? '11px 4px' : '9px 4px', borderRadius:12, border:`1px solid ${subTab===id ? C.goldLine : C.border}`,
