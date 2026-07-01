@@ -40,7 +40,7 @@ const hexToRgba = (hex, a) => {
 
 const BRANCH_PIN = '1234';
 // Zvýš toto číslo keď zmeníš INIT_INV — všetky pobočky dostanú nový základ
-const INV_DATA_VERSION = '2';
+const INV_DATA_VERSION = '3';
 
 const BRANCHES = [
   { name: 'Obchodná', url: 'https://script.google.com/macros/s/AKfycbzlcPT4Yu8Pk-Y_5-9-oOHag0oVsFVS-gAtwujfDqn0yjXwEiKcfKbcVwmoW1UF5te9rA/exec' },
@@ -143,9 +143,9 @@ const INIT_INV = [
   ]},
   { category: 'Mlieko & smotana', items: [
     { id: 'p13', name: 'Mlieko',                    portosCode: '13', unit: 'l' },
-    { id: 'p15', name: 'Mlieko ovsené',             portosCode: '15', unit: 'ks' },
-    { id: 'p11', name: 'Mlieko hrachové',           portosCode: '11', unit: 'ks' },
-    { id: 'p12', name: 'Smotana na šľahanie 33%',  portosCode: '12', unit: 'ks' },
+    { id: 'p15', name: 'Mlieko ovsené',             portosCode: '15', unit: 'l' },
+    { id: 'p11', name: 'Mlieko hrachové',           portosCode: '11', unit: 'l' },
+    { id: 'p12', name: 'Smotana na šľahanie 33%',  portosCode: '12', unit: 'l' },
   ]},
   { category: 'Čaje & horúce nápoje', items: [
     { id: 'p26', name: 'Čaj sypaný zelený',         portosCode: '26', unit: 'g' },
