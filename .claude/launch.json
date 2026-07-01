@@ -8,6 +8,12 @@
       "port": 3000
     },
     {
+      "name": "obraty-prototype",
+      "runtimeExecutable": "py",
+      "runtimeArgs": ["-m", "http.server", "8767", "--directory", "C:\\Users\\jakub.hrebenar\\Desktop\\Obraty - Appka"],
+      "port": 8767
+    },
+    {
       "name": "cenovky-web",
       "runtimeExecutable": "py",
       "runtimeArgs": ["-m", "http.server", "8766", "--directory", "C:\\Users\\jakub.hrebenar\\Desktop\\vyrobník cenoviek\\web"],

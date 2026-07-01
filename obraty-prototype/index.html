@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Obraty BA Obchodná — prototyp</title>
+<style>
+  :root{
+    --bg:#f2ede4; --panel:rgba(255,255,255,.85); --border:rgba(150,120,80,.18);
+    --borderM:rgba(150,120,80,.35); --gold:#b87020; --goldDim:rgba(184,112,32,.12);
+    --text:#1e1608; --sub:#6b5d4f; --muted:#a09080; --ok:#2a9a55; --okDim:rgba(42,154,85,.10);
+    --err:#d03030; --errDim:rgba(208,48,48,.10); --blue:#1a6fa8;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  body{margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; font-size:15px}
+  .wrap{max-width:640px; margin:0 auto; padding:12px 12px 90px}
+  h1{font-size:18px; margin:10px 4px 2px; display:flex; align-items:center; gap:8px}
+  h1 .hex{color:var(--gold)}
+  .sub{color:var(--sub); font-size:12px; margin:0 4px 12px}
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:14px;
+    padding:14px; margin-bottom:12px; backdrop-filter:blur(6px)}
+  .tag{font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--gold);
+    font-weight:700; margin-bottom:8px}
+  /* tabs */
+  .tabs{position:fixed; bottom:0; left:0; right:0; background:rgba(255,255,255,.95);
+    border-top:1px solid var(--borderM); display:flex; z-index:50; backdrop-filter:blur(8px)}
+  .tabs button{flex:1; border:0; background:none; padding:10px 2px 12px; font-size:11px;
+    color:var(--muted); cursor:pointer; font-weight:600}
+  .tabs button.on{color:var(--gold)}
+  .tabs button span{display:block; font-size:18px; margin-bottom:2px}
+  /* segmented */
+  .seg{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px}
+  .seg button{flex:1; min-width:70px; border:1px solid var(--borderM); background:#fff;
+    border-radius:10px; padding:9px 6px; font-size:13px; font-weight:600; color:var(--sub); cursor:pointer}
+  .seg button.on{background:var(--gold); border-color:var(--gold); color:#fff}
+  /* fields */
+  .frow{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:7px 0;
+    border-bottom:1px dashed var(--border)}
+  .frow:last-child{border-bottom:0}
+  .frow label{font-size:13px; color:var(--sub); flex:1; line-height:1.25}
+  .frow input[type=number],.frow input[type=text]{width:130px; padding:9px 10px; border:1px solid var(--borderM);
+    border-radius:9px; font-size:16px; text-align:right; background:#fff; color:var(--text)}
+  .frow input:focus{outline:2px solid var(--gold); border-color:var(--gold)}
+  .frow input[type=text]{text-align:left}
+  input[type=date],input[type=month]{padding:9px 10px; border:1px solid var(--borderM); border-radius:9px;
+    font-size:15px; background:#fff; color:var(--text); width:100%}
+  /* computed */
+  .comp{display:flex; align-items:center; justify-content:space-between; padding:7px 0;
+    border-bottom:1px dashed var(--border); font-size:13px}
+  .comp:last-child{border-bottom:0}
+  .comp b{font-size:15px; font-variant-numeric:tabular-nums}
+  .comp .neg{color:var(--err)} .comp .pos{color:var(--ok)}
+  .hint{font-size:11px; color:var(--muted); margin-top:6px; line-height:1.4}
+  /* tables */
+  .tbl{width:100%; border-collapse:collapse; font-size:12px}
+  .tbl th{color:var(--sub); font-weight:600; text-align:right; padding:5px 6px;
+    border-bottom:1px solid var(--borderM); white-space:nowrap}
+  .tbl td{padding:5px 6px; text-align:right; border-bottom:1px solid var(--border);
+    font-variant-numeric:tabular-nums; white-space:nowrap}
+  .tbl th:first-child,.tbl td:first-child{text-align:left}
+  .tbl tr.sum td{font-weight:700; border-top:2px solid var(--borderM); background:var(--goldDim)}
+  .tbl tr.wknd td{background:rgba(184,112,32,.05)}
+  .tblwrap{overflow-x:auto; margin:0 -6px}
+  .dim{color:var(--muted)}
+  /* buttons */
+  .btn{display:inline-block; border:1px solid var(--gold); background:var(--gold); color:#fff;
+    border-radius:10px; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer}
+  .btn.ghost{background:#fff; color:var(--gold)}
+  .btn.sm{padding:6px 10px; font-size:12px; border-radius:8px}
+  .btn.red{background:var(--err); border-color:var(--err)}
+  .rowflex{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  .blokrow{display:grid; grid-template-columns:110px 90px 1fr 30px; gap:6px; margin-bottom:6px}
+  .blokrow input{padding:8px; border:1px solid var(--borderM); border-radius:8px; font-size:13px; width:100%}
+  .blokrow button{border:0; background:none; color:var(--err); font-size:16px; cursor:pointer}
+  .ok-pill{display:inline-block; padding:2px 8px; border-radius:99px; font-size:11px; font-weight:700}
+  .ok-pill.ok{background:var(--okDim); color:var(--ok)}
+  .ok-pill.err{background:var(--errDim); color:var(--err)}
+  .daynav{display:flex; gap:8px; align-items:center; margin-bottom:10px}
+  .daynav button{border:1px solid var(--borderM); background:#fff; border-radius:9px; width:42px; height:42px;
+    font-size:17px; cursor:pointer; color:var(--gold); flex:none}
+  .dayname{font-size:12px; color:var(--sub); text-align:center; margin:-4px 0 8px}
+  .secthead{font-size:13px; font-weight:700; color:var(--text); margin:12px 0 2px;
+    padding-top:8px; border-top:2px solid var(--borderM)}
+  .secthead:first-child{border-top:0; margin-top:0; padding-top:0}
+  /* OCR doklad */
+  .ocrdrop{border:2px dashed var(--borderM); border-radius:12px; padding:16px; text-align:center;
+    color:var(--sub); cursor:pointer; background:rgba(184,112,32,.04)}
+  .ocrdrop b{color:var(--gold)}
+  .ocr-prog{height:8px; border-radius:99px; background:var(--goldDim); overflow:hidden; margin:10px 0}
+  .ocr-prog>div{height:100%; background:var(--gold); transition:width .2s}
+  .ocr-field{display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px dashed var(--border)}
+  .ocr-field:last-child{border-bottom:0}
+  .ocr-field label{flex:1; font-size:13px; color:var(--sub)}
+  .ocr-field input[type=number]{width:110px; padding:7px 9px; border:1px solid var(--borderM);
+    border-radius:8px; font-size:15px; text-align:right; background:#fff}
+  .ocr-field input[type=checkbox]{width:20px; height:20px; accent-color:var(--gold)}
+  .ocr-field.miss input[type=number]{border-style:dashed; color:var(--muted)}
+  .ocr-raw{font-size:11px; white-space:pre-wrap; color:var(--muted); max-height:150px; overflow:auto;
+    background:rgba(0,0,0,.03); padding:8px; border-radius:8px; margin-top:8px; font-family:monospace}
+  .ocr-thumb{max-width:100%; max-height:180px; border-radius:10px; margin-top:8px; display:block}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1><span class="hex">⬡</span> Obraty — BA Obchodná <span style="font-size:11px;color:var(--muted);font-weight:400">prototyp</span></h1>
+  <p class="sub">KK + OO + FXF · denné zápisy uzávierok pokladní</p>
+  <div id="view"></div>
+</div>
+<div class="tabs" id="tabs"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script>
+'use strict';
+/* ============================== KONFIGURÁCIA ============================== */
+const DNI = ['nedeľa','pondelok','utorok','streda','štvrtok','piatok','sobota'];
+const MESIACE = ['Január','Február','Marec','Apríl','Máj','Jún','Júl','August','September','Október','November','December'];
+
+// Vstupné polia z dennej uzávierky pokladne (presne podľa Excelu)
+const F_PREDAJ = [   // blok „predajná pokladňa" — KK POS aj OO A3 strana
+  ['obrat',      'Celkový obrat'],
+  ['zaokr',      'Zaokrúhlenie'],
+  ['karta',      'Platobná karta (ANS)'],
+  ['darcek',     'Darčekové karty (Doxx, Up, Callio)'],
+  ['dpPouk',     'Darčekové poukážky'],
+  ['dpMartinus', 'DP – Martinus'],
+  ['dpEticket',  'DP – Eticket'],
+  ['odvod',      'Odvod KK'],
+];
+const F_FAKTURY = [  // blok „úhrady faktúr" — OO strana
+  ['uhrHot',      'Úhrada faktúr – hotovosť'],
+  ['uhrZaokr',    'Úhrada faktúr – zaokrúhlenie'],
+  ['uhrKarta',    'Úhrada faktúr – karta'],
+  ['darcek2',     'Darčekové karty'],
+  ['dpPouk2',     'Darčekové poukážky'],
+  ['dpMartinus2', 'DP – Martinus'],
+  ['dpEticket2',  'DP – Eticket'],
+  ['odvodOO',     'Odvod OO'],
+];
+const F_FXF = [
+  ['obrat',          'Celkový obrat'],
+  ['zaokr',          'Zaokrúhlenie'],
+  ['karta',          'Platobná karta'],
+  ['upKarta',        'Darčekové karty (UP)'],
+  ['qerko',          'Qerko'],
+  ['tringelty',      'Qerko – tringelty'],
+  ['gastro',         'Gastro lístky'],
+  ['odvod',          'Odvod pokladne'],
+  ['nakupy',         'Nákupy (celková suma)'],
+  ['prevodMalaKasa', 'Prevod na malú kasu'],
+  ['vklad',          'Vklad do pokladne'],
+  ['vkladBanka',     'Vklad do banky'],
+];
+
+const UNITS = {
+  KK:  { label:'KK',  registers:[
+          {id:'POS1', label:'A3 POS 1-7'}, {id:'POS2', label:'A3 POS 2-7'},
+          {id:'POS3', label:'A3 POS 3-7'}, {id:'POS4', label:'A3 POS 4-7'},
+          {id:'POS5', label:'A3 POS 5-7'} ],
+        dayFields:[ ['prevodOffice','Prevod hotovosti pre BA office'], ['vkladBanka','Vklad do banky (KK)'] ] },
+  OO:  { label:'OO',  registers:[
+          {id:'RP1', label:'RP 1'}, {id:'RP2', label:'RP 2'}, {id:'RP3', label:'RP 3'} ],
+        dayFields:[ ['vkladBankaOO','Vklad do banky (OO)'] ] },
+  FXF: { label:'FXF', registers:[ {id:'FX15', label:'FX15'} ], dayFields:[] },
+};
+
+/* ============================== STAV + ULOŽENIE ============================== */
+const LS_KEY = 'fxf-obraty-v1';
+let S = load();
+function load(){
+  try{ const s = JSON.parse(localStorage.getItem(LS_KEY)); if(s && s.entries) return s; }catch(e){}
+  return {
+    entries:{},          // "UNIT|REG|YYYY-MM-DD" -> {pole:hodnota}
+    days:{},             // "UNIT|YYYY-MM-DD"     -> denné polia (prevod office, vklad banka…)
+    blocky:{},           // "UNIT|YYYY-MM"        -> [{datum,suma,ucel}]
+    monthMeta:{},        // "UNIT|YYYY-MM"        -> {rozmienanie, neodvedene}
+    settings:{
+      startMonth: iso(new Date()).slice(0,7),
+      openingDrawer:{},  // drawerKey -> €  (stav zásuvky pred prvým mesiacom)
+      openingCash:{KK:0, OO:0, FXF:0, MALAKASA:0},  // stav hotovosti na prevádzke pred prvým mesiacom
+    },
+  };
+}
+function save(){ localStorage.setItem(LS_KEY, JSON.stringify(S)); }
+const N = v => { const x = parseFloat(v); return isFinite(x) ? x : 0; };
+const E = (u,r,d) => S.entries[`${u}|${r}|${d}`] || {};
+const D = (u,d)   => S.days[`${u}|${d}`] || {};
+const g = (o,f)   => N(o[f]);
+function setE(u,r,d,f,v){ const k=`${u}|${r}|${d}`; if(!S.entries[k]) S.entries[k]={}; S.entries[k][f]=v; save(); }
+function setD(u,d,f,v){ const k=`${u}|${d}`; if(!S.days[k]) S.days[k]={}; S.days[k][f]=v; save(); }
+
+/* ============================== DÁTUMY ============================== */
+function iso(dt){ return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`; }
+function daysInMonth(ym){ const [y,m]=ym.split('-').map(Number); return new Date(y,m,0).getDate(); }
+function monthDates(ym){ const n=daysInMonth(ym); return Array.from({length:n},(_,i)=>`${ym}-${String(i+1).padStart(2,'0')}`); }
+function addMonths(ym,k){ const [y,m]=ym.split('-').map(Number); const d=new Date(y,m-1+k,1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+function monthLabel(ym){ const [y,m]=ym.split('-').map(Number); return `${MESIACE[m-1]} ${y}`; }
+const fmt = v => ((Math.round(v*100)/100) || 0).toLocaleString('sk-SK',{minimumFractionDigits:2, maximumFractionDigits:2})+' €';
+
+/* ============================== VÝPOČTY (vzorce z Excelu) ============================== */
+// Predajná pokladňa (KK POS / OO A3):  H = F − I − L + G ;  L = M+N+O ;  terminál = I − J
+function calcPredaj(e){
+  const dpSpolu  = g(e,'dpPouk') + g(e,'dpMartinus') + g(e,'dpEticket');
+  const hotovost = g(e,'obrat') - g(e,'karta') - dpSpolu + g(e,'zaokr');
+  const terminal = g(e,'karta') - g(e,'darcek');
+  return {dpSpolu, hotovost, terminal};
+}
+// OO strana (faktúry):  X = P + R + T − Q ;  T = U+V+W
+function calcFaktury(e){
+  const dpSpolu  = g(e,'dpPouk2') + g(e,'dpMartinus2') + g(e,'dpEticket2');
+  const eshop    = g(e,'uhrHot') + g(e,'uhrKarta') + dpSpolu - g(e,'uhrZaokr');
+  return {dpSpolu, eshop};
+}
+// FXF:  J = H − K − P + I − N − O ;  M = K − L
+function calcFXF(e){
+  const hotovost   = g(e,'obrat') - g(e,'karta') - g(e,'gastro') + g(e,'zaokr') - g(e,'qerko') - g(e,'tringelty');
+  const kartaBezUp = g(e,'karta') - g(e,'upKarta');
+  return {hotovost, kartaBezUp};
+}
+// Nákupy KK v daný deň = súčet bločkov s daným dátumom (v Exceli ručný stĺpec AB)
+function nakupyDna(unit, date){
+  const ym = date.slice(0,7);
+  return (S.blocky[`${unit}|${ym}`]||[]).filter(b=>b.datum===date).reduce((s,b)=>s+N(b.suma),0);
+}
+// Denná zmena zásuvky (vzorce stĺpcov E/Q/AD/AP/BB, Z/AA, G)
+function drawerDelta(drawerKey, date){
+  const [unit, reg, side] = drawerKey.split('|');
+  if(unit==='KK'){
+    const e=E('KK',reg,date), c=calcPredaj(e);
+    let d = c.hotovost - g(e,'odvod');
+    if(reg==='POS3') d -= nakupyDna('KK', date);   // nákupy idú z pokladne POS 3-7 (stĺpec AD)
+    return d;
+  }
+  if(unit==='OO'){
+    const e=E('OO',reg,date);
+    if(side==='A3') return calcPredaj(e).hotovost - g(e,'odvod');     // Z = Z−1 + G − C
+    return g(e,'uhrHot') - g(e,'odvodOO');                            // AA = AA−1 + P − O
+  }
+  if(unit==='FXF'){
+    if(reg==='MALAKASA'){
+      const e=E('FXF','FX15',date);
+      return g(e,'prevodMalaKasa') - nakupyDna('FXF', date);
+    }
+    const e=E('FXF',reg,date), c=calcFXF(e);
+    return c.hotovost - g(e,'nakupy') - g(e,'odvod') + g(e,'vklad');  // G = G−1 + J − E − D + Q
+  }
+  return 0;
+}
+const DRAWERS = [
+  {key:'KK|POS1', label:'KK · A3 POS 1-7'}, {key:'KK|POS2', label:'KK · A3 POS 2-7'},
+  {key:'KK|POS3', label:'KK · A3 POS 3-7'}, {key:'KK|POS4', label:'KK · A3 POS 4-7'},
+  {key:'KK|POS5', label:'KK · A3 POS 5-7'},
+  {key:'OO|RP1|A3', label:'OO · RP1 (A3 predaj)'}, {key:'OO|RP1|OO', label:'OO · RP1 (faktúry)'},
+  {key:'OO|RP2|A3', label:'OO · RP2 (A3 predaj)'}, {key:'OO|RP2|OO', label:'OO · RP2 (faktúry)'},
+  {key:'OO|RP3|A3', label:'OO · RP3 (A3 predaj)'}, {key:'OO|RP3|OO', label:'OO · RP3 (faktúry)'},
+  {key:'FXF|FX15', label:'FXF · FX15'}, {key:'FXF|MALAKASA', label:'FXF · malá kasa'},
+];
+// Stav zásuvky ku koncu dňa = počiatočný stav + súčet denných zmien od začiatku evidencie
+function drawerBalance(drawerKey, uptoDate){
+  let bal = N(S.settings.openingDrawer[drawerKey]);
+  const start = S.settings.startMonth + '-01';
+  for(let d = new Date(start+'T00:00'); iso(d) <= uptoDate; d.setDate(d.getDate()+1)){
+    bal += drawerDelta(drawerKey, iso(d));
+  }
+  return bal;
+}
+
+/* ---- denné súčty naprieč pokladňami (stĺpce C a BN v KK hárku) ---- */
+function obratCelkomDna(date){  // C = 5× KK obrat + 3× OO A3 obrat + … (FXF vedie Excel zvlášť)
+  let s = 0;
+  for(const r of UNITS.KK.registers) s += g(E('KK',r.id,date),'obrat');
+  for(const r of UNITS.OO.registers) s += g(E('OO',r.id,date),'obrat');
+  return s;
+}
+function odvodKKDna(date){      // BN = 5× KK odvod + 3× OO odvod KK − prevod pre office
+  let s = 0;
+  for(const r of UNITS.KK.registers) s += g(E('KK',r.id,date),'odvod');
+  for(const r of UNITS.OO.registers) s += g(E('OO',r.id,date),'odvod');
+  return s - g(D('KK',date),'prevodOffice');
+}
+
+/* ---- mesačná uzávierka (riadky 36–42 v Exceli) ---- */
+function sumMonth(fn, ym){ return monthDates(ym).reduce((s,d)=>s+fn(d),0); }
+function uzavierkaKK(ym){
+  const hotovost = sumMonth(d=>{
+    let s=0;
+    for(const r of UNITS.KK.registers) s += calcPredaj(E('KK',r.id,d)).hotovost;
+    for(const r of UNITS.OO.registers) s += calcPredaj(E('OO',r.id,d)).hotovost;
+    return s;
+  }, ym);
+  const nakupy = (S.blocky['KK|'+ym]||[]).reduce((s,b)=>s+N(b.suma),0);
+  const banka  = sumMonth(d=>g(D('KK',d),'vkladBanka'), ym);
+  const prevod = sumMonth(d=>g(D('KK',d),'prevodOffice'), ym);
+  const minuly = stavHotovosti('KK', addMonths(ym,-1));
+  const stav   = minuly + hotovost - nakupy - banka - prevod;
+  const last   = monthDates(ym).at(-1);
+  const zasuvky = ['KK|POS1','KK|POS2','KK|POS3','KK|POS4','KK|POS5','OO|RP1|A3','OO|RP2|A3','OO|RP3|A3']
+                  .reduce((s,k)=>s+drawerBalance(k,last),0);
+  return {minuly, hotovost, nakupy, banka, prevod, stav, zasuvky};
+}
+function uzavierkaOO(ym){
+  const hotovost = sumMonth(d=>UNITS.OO.registers.reduce((s,r)=>s+g(E('OO',r.id,d),'uhrHot'),0), ym);
+  const banka  = sumMonth(d=>g(D('OO',d),'vkladBankaOO'), ym);
+  const minuly = stavHotovosti('OO', addMonths(ym,-1));
+  const stav   = minuly + hotovost - banka;
+  const last   = monthDates(ym).at(-1);
+  const zasuvky = ['OO|RP1|OO','OO|RP2|OO','OO|RP3|OO'].reduce((s,k)=>s+drawerBalance(k,last),0);
+  return {minuly, hotovost, banka, stav, zasuvky, nakupy:0, prevod:0};
+}
+function uzavierkaFXF(ym){
+  const hotovost = sumMonth(d=>calcFXF(E('FXF','FX15',d)).hotovost, ym);
+  const nakupy = sumMonth(d=>g(E('FXF','FX15',d),'nakupy'), ym);
+  const prevod = sumMonth(d=>g(E('FXF','FX15',d),'prevodMalaKasa'), ym);
+  const banka  = sumMonth(d=>g(E('FXF','FX15',d),'vkladBanka'), ym);
+  const minuly = stavHotovosti('FXF', addMonths(ym,-1));
+  const stav   = minuly + hotovost - nakupy - banka - prevod;
+  const last   = monthDates(ym).at(-1);
+  return {minuly, hotovost, nakupy, banka, prevod, stav,
+          zasuvky: drawerBalance('FXF|FX15', last),
+          malaKasa: drawerBalance('FXF|MALAKASA', last)};
+}
+// „Stav hotovosti na prevádzke" — reťazí sa mesiac za mesiacom od počiatočného stavu
+function stavHotovosti(unit, ym){
+  if(ym < S.settings.startMonth) return N(S.settings.openingCash[unit]);
+  const fn = unit==='KK' ? uzavierkaKK : unit==='OO' ? uzavierkaOO : uzavierkaFXF;
+  return fn(ym).stav;
+}
+
+/* ============================== UI ============================== */
+let UI = { tab:'zapis', date: iso(new Date()), unit:'KK', reg:'POS1',
+           ym: iso(new Date()).slice(0,7), prehladUnit:'SPOLU', blokUnit:'KK', ocr:null };
+
+const TABS = [
+  ['zapis','✍️','Zápis'], ['prehlad','📊','Prehľad'], ['uzavierka','🧾','Uzávierka'],
+  ['blocky','🧷','Bločky'], ['nastavenia','⚙️','Nastavenia'],
+];
+function renderTabs(){
+  document.getElementById('tabs').innerHTML = TABS.map(([id,ic,lb])=>
+    `<button class="${UI.tab===id?'on':''}" onclick="go('${id}')"><span>${ic}</span>${lb}</button>`).join('');
+}
+function go(tab){ UI.tab=tab; render(); }
+function render(){
+  renderTabs();
+  const v = document.getElementById('view');
+  if(UI.tab==='zapis') v.innerHTML = vZapis();
+  if(UI.tab==='prehlad') v.innerHTML = vPrehlad();
+  if(UI.tab==='uzavierka') v.innerHTML = vUzavierka();
+  if(UI.tab==='blocky') v.innerHTML = vBlocky();
+  if(UI.tab==='nastavenia') v.innerHTML = vNastavenia();
+}
+
+/* ---------- ZÁPIS ---------- */
+function inputRow(label, val, oninput, type='number'){
+  const v = (val===undefined||val===null||val==='') ? '' : val;
+  return `<div class="frow"><label>${label}</label>
+    <input type="${type}" ${type==='number'?'inputmode="decimal" step="0.01" placeholder="0,00"':''}
+      value="${v}" oninput="${oninput}"></div>`;
+}
+function compRow(label, val, money=true){
+  const cls = val<0 ? 'neg' : '';
+  return `<div class="comp"><span>${label}</span><b class="${cls}">${money?fmt(val):val}</b></div>`;
+}
+function vZapis(){
+  const u = UI.unit, unit = UNITS[u];
+  if(!unit.registers.some(r=>r.id===UI.reg)) UI.reg = unit.registers[0].id;
+  const d = UI.date, dt = new Date(d+'T00:00');
+  let h = `
+  <div class="card">
+    <div class="daynav">
+      <button onclick="shiftDay(-1)">‹</button>
+      <input type="date" value="${d}" onchange="UI.date=this.value;render()">
+      <button onclick="shiftDay(1)">›</button>
+    </div>
+    <div class="dayname">${DNI[dt.getDay()]} · ${dt.getDate()}. ${MESIACE[dt.getMonth()].toLowerCase()} ${dt.getFullYear()}</div>
+    <div class="seg">${Object.keys(UNITS).map(k=>
+      `<button class="${u===k?'on':''}" onclick="UI.unit='${k}';render()">${k}</button>`).join('')}</div>
+    ${unit.registers.length>1 ? `<div class="seg">${unit.registers.map(r=>
+      `<button class="${UI.reg===r.id?'on':''}" onclick="UI.reg='${r.id}';render()">${r.label}</button>`).join('')}</div>` : ''}
+  </div>`;
+
+  const reg = UI.reg, e = E(u,reg,d);
+  const set = f => `setE('${u}','${reg}','${d}','${f}',this.value);refreshComp()`;
+
+  if(u==='KK'){
+    h += `<div class="card"><div class="tag">Pokladňa ${unit.registers.find(r=>r.id===reg).label} — uzávierka</div>
+      ${F_PREDAJ.map(([f,l])=>inputRow(l, e[f], set(f))).join('')}</div>`;
+  }
+  if(u==='OO'){
+    h += `<div class="card"><div class="tag">${reg} — A3 predajná pokladňa</div>
+      ${F_PREDAJ.map(([f,l])=>inputRow(l, e[f], set(f))).join('')}</div>
+    <div class="card"><div class="tag">${reg} — úhrady faktúr (OO)</div>
+      ${F_FAKTURY.map(([f,l])=>inputRow(l, e[f], set(f))).join('')}</div>`;
+  }
+  if(u==='FXF'){
+    h += `<div class="card"><div class="tag">FX15 — uzávierka</div>
+      ${F_FXF.map(([f,l])=>inputRow(l, e[f], set(f))).join('')}
+      ${inputRow('Popis vkladu', e.popis||'', set('popis'), 'text')}</div>`;
+  }
+  // denné polia jednotky (prevody, vklad do banky)
+  if(unit.dayFields.length){
+    const dd = D(u,d);
+    h += `<div class="card"><div class="tag">Denné údaje — ${u} (spoločné pre celý deň)</div>
+      ${unit.dayFields.map(([f,l])=>inputRow(l, dd[f], `setD('${u}','${d}','${f}',this.value);refreshComp()`)).join('')}</div>`;
+  }
+  h += `<div class="card" id="ocrCard">${ocrPanel()}</div>`;
+  h += `<div class="card" id="compCard">${compPanel()}</div>`;
+  return h;
+}
+function shiftDay(k){ const dt=new Date(UI.date+'T00:00'); dt.setDate(dt.getDate()+k); UI.date=iso(dt); render(); }
+function refreshComp(){ const c=document.getElementById('compCard'); if(c) c.innerHTML = compPanel(); }
+function compPanel(){
+  const u=UI.unit, reg=UI.reg, d=UI.date, e=E(u,reg,d);
+  let h = `<div class="tag">Vypočítané automaticky</div>`;
+  if(u==='KK'){
+    const c = calcPredaj(e);
+    h += compRow('Hotovosť (obrat − karta − DP + zaokr.)', c.hotovost)
+       + compRow('Darčekové poukážky spolu', c.dpSpolu)
+       + compRow('Terminál: platba kartou spolu', c.terminal)
+       + compRow('Hotovosť v zásuvke po dnešku', drawerBalance(`KK|${reg}`, d))
+       + compRow('Obrat CELKOM za deň (KK + OO predaj)', obratCelkomDna(d))
+       + compRow('Odvod KK za deň (po odpočte prevodu)', odvodKKDna(d));
+    if(reg==='POS3') h += `<p class="hint">Pozn.: nákupy z bločkov (${fmt(nakupyDna('KK',d))} dnes) sa odpočítavajú zo zásuvky POS 3-7 — tak ako v Exceli.</p>`;
+  }
+  if(u==='OO'){
+    const c = calcPredaj(e), f = calcFaktury(e);
+    h += compRow('Hotovosť A3 (predaj)', c.hotovost)
+       + compRow('Terminál A3 spolu', c.terminal)
+       + compRow('E-shop / úhrady faktúr spolu', f.eshop)
+       + compRow('Zásuvka A3 po dnešku', drawerBalance(`OO|${reg}|A3`, d))
+       + compRow('Zásuvka OO (faktúry) po dnešku', drawerBalance(`OO|${reg}|OO`, d));
+  }
+  if(u==='FXF'){
+    const c = calcFXF(e);
+    h += compRow('Hotovosť (obrat − karta − gastro − Qerko + zaokr.)', c.hotovost)
+       + compRow('Platobná karta bez UP', c.kartaBezUp)
+       + compRow('Hotovosť v zásuvke po dnešku', drawerBalance('FXF|FX15', d))
+       + compRow('Malá kasa po dnešku', drawerBalance('FXF|MALAKASA', d));
+  }
+  h += `<p class="hint">Suma „v zásuvke po dnešku" je to, čo má fyzicky ostať v pokladni — okamžitá kontrola pri uzávierke.</p>`;
+  return h;
+}
+
+/* ---------- PREHĽAD ---------- */
+function vPrehlad(){
+  const ym = UI.ym, dates = monthDates(ym), nd = dates.length;
+  let h = `<div class="card">
+    <div class="rowflex" style="margin-bottom:10px">
+      <input type="month" value="${ym}" onchange="UI.ym=this.value;render()" style="flex:1">
+    </div>
+    <div class="seg">${['SPOLU','KK','OO','FXF'].map(k=>
+      `<button class="${UI.prehladUnit===k?'on':''}" onclick="UI.prehladUnit='${k}';render()">${k}</button>`).join('')}</div>
+  </div>`;
+  const pu = UI.prehladUnit;
+  let cols, rowFn;   // [hlavičky], date -> [hodnoty]
+  if(pu==='SPOLU'){
+    cols = ['Obrat KK+OO','Obrat FXF','Spolu','Odvod KK'];
+    rowFn = d => { const a=obratCelkomDna(d), b=g(E('FXF','FX15',d),'obrat');
+                   return [a, b, a+b, odvodKKDna(d)]; };
+  }
+  if(pu==='KK'){
+    cols = ['Obrat','Hotovosť','Odvod','Nákupy','Vklad banka'];
+    rowFn = d => {
+      let o=0,hh=0,od=0;
+      for(const r of UNITS.KK.registers){ const e=E('KK',r.id,d); o+=g(e,'obrat'); hh+=calcPredaj(e).hotovost; od+=g(e,'odvod'); }
+      return [o, hh, od, nakupyDna('KK',d), g(D('KK',d),'vkladBanka')];
+    };
+  }
+  if(pu==='OO'){
+    cols = ['Obrat A3','Hotovosť A3','Úhrady fakt.','E-shop spolu','Vklad banka'];
+    rowFn = d => {
+      let o=0,hh=0,uh=0,es=0;
+      for(const r of UNITS.OO.registers){ const e=E('OO',r.id,d);
+        o+=g(e,'obrat'); hh+=calcPredaj(e).hotovost; uh+=g(e,'uhrHot'); es+=calcFaktury(e).eshop; }
+      return [o, hh, uh, es, g(D('OO',d),'vkladBankaOO')];
+    };
+  }
+  if(pu==='FXF'){
+    cols = ['Obrat','Hotovosť','Karta','Qerko','Odvod','Zásuvka'];
+    rowFn = d => { const e=E('FXF','FX15',d), c=calcFXF(e);
+      return [g(e,'obrat'), c.hotovost, g(e,'karta'), g(e,'qerko'), g(e,'odvod'), drawerBalance('FXF|FX15',d)]; };
+  }
+  const rows = dates.map(d => ({d, vals: rowFn(d)}));
+  const sums = cols.map((_,i)=> rows.reduce((s,r)=>s+r.vals[i],0));
+  const fm = v => v===0 ? '<span class="dim">–</span>' : (Math.round(v*100)/100).toLocaleString('sk-SK',{minimumFractionDigits:2});
+  h += `<div class="card"><div class="tag">${monthLabel(ym)} · ${pu}</div>
+  <div class="tblwrap"><table class="tbl">
+    <tr><th>Deň</th>${cols.map(c=>`<th>${c}</th>`).join('')}</tr>
+    ${rows.map(r=>{ const dt=new Date(r.d+'T00:00'); const w=dt.getDay()===0||dt.getDay()===6;
+      return `<tr class="${w?'wknd':''}"><td>${dt.getDate()}. <span class="dim">${DNI[dt.getDay()].slice(0,2)}</span></td>${
+        r.vals.map(v=>`<td>${fm(v)}</td>`).join('')}</tr>`; }).join('')}
+    <tr class="sum"><td>Spolu</td>${sums.map((v,i)=>`<td>${pu==='FXF'&&i===5?'':fm(v)}</td>`).join('')}</tr>
+    <tr><td class="dim">Denný priemer (${nd} dní)</td>${sums.map((v,i)=>`<td class="dim">${pu==='FXF'&&i===5?'':fm(v/nd)}</td>`).join('')}</tr>
+  </table></div>
+  <p class="hint">Denný priemer sa delí automaticky správnym počtom dní v mesiaci (${nd}). Víkendy sú podfarbené.</p></div>`;
+  return h;
+}
+
+/* ---------- UZÁVIERKA ---------- */
+function vUzavierka(){
+  const ym = UI.ym;
+  let h = `<div class="card"><input type="month" value="${ym}" onchange="UI.ym=this.value;render()"></div>`;
+  const blocks = [
+    ['KK (vrátane A3 pokladní v OO)', uzavierkaKK(ym), 'KK'],
+    ['OO — úhrady faktúr', uzavierkaOO(ym), 'OO'],
+    ['FXF — Foxford', uzavierkaFXF(ym), 'FXF'],
+  ];
+  for(const [title, z, u] of blocks){
+    const meta = S.monthMeta[`${u}|${ym}`] || {};
+    const kontrola = N(meta.rozmienanie) + N(meta.neodvedene) + z.zasuvky + (z.malaKasa || 0);
+    const sedi = Math.abs(kontrola - z.stav) < 0.005;
+    h += `<div class="card"><div class="tag">${title} · ${monthLabel(ym)}</div>
+      ${compRow('Minulý mesiac (prenos)', z.minuly)}
+      ${compRow('Hotovosť celkom', z.hotovost)}
+      ${z.nakupy ? compRow('Nákupy celkom', -z.nakupy) : ''}
+      ${z.prevod ? compRow('Prevod pre BA office', -z.prevod) : ''}
+      ${compRow('Vklady do banky', -z.banka)}
+      ${compRow('Stav hotovosti na prevádzke', z.stav)}
+      <div class="secthead">Kontrola podľa zásuviek</div>
+      ${inputRow('Rozmieňanie (vypíš)', meta.rozmienanie, `setMeta('${u}','${ym}','rozmienanie',this.value)`)}
+      ${inputRow('Neodvedené do banky (vypíš)', meta.neodvedene, `setMeta('${u}','${ym}','neodvedene',this.value)`)}
+      ${compRow('Stav zásuviek k poslednému dňu', z.zasuvky)}
+      ${z.malaKasa!==undefined ? compRow('Malá kasa', z.malaKasa) : ''}
+      ${compRow('Spolu podľa zásuviek', kontrola)}
+      <div style="margin-top:8px"><span class="ok-pill ${sedi?'ok':'err'}">${sedi?'✓ sedí':'✗ rozdiel '+fmt(kontrola - z.stav)}</span></div>
+    </div>`;
+  }
+  h += `<p class="hint" style="margin:0 6px">Prenos medzi mesiacmi je automatický — žiadne kopírovanie hárkov ani odkazy na minulý mesiac.</p>`;
+  return h;
+}
+function setMeta(u,ym,f,v){ const k=`${u}|${ym}`; if(!S.monthMeta[k]) S.monthMeta[k]={}; S.monthMeta[k][f]=v; save(); render(); }
+
+/* ---------- BLOČKY ---------- */
+function vBlocky(){
+  const u = UI.blokUnit, ym = UI.ym, key = `${u}|${ym}`;
+  const list = S.blocky[key] || [];
+  const spolu = list.reduce((s,b)=>s+N(b.suma),0);
+  return `<div class="card">
+    <div class="rowflex" style="margin-bottom:10px"><input type="month" value="${ym}" onchange="UI.ym=this.value;render()" style="flex:1"></div>
+    <div class="seg">${['KK','FXF'].map(k=>`<button class="${u===k?'on':''}" onclick="UI.blokUnit='${k}';render()">${k}</button>`).join('')}</div>
+  </div>
+  <div class="card"><div class="tag">Nákupy po blokoch — ${u} · ${monthLabel(ym)}</div>
+    <div class="blokrow" style="font-size:11px;color:var(--muted)"><span>Dátum</span><span>Suma €</span><span>Účel</span><span></span></div>
+    ${list.map((b,i)=>`<div class="blokrow">
+      <input type="date" value="${b.datum||''}" onchange="setBlok('${key}',${i},'datum',this.value)">
+      <input type="number" inputmode="decimal" step="0.01" value="${b.suma??''}" oninput="setBlok('${key}',${i},'suma',this.value)">
+      <input type="text" value="${b.ucel||''}" oninput="setBlok('${key}',${i},'ucel',this.value)">
+      <button onclick="delBlok('${key}',${i})">✕</button></div>`).join('')}
+    <div class="rowflex" style="margin-top:8px;justify-content:space-between">
+      <button class="btn ghost sm" onclick="addBlok('${key}')">+ Pridať bloček</button>
+      <b>Spolu: ${fmt(spolu)}</b>
+    </div>
+    <p class="hint">${u==='KK'
+      ? 'Suma bločkov za deň sa automaticky prepíše do „Nákupy" daného dňa a odpočíta zo zásuvky POS 3-7 — stĺpec AB netreba vypĺňať ručne.'
+      : 'Bločky FXF sa odpočítavajú z malej kasy (v Exceli K38:K52 → C37).'}</p>
+  </div>`;
+}
+function addBlok(k){ if(!S.blocky[k]) S.blocky[k]=[]; S.blocky[k].push({datum:UI.ym+'-01', suma:'', ucel:''}); save(); render(); }
+function setBlok(k,i,f,v){ S.blocky[k][i][f]=v; save(); if(f!=='suma'&&f!=='ucel') render(); }
+function delBlok(k,i){ S.blocky[k].splice(i,1); save(); render(); }
+
+/* ---------- NASTAVENIA ---------- */
+function vNastavenia(){
+  const st = S.settings;
+  return `<div class="card"><div class="tag">Začiatok evidencie</div>
+    <div class="frow"><label>Prvý mesiac v appke</label>
+      <input type="month" value="${st.startMonth}" onchange="S.settings.startMonth=this.value;save();render()" style="width:160px"></div>
+    <p class="hint">Stavy nižšie sú „k poslednému dňu pred prvým mesiacom" — to, čo je teraz v Exceli na konci posledného vyplneného mesiaca.</p>
+  </div>
+  <div class="card"><div class="tag">Počiatočné stavy zásuviek</div>
+    ${DRAWERS.map(dr=>inputRow(dr.label, st.openingDrawer[dr.key],
+      `S.settings.openingDrawer['${dr.key}']=this.value;save()`)).join('')}
+  </div>
+  <div class="card"><div class="tag">Počiatočný stav hotovosti na prevádzke</div>
+    ${['KK','OO','FXF'].map(u=>inputRow(u, st.openingCash[u],
+      `S.settings.openingCash['${u}']=this.value;save()`)).join('')}
+  </div>
+  <div class="card"><div class="tag">Zálohovanie dát</div>
+    <div class="rowflex">
+      <button class="btn ghost" onclick="exportJSON()">⬇ Export (JSON)</button>
+      <label class="btn ghost" style="cursor:pointer">⬆ Import<input type="file" accept=".json" style="display:none" onchange="importJSON(this)"></label>
+      <button class="btn red" onclick="if(confirm('Naozaj vymazať všetky dáta?')){localStorage.removeItem(LS_KEY);localStorage.setItem(LS_KEY+'-touched','1');location.reload()}">Vymazať všetko</button>
+    </div>
+    <div class="rowflex" style="margin-top:8px">
+      <button class="btn" onclick="loadDemo()">▶ Načítať ukážkové dáta (jún 2026 z Excelu)</button>
+    </div>
+    <p class="hint">Dáta sa ukladajú lokálne v prehliadači (localStorage). Export si občas ulož ako zálohu. Synchronizácia do Google Sheets je ďalší krok po odskúšaní prototypu.</p>
+  </div>`;
+}
+function exportJSON(){
+  const blob = new Blob([JSON.stringify(S,null,1)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `obraty-zaloha-${iso(new Date())}.json`;
+  a.click();
+}
+function importJSON(inp){
+  const f = inp.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = () => { try{ const s=JSON.parse(r.result); if(!s.entries) throw 0; S=s; save(); render(); alert('Import OK'); }
+                     catch(e){ alert('Neplatný súbor.'); } };
+  r.readAsText(f);
+}
+
+/* ============================== OCR — NAHRANIE DOKLADU ============================== */
+// Mapovanie: pre každé pole appky kľúčové slová, ktoré sa hľadajú na bločku.
+// Diakritika sa ignoruje, porovnáva sa malými písmenami. Doladí sa podľa reálneho bločka.
+const OCR_PREDAJ = [
+  {f:'obrat',      keys:['celkovy obrat','celkova trzba','obrat','trzba','medzisucet']},
+  {f:'zaokr',      keys:['zaokruhlenie','zaokr']},
+  {f:'karta',      keys:['platobna karta','platba kartou','bezhotovost','karta']},
+  {f:'darcek',     keys:['darcekove karty','doxx','callio','up karta']},
+  {f:'dpPouk',     keys:['darcekove poukazky','poukazky']},
+  {f:'dpMartinus', keys:['martinus']},
+  {f:'dpEticket',  keys:['eticket','e-ticket']},
+];
+const OCR_FXF = [
+  {f:'obrat',     keys:['celkovy obrat','celkova trzba','obrat','trzba','medzisucet']},
+  {f:'zaokr',     keys:['zaokruhlenie','zaokr']},
+  {f:'karta',     keys:['platobna karta','platba kartou','bezhotovost','karta']},
+  {f:'upKarta',   keys:['up karta','darcekove karty','up ']},
+  {f:'qerko',     keys:['qerko','querko']},
+  {f:'tringelty', keys:['tringelt','prepitne','spropitne']},
+  {f:'gastro',    keys:['gastro','stravne listky','stravne','edenred','dobre karty']},
+];
+function ocrMap(unit){ return unit==='FXF' ? OCR_FXF : OCR_PREDAJ; }
+function labelOf(unit, f){
+  const src = unit==='FXF' ? F_FXF : F_PREDAJ;
+  const hit = src.find(x=>x[0]===f); return hit ? hit[1] : f;
+}
+const stripD = s => s.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+// Z riadku vytiahne peňažnú sumu (posledné číslo; podporuje "1 234,56", "1234.56", "1 234.56")
+function parseAmount(line){
+  const m = line.match(/-?\d[\d  .,]*\d|\d/g);
+  if(!m) return null;
+  let t = m[m.length-1].replace(/[  ]/g,'');
+  if(t.includes(',') && t.includes('.')){
+    t = (t.lastIndexOf(',') > t.lastIndexOf('.')) ? t.replace(/\./g,'').replace(',','.') : t.replace(/,/g,'');
+  } else if(t.includes(',')){ t = t.replace(',','.'); }
+  const v = parseFloat(t);
+  return isFinite(v) ? Math.round(v*100)/100 : null;
+}
+function matchFields(text, unit){
+  const lines = text.split(/\n+/).map(l=>l.trim()).filter(Boolean);
+  return ocrMap(unit).map(({f,keys})=>{
+    let value = null;
+    for(const ln of lines){
+      const norm = stripD(ln);
+      if(keys.some(k=>norm.includes(k))){ const a=parseAmount(ln); if(a!==null){ value=a; break; } }
+    }
+    return {f, label:labelOf(unit,f), value, found:value!==null};
+  });
+}
+function fileToImage(file){ return new Promise((res,rej)=>{ const img=new Image();
+  img.onload=()=>res(img); img.onerror=rej; img.src=URL.createObjectURL(file); }); }
+// Predspracovanie: zmenšenie + odtiene sivej + zvýšenie kontrastu (lepšie OCR na termo-bločku)
+function preprocess(img){
+  const max=1600, sc=Math.min(1, max/Math.max(img.width,img.height));
+  const w=Math.round(img.width*sc), h=Math.round(img.height*sc);
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const x=c.getContext('2d'); x.drawImage(img,0,0,w,h);
+  const d=x.getImageData(0,0,w,h), p=d.data;
+  for(let i=0;i<p.length;i+=4){
+    let g=0.299*p[i]+0.587*p[i+1]+0.114*p[i+2];
+    g=(g-128)*1.4+128;                 // kontrast
+    g=g<0?0:g>255?255:g;
+    p[i]=p[i+1]=p[i+2]=g;
+  }
+  x.putImageData(d,0,0); return c;
+}
+async function runOcr(input){
+  const file = input.files && input.files[0]; if(!file) return;
+  if(typeof Tesseract==='undefined'){
+    alert('OCR engine sa nenačítal. Pri prvom použití treba internet (stiahne sa ~15 MB, potom funguje offline).'); return;
+  }
+  UI.ocr = {busy:true, progress:0, status:'Načítavam obrázok…', fields:[], raw:'', thumb:URL.createObjectURL(file), unit:UI.unit, reg:UI.reg, date:UI.date};
+  renderOcr();
+  try{
+    const img = await fileToImage(file);
+    const canvas = preprocess(img);
+    UI.ocr.status='Rozpoznávam text…'; renderOcr();
+    const {data} = await Tesseract.recognize(canvas, 'slk', {
+      logger: m => { if(m.status==='recognizing text'){ UI.ocr.progress=Math.round(m.progress*100);
+        UI.ocr.status='Rozpoznávam text… '+UI.ocr.progress+'%'; renderOcr(); } }
+    });
+    UI.ocr.raw = data.text || '';
+    UI.ocr.fields = matchFields(UI.ocr.raw, UI.ocr.unit);
+    UI.ocr.busy=false;
+    const n = UI.ocr.fields.filter(x=>x.found).length;
+    UI.ocr.status = n ? `Našiel som ${n} ${n===1?'pole':n<5?'polia':'polí'} — skontroluj a doplň.` : 'Nenašiel som sumy — skús ostrejšiu fotku alebo dopíš ručne.';
+  }catch(e){ UI.ocr.busy=false; UI.ocr.status='Chyba OCR: '+e.message; }
+  renderOcr();
+}
+function renderOcr(){ const el=document.getElementById('ocrCard'); if(el) el.innerHTML=ocrPanel(); }
+function ocrPanel(){
+  const o = UI.ocr;
+  let h = `<div class="tag">📷 Nahrať doklad (OCR)</div>`;
+  if(!o || (o.unit!==UI.unit || o.reg!==UI.reg || o.date!==UI.date)){
+    h += `<label class="ocrdrop">
+      <input type="file" accept="image/*" capture="environment" style="display:none" onchange="runOcr(this)">
+      <div><b>Odfotiť / vybrať</b> uzávierkový bloček</div>
+      <div style="font-size:11px;margin-top:4px">Appka prečíta sumy a predvyplní polia tohto dňa a pokladne.</div>
+    </label>
+    <p class="hint">Vždy si skontroluj prečítané čísla — pri prvom použití sa stiahne OCR engine (~15 MB, potrebný internet, potom funguje offline).</p>`;
+    return h;
+  }
+  if(o.thumb) h += `<img src="${o.thumb}" class="ocr-thumb">`;
+  h += `<div class="ocr-prog"><div style="width:${o.progress||(o.busy?5:100)}%"></div></div>
+        <p class="hint" style="margin-top:0">${o.status}</p>`;
+  if(!o.busy && o.fields.length){
+    h += o.fields.map((x,i)=>`<div class="ocr-field ${x.found?'':'miss'}">
+        <input type="checkbox" ${x.found?'checked':''} onchange="UI.ocr.fields[${i}].use=this.checked">
+        <label>${x.label}</label>
+        <input type="number" step="0.01" value="${x.value??''}" placeholder="—"
+          oninput="UI.ocr.fields[${i}].value=parseFloat(this.value); UI.ocr.fields[${i}].found=true">
+      </div>`).join('');
+    o.fields.forEach(x=>{ if(x.use===undefined) x.use=x.found; });
+    h += `<div class="rowflex" style="margin-top:10px;justify-content:space-between">
+      <button class="btn ghost sm" onclick="UI.ocr=null;render()">Zrušiť</button>
+      <button class="btn sm" onclick="applyOcr()">Doplniť do formulára</button>
+    </div>
+    <details style="margin-top:8px"><summary style="font-size:11px;color:var(--muted);cursor:pointer">Zobraziť rozpoznaný text</summary>
+      <div class="ocr-raw">${(o.raw||'').replace(/</g,'&lt;')}</div></details>`;
+  } else if(o.busy){
+    h += `<p class="hint">Chvíľu strpenia…</p>`;
+  } else {
+    h += `<button class="btn ghost sm" onclick="UI.ocr=null;render()">Skúsiť znova</button>`;
+  }
+  return h;
+}
+function applyOcr(){
+  const o = UI.ocr; if(!o) return; let n=0;
+  o.fields.forEach(x=>{ if(x.use && x.value!==undefined && !isNaN(x.value)){ setE(o.unit,o.reg,o.date,x.f,x.value); n++; } });
+  UI.ocr=null; render();
+  if(n) setTimeout(()=>{ const c=document.getElementById('compCard'); if(c) c.scrollIntoView({behavior:'smooth',block:'center'}); }, 50);
+}
+
+/* ---------- UKÁŽKOVÉ DÁTA (reálne vstupy z hárkov Jún 2026) ---------- */
+const DEMO = {"entries": {"KK|POS5|2026-06-01": {"odvod": 1040.0, "obrat": 5674.04, "zaokr": 0.14, "karta": 4224.51, "dpPouk": 60.0, "dpMartinus": 287.07, "dpEticket": 27.0}, "KK|POS3|2026-06-02": {"obrat": 966.3, "zaokr": 0.01, "karta": 599.47, "dpPouk": 10.0, "dpMartinus": 199.69}, "KK|POS5|2026-06-02": {"odvod": 900.0, "obrat": 4335.97, "zaokr": 0.11, "karta": 3093.04, "dpPouk": 58.0, "dpMartinus": 304.69}, "KK|POS3|2026-06-03": {"odvod": 500.0, "obrat": 1762.76, "zaokr": 0.02, "karta": 1306.07, "dpPouk": 20.0, "dpMartinus": 95.36}, "KK|POS4|2026-06-03": {"obrat": 145.26, "zaokr": -0.03, "karta": 72.63}, "KK|POS5|2026-06-03": {"odvod": 600.0, "obrat": 3705.73, "zaokr": -0.02, "karta": 2837.06, "dpMartinus": 245.0}, "KK|POS3|2026-06-04": {"obrat": 724.67, "zaokr": 0.01, "karta": 421.67, "dpMartinus": 150.46}, "KK|POS5|2026-06-04": {"odvod": 1180.0, "obrat": 6114.44, "zaokr": 0.04, "karta": 4408.61, "dpPouk": 10.0, "dpMartinus": 513.97}, "KK|POS3|2026-06-05": {"odvod": 50.0, "obrat": 928.06, "zaokr": -0.02, "karta": 818.89, "dpMartinus": 20.0}, "KK|POS5|2026-06-05": {"odvod": 740.0, "obrat": 6137.2, "zaokr": 0.13, "karta": 4983.77, "dpMartinus": 400.31, "dpEticket": 30.0}, "KK|POS4|2026-06-06": {"obrat": 232.83, "zaokr": -0.03, "karta": 179.1}, "KK|POS5|2026-06-06": {"odvod": 650.0, "obrat": 5166.35, "zaokr": 0.08, "karta": 4076.65, "dpPouk": 64.0, "dpMartinus": 386.18}, "KK|POS5|2026-06-07": {"odvod": 400.0, "obrat": 3168.46, "zaokr": 0.04, "karta": 2445.59, "dpMartinus": 274.66}, "KK|POS5|2026-06-08": {"odvod": 1140.0, "obrat": 5272.34, "zaokr": 0.17, "karta": 3911.7, "dpPouk": 20.0, "dpMartinus": 196.26}, "KK|POS5|2026-06-09": {"odvod": 1020.0, "obrat": 5603.51, "zaokr": 0.05, "karta": 4209.68, "dpPouk": 20.0, "dpMartinus": 398.88}, "KK|POS5|2026-06-10": {"odvod": 1280.0, "obrat": 5829.52, "zaokr": 0.09, "karta": 4296.82, "dpPouk": 34.0, "dpMartinus": 174.99}, "OO|RP2|2026-06-01": {"odvod": 100.0, "obrat": 1533.89, "zaokr": 0.03, "karta": 1282.64, "dpMartinus": 117.48, "dpEticket": 25.0, "odvodOO": 200.0, "uhrHot": 200.55, "uhrZaokr": 0.07, "uhrKarta": 918.47, "dpPouk2": 30.0, "dpMartinus2": 110.0}, "OO|RP2|2026-06-02": {"odvod": 240.0, "obrat": 792.32, "karta": 472.47, "dpMartinus": 70.0, "odvodOO": 420.0, "uhrHot": 427.85, "uhrZaokr": 0.03, "uhrKarta": 1735.04, "dpMartinus2": 102.0, "dpEticket2": 10.0}, "OO|RP2|2026-06-03": {"odvod": 120.0, "obrat": 1010.35, "zaokr": 0.01, "karta": 840.51, "dpMartinus": 43.45, "odvodOO": 400.0, "uhrHot": 399.0, "uhrZaokr": 0.03, "uhrKarta": 1198.92, "dpMartinus2": 10.0}, "OO|RP1|2026-06-04": {"obrat": 112.75, "karta": 112.75, "uhrKarta": 67.57}, "OO|RP2|2026-06-04": {"odvod": 280.0, "obrat": 1265.68, "zaokr": 0.02, "karta": 975.9, "dpMartinus": 5.0, "odvodOO": 230.0, "uhrHot": 228.3, "uhrZaokr": -0.01, "uhrKarta": 1421.74, "dpMartinus2": 125.0}, "OO|RP2|2026-06-05": {"odvod": 220.0, "obrat": 1228.79, "zaokr": 0.02, "karta": 1003.11, "dpMartinus": 5.0, "odvodOO": 330.0, "uhrHot": 330.9, "uhrZaokr": 0.07, "uhrKarta": 1770.88, "dpPouk2": 15.0, "dpMartinus2": 230.0, "dpEticket2": 24.0}, "OO|RP2|2026-06-06": {"odvod": 300.0, "obrat": 915.89, "zaokr": 0.02, "karta": 550.66, "dpMartinus": 70.0, "odvodOO": 100.0, "uhrHot": 93.15, "uhrZaokr": 0.03, "uhrKarta": 468.21, "dpMartinus2": 17.81, "dpEticket2": 130.0}, "OO|RP2|2026-06-07": {"odvod": 50.0, "obrat": 798.9, "zaokr": 0.01, "karta": 658.69, "dpMartinus": 91.32, "odvodOO": 50.0, "uhrHot": 49.5, "uhrKarta": 139.19}, "OO|RP2|2026-06-08": {"odvod": 200.0, "obrat": 930.02, "zaokr": 0.01, "karta": 711.58, "dpMartinus": 25.0, "odvodOO": 400.0, "uhrHot": 396.4, "uhrZaokr": 0.02, "uhrKarta": 824.76, "dpMartinus2": 50.0}, "OO|RP2|2026-06-09": {"odvod": 300.0, "obrat": 1431.59, "zaokr": 0.02, "karta": 1054.01, "dpMartinus": 59.3, "dpEticket": 15.0, "odvodOO": 250.0, "uhrHot": 241.7, "uhrZaokr": 0.04, "uhrKarta": 1310.89}, "OO|RP1|2026-06-10": {"obrat": 139.06, "karta": 108.56, "dpMartinus": 30.0, "odvodOO": 40.0, "uhrHot": 39.6, "uhrZaokr": 0.01, "uhrKarta": 143.43}, "OO|RP2|2026-06-10": {"odvod": 250.0, "obrat": 815.27, "zaokr": 0.07, "karta": 537.01, "dpMartinus": 24.93, "odvodOO": 200.0, "uhrHot": 207.6, "uhrZaokr": 0.01, "uhrKarta": 833.37, "dpMartinus2": 95.0}, "FXF|FX15|2026-06-01": {"odvod": 260.0, "obrat": 1966.64, "karta": 1367.72, "qerko": 354.97, "tringelty": 14.37}, "FXF|FX15|2026-06-02": {"odvod": 200.0, "obrat": 1738.36, "karta": 1218.24, "upKarta": 3.4, "qerko": 311.65, "tringelty": 16.05}, "FXF|FX15|2026-06-03": {"odvod": 325.0, "obrat": 1848.31, "karta": 1202.97, "qerko": 303.85, "tringelty": 22.63}, "FXF|FX15|2026-06-04": {"vkladBanka": 1530.0, "odvod": 185.0, "obrat": 1658.09, "karta": 1149.63, "qerko": 289.31, "tringelty": 17.51}, "FXF|FX15|2026-06-05": {"odvod": 230.0, "prevodMalaKasa": 85.0, "obrat": 2187.85, "karta": 1641.27, "qerko": 290.86, "tringelty": 17.76}, "FXF|FX15|2026-06-06": {"odvod": 270.0, "obrat": 1513.47, "karta": 978.26, "qerko": 272.81, "tringelty": 13.83}, "FXF|FX15|2026-06-07": {"odvod": 120.0, "obrat": 1304.15, "karta": 931.1, "qerko": 214.18, "tringelty": 13.28}, "FXF|FX15|2026-06-08": {"odvod": 200.0, "obrat": 1560.72, "karta": 1031.84, "qerko": 321.52, "tringelty": 20.84}, "FXF|FX15|2026-06-09": {"odvod": 210.0, "prevodMalaKasa": 110.0, "obrat": 1843.0, "karta": 1365.0, "upKarta": 3.9, "qerko": 252.93, "tringelty": 14.21}, "FXF|FX15|2026-06-10": {"vkladBanka": 1020.0}}, "days": {"KK|2026-06-04": {"vkladBanka": 7910.0}, "KK|2026-06-10": {"prevodOffice": 600.0, "vkladBanka": 5930.0}, "OO|2026-06-04": {"vkladBankaOO": 1860.0}, "OO|2026-06-10": {"vkladBankaOO": 1360.0}}, "blocky": {"KK|2026-06": [{"datum": "2026-06-04", "suma": 29.8, "ucel": "Majo cestovné"}, {"datum": "2026-06-05", "suma": 70.0, "ucel": "Oprava umývačky"}]}, "monthMeta": {}, "settings": {"startMonth": "2026-06", "openingDrawer": {"KK|POS1": 488.7, "KK|POS2": 388.82, "KK|POS3": 312.65, "KK|POS4": 335.3, "KK|POS5": 412.29, "OO|RP1|A3": 374.85, "OO|RP1|OO": 332.8, "OO|RP2|A3": 305.89, "OO|RP2|OO": 212.1, "OO|RP3|A3": 245.55, "OO|RP3|OO": 297.75, "FXF|FX15": 278.28, "FXF|MALAKASA": 43.25}, "openingCash": {"KK": 8496.05, "OO": 1682.65, "FXF": 1066.53, "MALAKASA": 0}}};
+function loadDemo(){
+  if(Object.keys(S.entries).length && !confirm('Nahrať ukážkové dáta z júna 2026? Prepíšu existujúce zápisy.')) return;
+  S = JSON.parse(JSON.stringify(DEMO)); save();
+  UI.ym='2026-06'; UI.date='2026-06-01'; UI.unit='KK'; UI.reg='POS5'; UI.tab='prehlad';
+  render();
+}
+
+// Pri úplne prvom otvorení (prázdne úložisko a nebolo ešte zámerne vymazané)
+// sa rovno nahrajú ukážkové dáta, aby bolo čo vidieť.
+if(!localStorage.getItem(LS_KEY) && !localStorage.getItem(LS_KEY+'-touched')){
+  S = JSON.parse(JSON.stringify(DEMO)); save();
+  UI.ym='2026-06'; UI.date='2026-06-01'; UI.unit='KK'; UI.reg='POS5'; UI.tab='prehlad';
+}
+
+render();
+</script>
+</body>
+</html>

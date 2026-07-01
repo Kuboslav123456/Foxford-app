@@ -2827,10 +2827,10 @@ export default function App() {
                     Zatiaľ žiadne odpisy na dnes — vyhľadaj produkt vyššie
                   </div>
                 ) : todayEntries.map(entry => (
-                  <div key={entry.id} style={{ marginBottom:10, paddingBottom:10, borderBottom:`1px solid ${C.border}` }}>
+                  <div key={entry.id} style={{ marginBottom:8, background:'rgba(150,120,80,0.07)', border:`1px solid ${C.borderM}`, borderRadius:14, padding:'10px 12px' }}>
                     {/* Riadok: názov + qty + jednotka + zmazať */}
                     <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
-                      <div style={{ flex:1, fontSize:13, fontWeight:600, color:C.text, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{entry.name}</div>
+                      <div style={{ flex:1, fontSize:14, fontWeight:700, color:C.text, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{entry.name}</div>
                       {/* Qty — tap otvorí numpad (rovnaký ako v Sklade) */}
                       <div
                         onPointerDown={e => { tapStartRef.current = { x: e.clientX, y: e.clientY }; }}
@@ -2874,7 +2874,7 @@ export default function App() {
                 <div style={{ marginTop: todayEntries.length > 0 ? 10 : 4 }}>
                   <div style={{ fontSize:11, fontWeight:700, color:C.sub, letterSpacing:.5, textTransform:'uppercase', marginBottom:6 }}>💬 Odkaz kolegovi</div>
                   <textarea
-                    placeholder="Zanechaj odkaz pre ďalšiu smenu…"
+                    placeholder="Zanechaj odkaz pre ďalšiu smenu… (napr. Zajtra končí spotreba pre ovocný džús!)"
                     value={todayData.note}
                     onChange={e => setDayNote(todayKey, e.target.value)}
                     rows={2}
@@ -3686,12 +3686,12 @@ export default function App() {
         <div style={{ position:'fixed', inset:0, zIndex:3500 }}>
           {/* Blur vrstva — samostatný sibling bez detí: písanie do numpadu ju neinvaliduje,
               takže prehliadač neprepočítava celoobrazovkový blur na každé ťuknutie => plynulé */}
-          <div onPointerDown={numpadCancel}
+          <div onPointerDown={e => e.preventDefault()} onPointerUp={e => { e.preventDefault(); e.stopPropagation(); numpadCancel(); }}
             style={{ position:'absolute', inset:0, background:'rgba(30,22,8,.55)',
                      backdropFilter:'blur(5px)', WebkitBackdropFilter:'blur(5px)' }} />
           {/* Obsah nad blur vrstvou */}
           <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', padding:24, pointerEvents:'none' }}>
-          <div onPointerDown={e => e.stopPropagation()} className="pop-in"
+          <div onPointerDown={e => e.stopPropagation()} onPointerUp={e => e.stopPropagation()} className="pop-in"
             style={{ pointerEvents:'auto', background:C.modal, border:`1px solid ${C.borderM}`, width:'100%', maxWidth:340,
                      borderRadius:26, padding:'22px 18px 20px', boxShadow:'0 12px 48px rgba(0,0,0,.2)' }}>
 
@@ -3760,13 +3760,13 @@ export default function App() {
 
             {/* Confirm + Cancel */}
             <div style={{ display:'flex', gap:10, marginTop:4 }}>
-              <button onPointerDown={e => { e.preventDefault(); numpadCancel(); }}
+              <button onPointerDown={e => e.preventDefault()} onPointerUp={e => { e.preventDefault(); e.stopPropagation(); numpadCancel(); }}
                 style={{ flex:1, padding:'14px', borderRadius:14, border:`1px solid ${C.border}`,
                          background:'transparent', color:C.sub, fontWeight:700, fontSize:14,
                          cursor:'pointer', fontFamily:'inherit' }}>
                 Zrušiť
               </button>
-              <button onPointerDown={e => { e.preventDefault(); numpadConfirm(); }}
+              <button onPointerDown={e => e.preventDefault()} onPointerUp={e => { e.preventDefault(); e.stopPropagation(); numpadConfirm(); }}
                 style={{ flex:2, padding:'14px', borderRadius:14, border:`1px solid ${C.goldLine}`,
                          background:`linear-gradient(135deg, ${C.gold}, #d4903a)`,
                          color:'#fff', fontWeight:800, fontSize:16,
