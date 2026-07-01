@@ -2826,7 +2826,9 @@ export default function App() {
                   <div style={{ textAlign:'center', color:C.muted, fontSize:13, padding:'16px 0' }}>
                     Zatiaľ žiadne odpisy na dnes — vyhľadaj produkt vyššie
                   </div>
-                ) : todayEntries.map(entry => (
+                ) : todayEntries.map(entry => {
+                  const catalogUnit = invData.flatMap(g => g.items).find(i => i.id === entry.itemId)?.unit || entry.unit;
+                  return (
                   <div key={entry.id} style={{ marginBottom:8, background:'rgba(150,120,80,0.07)', border:`1px solid ${C.borderM}`, borderRadius:14, padding:'10px 12px' }}>
                     {/* Riadok: názov + qty + jednotka + zmazať */}
                     <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
@@ -2834,7 +2836,7 @@ export default function App() {
                       {/* Qty — tap otvorí numpad (rovnaký ako v Sklade) */}
                       <div
                         onPointerDown={e => { tapStartRef.current = { x: e.clientX, y: e.clientY }; }}
-                        onPointerUp={e => { if (Math.abs(e.clientX - tapStartRef.current.x) + Math.abs(e.clientY - tapStartRef.current.y) < 10) setInvNumpad({ kind:'odpis', itemId: todayKey, rowId: entry.id, value: entry.qty || '', unit: entry.unit, itemName: entry.name, displayUnit: entry.unit }); }}
+                        onPointerUp={e => { if (Math.abs(e.clientX - tapStartRef.current.x) + Math.abs(e.clientY - tapStartRef.current.y) < 10) setInvNumpad({ kind:'odpis', itemId: todayKey, rowId: entry.id, value: entry.qty || '', unit: catalogUnit, itemName: entry.name, displayUnit: catalogUnit }); }}
                         style={{
                           width:70, padding:'9px 8px', borderRadius:12, boxSizing:'border-box',
                           border:`1px solid ${entry.qty ? C.goldLine : C.border}`,
@@ -2848,7 +2850,7 @@ export default function App() {
                         }}>
                         {entry.qty || '0'}
                       </div>
-                      <span style={{ fontSize:11, fontWeight:700, color:C.gold, border:`1px solid ${C.goldLine}`, padding:'3px 8px', borderRadius:8, flexShrink:0 }}>{entry.unit}</span>
+                      <span style={{ fontSize:11, fontWeight:700, color:C.gold, border:`1px solid ${C.goldLine}`, padding:'3px 8px', borderRadius:8, flexShrink:0 }}>{catalogUnit}</span>
                       <span onClick={() => removeOdpis(todayKey, entry.id)} style={{ color:C.muted, fontSize:16, cursor:'pointer', flexShrink:0, lineHeight:1 }}>✕</span>
                     </div>
                     {/* Dôvod odpisu — chips */}
@@ -2868,7 +2870,8 @@ export default function App() {
                       })}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
 
                 {/* Odkaz kolegovi */}
                 <div style={{ marginTop: todayEntries.length > 0 ? 10 : 4 }}>
