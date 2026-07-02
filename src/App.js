@@ -2395,6 +2395,24 @@ export default function App() {
               </div>
             )}
 
+            {/* Banner — inventúra je otvorená */}
+            {(() => {
+              const filledCount = invData.reduce((s,g) => s + g.items.filter(i => (invQty[i.id]||[]).some(r => r.qty)).length, 0);
+              if (!filledCount) return null;
+              return (
+                <div style={{ marginBottom:10, padding:'13px 16px', borderRadius:14,
+                              background:`linear-gradient(135deg, rgba(42,154,85,0.13), rgba(42,154,85,0.06))`,
+                              border:`2px solid ${C.ok}`,
+                              display:'flex', alignItems:'center', gap:10 }}>
+                  <span style={{ fontSize:20, lineHeight:1 }}>📋</span>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:900, color:C.ok, letterSpacing:.8, textTransform:'uppercase' }}>Inventúra je otvorená</div>
+                    <div style={{ fontSize:11, color:C.sub, marginTop:2 }}>Vpísaných {filledCount} položiek — pokračuj alebo spusti novú inventúru</div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Search */}
             <Glass style={{ padding:'13px 16px', marginBottom:10, display:'flex', alignItems:'center', gap:10,
                             border:`2px solid ${C.goldLine}`,
