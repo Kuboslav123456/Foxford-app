@@ -811,7 +811,9 @@ export default function App() {
       const ms = midnight - now;
       timer = setTimeout(() => {
         // 1) Odošli denné úlohy a odpisy končiaceho dňa + zapíš reset do localStorage
-        performDailyClose(new Date());
+        // POZN: o polnoci new Date() je už nový deň — posielame včerajší (deň ktorý práve skončil)
+        const endingDay = new Date(); endingDay.setDate(endingDay.getDate() - 1);
+        performDailyClose(endingDay);
         localStorage.setItem('foxford-last-reset-date', new Date().toDateString());
         // 2) Aktualizuj React state — načítaj čerstvý stav z localStorage (performDailyClose ho zapísal, vrátane príp. víkendového resetu)
         setTasks(safeParse('foxford-tasks', INIT_TASKS));
