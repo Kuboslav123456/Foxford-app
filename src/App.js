@@ -1312,7 +1312,7 @@ export default function App() {
   const needInsp = () => { if (!inspectors[subTab].trim()) { doShake(setShakeInsp, inspRef); return false; } return true; };
 
   // ── ODPISY HELPERS ───────────────────────────────────────────────────────
-  const ODPISOVY_DOVODY = ['Spotreba', 'Pokazené', 'Rozbité', 'Ochutnávka'];
+  const ODPISOVY_DOVODY = ['Spotreba', 'Pokazené', 'Rozbité', 'Ochutnávka', 'Školenie'];
 
   // backward compat: starý formát bol pole, nový je { entries, note }
   const getDayData = (key) => { const d = odpisy[key]; if (!d) return { entries: [], note: '' }; if (Array.isArray(d)) return { entries: d, note: '' }; return { entries: d.entries || [], note: d.note || '' }; };
@@ -2779,7 +2779,7 @@ export default function App() {
             : [];
           const { year, month } = odpisySummaryDate;
           const summary = getMonthSummary(year, month);
-          const dovorColors = { 'Spotreba': C.ok, 'Pokazené': C.err, 'Rozbité': '#d07010', 'Ochutnávka': '#7a60b0' };
+          const dovorColors = { 'Spotreba': C.ok, 'Pokazené': C.err, 'Rozbité': '#d07010', 'Ochutnávka': '#7a60b0', 'Školenie': '#1a8080' };
           // ── Prehliadač po dňoch ──────────────────────────────────────────────
           const keyToDate = (key) => { const [y, m, dd] = key.split('-').map(Number); return new Date(y, m - 1, dd); };
           const shiftBrowse = (delta) => setOdpisyBrowseKey(k => { const dt = keyToDate(k); dt.setDate(dt.getDate() + delta); return localDayKey(dt); });
