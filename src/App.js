@@ -453,7 +453,8 @@ function performDailyClose(endingDate) {
     const denne = Array.isArray(tasksData.denné) ? tasksData.denné : [];
     const inspectorDenne = (inspectorsData.denné || '').trim();
     const hadActivity = denne.some(t => t.done || t.issue) || inspectorDenne;
-    if (denne.length > 0 && hadActivity) {
+    const denneAutoSent = localStorage.getItem('foxford-denne-autosent') === sendDate;
+    if (denne.length > 0 && hadActivity && !denneAutoSent) {
       sendOrQueue(url, 'tasks_summary', {
         date: sendDate,
         category: 'denné',
@@ -1643,10 +1644,16 @@ export default function App() {
   const allResolved = (list) => { const t = list.filter(x => !x.header); return t.length > 0 && t.every(x => x.done || x.issue); };
 
   const autoSend = (updatedList) => {
-    // denné rieši polnočná uzávierka; víkendové idú cez pondelkový/nočný/ručný flush (žiadne okamžité odoslanie)
-    if (subTab === 'denné' || subTab === 'víkendové') return;
+    // víkendové idú cez pondelkový/nočný/ručný flush (žiadne okamžité odoslanie)
+    if (subTab === 'víkendové') return;
     if (!allResolved(updatedList)) return;
     if (!inspectors[subTab].trim()) return;
+    // denné: dedup — polnočná uzávierka preskočí ak sme už dnes odoslali
+    if (subTab === 'denné') {
+      const todayStr = new Date().toLocaleDateString('sk-SK');
+      if (localStorage.getItem('foxford-denne-autosent') === todayStr) return;
+      localStorage.setItem('foxford-denne-autosent', todayStr);
+    }
     sendToSheets('tasks_summary', {
       date: new Date().toLocaleDateString('sk-SK'),
       category: subTab,
