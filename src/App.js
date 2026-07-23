@@ -40,7 +40,7 @@ const hexToRgba = (hex, a) => {
 
 const BRANCH_PIN = '1234';
 // Zvýš toto číslo keď zmeníš INIT_INV — všetky pobočky dostanú nový základ
-const INV_DATA_VERSION = '3';
+const INV_DATA_VERSION = '4';
 
 const BRANCHES = [
   { name: 'Obchodná', url: 'https://script.google.com/macros/s/AKfycbzlcPT4Yu8Pk-Y_5-9-oOHag0oVsFVS-gAtwujfDqn0yjXwEiKcfKbcVwmoW1UF5te9rA/exec' },
@@ -294,11 +294,11 @@ const INIT_INV = [
     { id: 'p3658351', name: 'Targa tonic',                 portosCode: '3658351', unit: 'ks' },
   ]},
   { category: 'Zmrzlina & dželato', items: [
-    { id: 'p22',     name: 'Zmrzlina vanilka',                    portosCode: '22',     unit: 'ks' },
-    { id: 'p233302', name: 'Dželato malinový cheesecake',         portosCode: '233302', unit: 'ks' },
-    { id: 'p233303', name: 'Dželato čoko-koko vegán',             portosCode: '233303', unit: 'ks' },
-    { id: 'p233304', name: 'Dželato Sorbet citrón+mäta+limetka', portosCode: '233304', unit: 'ks' },
-    { id: 'p233305', name: 'Dželato Sorbet lesná zmes',           portosCode: '233305', unit: 'ks' },
+    { id: 'p22',     name: 'Zmrzlina vanilka',                    portosCode: '22',     unit: 'kg' },
+    { id: 'p233302', name: 'Dželato malinový cheesecake',         portosCode: '233302', unit: 'kg' },
+    { id: 'p233303', name: 'Dželato čoko-koko vegán',             portosCode: '233303', unit: 'kg' },
+    { id: 'p233304', name: 'Dželato Sorbet citrón+mäta+limetka', portosCode: '233304', unit: 'kg' },
+    { id: 'p233305', name: 'Dželato Sorbet lesná zmes',           portosCode: '233305', unit: 'kg' },
   ]},
   { category: 'Suroviny & doplnky', items: [
     { id: 'p5',       name: 'Foxid Acid',                   portosCode: '5',       unit: 'ks' },
