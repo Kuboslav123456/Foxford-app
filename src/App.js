@@ -76,7 +76,7 @@ const MENINY = {
 const TASKS_VERSION = '3';
 
 const INIT_TASKS = {
-  denné: [
+  ranné: [
     { id: 101, text: 'Zapnutie umývačky riadu + vyvešať/zvešať handry', done: false, time: null, issue: null },
     { id: 102, text: 'Správne otvorenie pokladne (problémy hlásiť VZ alebo Veve)', done: false, time: null, issue: null },
     { id: 103, text: 'Dať piecť croissanty a praclíky + zapísať teploty chladničiek (návod pri piecke)', done: false, time: null, issue: null },
@@ -95,6 +95,7 @@ const INIT_TASKS = {
     { id: 116, text: 'Poriadok pod stolmi, pozmetať omrvinky', done: false, time: null, issue: null },
     { id: 117, text: 'Očistiť zapisovací hárok z WC', done: false, time: null, issue: null },
   ],
+  večerné: [],
   víkendové: [
     { id: 200, text: 'Rajón', header: true },
     { id: 201, text: 'Utrieť od prachu komody pri 306, 310, 501 a všetky lampy', done: false, time: null, issue: null },
@@ -450,19 +451,20 @@ function performDailyClose(endingDate) {
     try { tasksData = JSON.parse(localStorage.getItem('foxford-tasks')) || {}; } catch (_) {}
     let inspectorsData = {};
     try { inspectorsData = JSON.parse(localStorage.getItem('foxford-inspectors')) || {}; } catch (_) {}
-    const denne = Array.isArray(tasksData.denné) ? tasksData.denné : [];
-    const inspectorDenne = (inspectorsData.denné || '').trim();
-    const hadActivity = denne.some(t => t.done || t.issue) || inspectorDenne;
-    const denneAutoSent = localStorage.getItem('foxford-denne-autosent') === sendDate;
-    if (denne.length > 0 && hadActivity && !denneAutoSent) {
+    const ranne = Array.isArray(tasksData.ranné) ? tasksData.ranné : [];
+    const inspRanne = (inspectorsData.ranné || '').trim();
+    if (ranne.length > 0 && (ranne.some(t => t.done || t.issue) || inspRanne) && localStorage.getItem('foxford-ranné-autosent') !== sendDate) {
       sendOrQueue(url, 'tasks_summary', {
-        date: sendDate,
-        category: 'denné',
-        inspector: inspectorDenne || 'Anonym',
-        tasks: denne.map(t => ({
-          text: t.text, done: !!t.done,
-          time: t.time || null, date: t.date || null, issue: t.issue || null, by: t.by || null,
-        })),
+        date: sendDate, category: 'ranné', inspector: inspRanne || 'Anonym',
+        tasks: ranne.map(t => ({ text: t.text, done: !!t.done, time: t.time || null, date: t.date || null, issue: t.issue || null, by: t.by || null })),
+      });
+    }
+    const vecerne = Array.isArray(tasksData.večerné) ? tasksData.večerné : [];
+    const inspVecerne = (inspectorsData.večerné || '').trim();
+    if (vecerne.length > 0 && (vecerne.some(t => t.done || t.issue) || inspVecerne) && localStorage.getItem('foxford-večerné-autosent') !== sendDate) {
+      sendOrQueue(url, 'tasks_summary', {
+        date: sendDate, category: 'večerné', inspector: inspVecerne || 'Anonym',
+        tasks: vecerne.map(t => ({ text: t.text, done: !!t.done, time: t.time || null, date: t.date || null, issue: t.issue || null, by: t.by || null })),
       });
     }
 
@@ -531,14 +533,19 @@ function performDailyClose(endingDate) {
     }
 
     // 3) Reset localStorage stavu pre nový deň — zachovať vlastné úlohy, len resetnúť stav
-    const baseDenne = (Array.isArray(tasksData.denné) && tasksData.denné.length > 0) ? tasksData.denné : INIT_TASKS.denné;
-    const resetTasks = { ...tasksData, denné: baseDenne.map(t => ({ ...t, done: false, time: null, date: null, issue: null, by: null })) };
+    const baseRanne = (Array.isArray(tasksData.ranné) && tasksData.ranné.length > 0) ? tasksData.ranné : INIT_TASKS.ranné;
+    const baseVecerne = (Array.isArray(tasksData.večerné) && tasksData.večerné.length > 0) ? tasksData.večerné : INIT_TASKS.večerné;
+    const resetTasks = {
+      ...tasksData,
+      ranné: baseRanne.map(t => ({ ...t, done: false, time: null, date: null, issue: null, by: null })),
+      večerné: baseVecerne.map(t => ({ ...t, done: false, time: null, date: null, issue: null, by: null })),
+    };
     if (flushVikend) {
       const baseVik = (Array.isArray(tasksData.víkendové) && tasksData.víkendové.length > 0) ? tasksData.víkendové : INIT_TASKS.víkendové;
       resetTasks.víkendové = baseVik.map(t => t.header ? t : ({ ...t, done: false, time: null, date: null, issue: null, by: null }));
     }
     localStorage.setItem('foxford-tasks', JSON.stringify(resetTasks));
-    const resetInspectors = { ...inspectorsData, denné: '' };
+    const resetInspectors = { ...inspectorsData, ranné: '', večerné: '' };
     if (flushVikend) resetInspectors.víkendové = '';
     localStorage.setItem('foxford-inspectors', JSON.stringify(resetInspectors));
     localStorage.setItem('foxford-haccp-date', '');
@@ -587,6 +594,7 @@ export default function App() {
   const [uiZoom, setUiZoom]     = useState(() => parseFloat(localStorage.getItem('foxford-zoom') || '1'));
   const [tab, setTab]           = useState('tasks');
   const [subTab, setSubTab]     = useState('denné');
+  const [denneTab, setDenneTab] = useState('ranné');
   const [expCat, setExpCat]     = useState(null);
   const [quickTask, setQuickTask] = useState(null);
   const [pressingId, setPressingId] = useState(null);
@@ -647,7 +655,10 @@ export default function App() {
     const saved = localStorage.getItem('foxford-tasks');
     let parsed = INIT_TASKS;
     if (saved) { try { parsed = JSON.parse(saved); } catch (_) { parsed = INIT_TASKS; } }
-    // Migrácia checklistu: pri novej verzii nahraď denné + víkendové novým základom.
+    // Migrácia: starý kľúč denné → ranné
+    if (parsed.denné && !parsed.ranné) { parsed = { ...parsed, ranné: parsed.denné }; delete parsed.denné; }
+    if (!parsed.večerné) parsed = { ...parsed, večerné: [] };
+    // Migrácia checklistu: pri novej verzii nahraď ranné + víkendové novým základom.
     // Zachováva done/time/issue/by pre úlohy s rovnakým ID — len text/štruktúra sa obnoví.
     // (mesačné zostávajú zachované)
     if (localStorage.getItem('foxford-tasks-version') !== TASKS_VERSION) {
@@ -660,7 +671,7 @@ export default function App() {
       };
       parsed = {
         ...parsed,
-        denné: mergeDone(INIT_TASKS.denné, parsed.denné),
+        ranné: mergeDone(INIT_TASKS.ranné, parsed.ranné),
         víkendové: mergeDone(INIT_TASKS.víkendové, parsed.víkendové),
       };
       localStorage.setItem('foxford-tasks-version', TASKS_VERSION);
@@ -669,7 +680,12 @@ export default function App() {
     return parsed;
   });
 
-  const [inspectors, setInspectors] = useState(() => safeParse('foxford-inspectors', { denné: '', víkendové: '', mesačné: '' }));
+  const [inspectors, setInspectors] = useState(() => {
+    const saved = safeParse('foxford-inspectors', { ranné: '', večerné: '', víkendové: '', mesačné: '' });
+    if (saved.denné !== undefined && saved.ranné === undefined) { saved.ranné = saved.denné; delete saved.denné; }
+    if (saved.večerné === undefined) saved.večerné = '';
+    return saved;
+  });
   const [newTask, setNewTask]       = useState('');
   const [tempFields, setTempFields] = useState(() => {
     // Migrácia: pri novej verzii nahraď zoznam zariadení na všetkých zariadeniach (prepíše vlastné úpravy)
@@ -818,7 +834,7 @@ export default function App() {
         localStorage.setItem('foxford-last-reset-date', new Date().toDateString());
         // 2) Aktualizuj React state — načítaj čerstvý stav z localStorage (performDailyClose ho zapísal, vrátane príp. víkendového resetu)
         setTasks(safeParse('foxford-tasks', INIT_TASKS));
-        setInspectors(safeParse('foxford-inspectors', { denné: '', víkendové: '', mesačné: '' }));
+        setInspectors(safeParse('foxford-inspectors', { ranné: '', večerné: '', víkendové: '', mesačné: '' }));
         setLastHaccpDate('');
         setLastHaccpDateVecerne('');
         // Reset všetkých temp polí — vrátane akýchkoľvek čo boli pridané po mount-e
@@ -1310,7 +1326,9 @@ export default function App() {
     if (invNumpad.isNew) removeQtyRow(invNumpad.itemId, invNumpad.rowId);
     setInvNumpad(null);
   };
-  const needInsp = () => { if (!inspectors[subTab].trim()) { doShake(setShakeInsp, inspRef); return false; } return true; };
+  const effectiveTab = subTab === 'denné' ? denneTab : subTab;
+
+  const needInsp = () => { if (!inspectors[effectiveTab].trim()) { doShake(setShakeInsp, inspRef); return false; } return true; };
 
   // ── ODPISY HELPERS ───────────────────────────────────────────────────────
   const ODPISOVY_DOVODY = ['Spotreba', 'Pokazené', 'Rozbité', 'Ochutnávka', 'Školenie'];
@@ -1615,7 +1633,7 @@ export default function App() {
   };
 
   const pct = () => {
-    const t = (tasks[subTab] || []).filter(x => !x.header);
+    const t = (tasks[effectiveTab] || []).filter(x => !x.header);
     return t.length === 0 ? 0 : Math.round(t.filter(x => x.done).length / t.length * 100);
   };
 
@@ -1636,7 +1654,7 @@ export default function App() {
   const onTouchEnd = () => { touchX.current = null; touchY.current = null; };
 
   const uncheckedTask = (t) => {
-    setTasks({ ...tasks, [subTab]: tasks[subTab].map(x => x.id === t.id ? { ...x, done: false, time: null, issue: null, by: null } : x) });
+    setTasks({ ...tasks, [effectiveTab]: tasks[effectiveTab].map(x => x.id === t.id ? { ...x, done: false, time: null, issue: null, by: null } : x) });
     setConfirmUndo(null);
   };
 
@@ -1647,17 +1665,18 @@ export default function App() {
     // víkendové idú cez pondelkový/nočný/ručný flush (žiadne okamžité odoslanie)
     if (subTab === 'víkendové') return;
     if (!allResolved(updatedList)) return;
-    if (!inspectors[subTab].trim()) return;
-    // denné: dedup — polnočná uzávierka preskočí ak sme už dnes odoslali
+    if (!inspectors[effectiveTab].trim()) return;
+    // ranné/večerné: dedup — polnočná uzávierka preskočí ak sme už dnes odoslali
     if (subTab === 'denné') {
       const todayStr = new Date().toLocaleDateString('sk-SK');
-      if (localStorage.getItem('foxford-denne-autosent') === todayStr) return;
-      localStorage.setItem('foxford-denne-autosent', todayStr);
+      const dedupKey = `foxford-${effectiveTab}-autosent`;
+      if (localStorage.getItem(dedupKey) === todayStr) return;
+      localStorage.setItem(dedupKey, todayStr);
     }
     sendToSheets('tasks_summary', {
       date: new Date().toLocaleDateString('sk-SK'),
-      category: subTab,
-      inspector: inspectors[subTab],
+      category: effectiveTab,
+      inspector: inspectors[effectiveTab],
       tasks: updatedList.filter(t => !t.header).map(t => ({
         text: t.text,
         done: t.done,
@@ -1680,9 +1699,9 @@ export default function App() {
     const now = new Date();
     const time = now.toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' });
     const date = now.toLocaleDateString('sk-SK', { day: 'numeric', month: 'numeric' });
-    const by = inspectors[subTab].trim(); // kto úlohu splnil
-    const updated = tasks[subTab].map(x => x.id === t.id ? { ...x, done: true, time, date, by, issue: null } : x);
-    setTasks({ ...tasks, [subTab]: updated });
+    const by = inspectors[effectiveTab].trim(); // kto úlohu splnil
+    const updated = tasks[effectiveTab].map(x => x.id === t.id ? { ...x, done: true, time, date, by, issue: null } : x);
+    setTasks({ ...tasks, [effectiveTab]: updated });
     autoSend(updated);
     if (allResolved(updated)) setTimeout(() => setCelebrate(true), 300);
   };
@@ -1707,9 +1726,9 @@ export default function App() {
   const reportIssue = (reason, e) => {
     if (e) { e.preventDefault(); e.stopPropagation(); }
     if (!needInsp()) { setQuickTask(null); return; }
-    const by = inspectors[subTab].trim(); // kto problém nahlásil
-    const updated = tasks[subTab].map(x => x.id === quickTask.id ? { ...x, done: false, time: null, issue: reason, by } : x);
-    setTasks({ ...tasks, [subTab]: updated });
+    const by = inspectors[effectiveTab].trim(); // kto problém nahlásil
+    const updated = tasks[effectiveTab].map(x => x.id === quickTask.id ? { ...x, done: false, time: null, issue: reason, by } : x);
+    setTasks({ ...tasks, [effectiveTab]: updated });
     autoSend(updated);
     if (allResolved(updated)) setTimeout(() => setCelebrate(true), 300);
     setQuickTask(null);
@@ -1718,18 +1737,18 @@ export default function App() {
   const resetList = () => setConfirmReset(true);
 
   const doReset = () => {
-    if (!inspectors[subTab].trim()) { doShake(setShakeInsp, inspRef); setConfirmReset(false); return; }
-    const taskList = (tasks[subTab] || []).filter(t => !t.header);
+    if (!inspectors[effectiveTab].trim()) { doShake(setShakeInsp, inspRef); setConfirmReset(false); return; }
+    const taskList = (tasks[effectiveTab] || []).filter(t => !t.header);
     if (taskList.length > 0) {
       sendToSheets('tasks_summary', {
         date: new Date().toLocaleDateString('sk-SK'),
-        category: subTab,
-        inspector: inspectors[subTab],
+        category: effectiveTab,
+        inspector: inspectors[effectiveTab],
         tasks: taskList.map(t => ({ text: t.text, done: t.done, time: t.time || null, date: t.date || null, issue: t.issue || null, by: t.by || null })),
       });
     }
-    setTasks({ ...tasks, [subTab]: tasks[subTab].map(t => t.header ? t : ({ ...t, done: false, time: null, issue: null, by: null })) });
-    setInspectors(prev => ({ ...prev, [subTab]: '' }));
+    setTasks({ ...tasks, [effectiveTab]: tasks[effectiveTab].map(t => t.header ? t : ({ ...t, done: false, time: null, issue: null, by: null })) });
+    setInspectors(prev => ({ ...prev, [effectiveTab]: '' }));
     if (subTab === 'víkendové') localStorage.setItem('foxford-vikend-week-done', weekMondayKey(new Date()));
     setConfirmReset(false);
   };
@@ -1952,16 +1971,31 @@ export default function App() {
               ))}
             </div>
 
+            {subTab === 'denné' && (
+              <div style={{ display:'flex', gap:4, marginTop:4, marginBottom:2 }}>
+                {['ranné','večerné'].map(t => (
+                  <button key={t} onClick={() => setDenneTab(t)} style={{
+                    flex:1, padding:'7px 4px', borderRadius:9,
+                    border:`1px solid ${denneTab===t ? C.gold+'55' : C.border}`,
+                    background: denneTab===t ? C.gold+'14' : 'transparent',
+                    color: denneTab===t ? C.gold : C.muted,
+                    fontWeight:600, fontSize: isTablet ? 10 : 9, letterSpacing:.5, textTransform:'uppercase',
+                    cursor:'pointer', fontFamily:'inherit',
+                  }}>{t}</button>
+                ))}
+              </div>
+            )}
+
             {/* Top row: inspector + progress side-by-side on tablet */}
             <div style={{ display: isTablet ? 'grid' : 'block', gridTemplateColumns: '1fr 1fr', gap: 10, alignItems: 'start', marginBottom: isTablet ? 0 : 0 }}>
             {/* Inspector */}
             <Glass accent style={{ padding:'14px 16px' }}>
-              <Tag text={`Kontroluje — ${subTab}`} />
+              <Tag text={`Kontroluje — ${effectiveTab}`} />
               <Inp ref={inspRef} type="text" placeholder="Tvoje meno…"
-                value={inspectors[subTab]}
-                onChange={e => { const v = e.target.value; setInspectors(prev => ({ ...prev, [subTab]: v })); }}
+                value={inspectors[effectiveTab] || ''}
+                onChange={e => { const v = e.target.value; setInspectors(prev => ({ ...prev, [effectiveTab]: v })); }}
                 shake={shakeInsp}
-                style={{ marginTop:7, borderColor: inspectors[subTab] ? C.ok : C.err + '88' }} />
+                style={{ marginTop:7, borderColor: inspectors[effectiveTab] ? C.ok : C.err + '88' }} />
             </Glass>
 
             {/* Progress */}
@@ -1969,7 +2003,7 @@ export default function App() {
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
                 <Tag text="Postup" />
                 <span style={{ fontSize:13, fontWeight:800, color: pct()===100 ? C.ok : C.gold }}>
-                  {(tasks[subTab]||[]).filter(t=>t.done).length} / {(tasks[subTab]||[]).filter(t=>!t.header).length}
+                  {(tasks[effectiveTab]||[]).filter(t=>t.done).length} / {(tasks[effectiveTab]||[]).filter(t=>!t.header).length}
                 </span>
               </div>
               <div style={{ height:7, background:C.muted, borderRadius:4, overflow:'hidden' }}>
@@ -1984,17 +2018,17 @@ export default function App() {
               {editMode && (
               <div style={{ display:'flex', gap:8, marginBottom:8 }}>
                 <Inp value={newTask} onChange={e => setNewTask(e.target.value)}
-                  onKeyDown={e => { if(e.key==='Enter'&&newTask.trim()){setTasks({...tasks,[subTab]:[...(tasks[subTab]||[]),{id:Date.now(),text:newTask,done:false,time:null,issue:null}]});setNewTask('');} }}
+                  onKeyDown={e => { if(e.key==='Enter'&&newTask.trim()){setTasks({...tasks,[effectiveTab]:[...(tasks[effectiveTab]||[]),{id:Date.now(),text:newTask,done:false,time:null,issue:null}]});setNewTask('');} }}
                   placeholder="Pridať úlohu…"
                   style={{ flex:1, fontSize:14, padding:'10px 12px' }} />
-                <button onClick={() => { if(newTask.trim()){setTasks({...tasks,[subTab]:[...(tasks[subTab]||[]),{id:Date.now(),text:newTask,done:false,time:null,issue:null}]});setNewTask('');} }}
+                <button onClick={() => { if(newTask.trim()){setTasks({...tasks,[effectiveTab]:[...(tasks[effectiveTab]||[]),{id:Date.now(),text:newTask,done:false,time:null,issue:null}]});setNewTask('');} }}
                   style={{ width:42, borderRadius:12, border:`1px solid ${C.border}`, background:C.panelHov, color:C.gold, fontSize:22, fontWeight:300, cursor:'pointer' }}>+</button>
               </div>
               )}
 
               {/* Tasks — pri sekciách (nadpisoch) zachovaj poradie; inak urgentné hore, splnené dole */}
               {(() => {
-                const list = tasks[subTab] || [];
+                const list = tasks[effectiveTab] || [];
                 const hasSections = list.some(t => t.header);
                 return hasSections ? list : [...list].sort((a,b) => {
                   if (a.done !== b.done) return a.done ? 1 : -1;
@@ -2066,7 +2100,7 @@ export default function App() {
                   </div>
                 </div>
               ))}
-              {(tasks[subTab]||[]).length === 0 && (
+              {(tasks[effectiveTab]||[]).length === 0 && (
                 <div style={{ textAlign:'center', color:C.muted, fontSize:13, padding:'24px 0' }}>Žiadne úlohy</div>
               )}
             </Glass>
@@ -3565,7 +3599,7 @@ export default function App() {
                 Ponechať
               </button>
               <button onMouseDown={() => {
-                setTasks({ ...tasks, [subTab]: tasks[subTab].filter(x => x.id !== confirmDeleteTask.id) });
+                setTasks({ ...tasks, [effectiveTab]: tasks[effectiveTab].filter(x => x.id !== confirmDeleteTask.id) });
                 setConfirmDeleteTask(null);
               }} style={{ flex:1, padding:'13px', borderRadius:14, border:`1px solid ${C.err}44`, background:C.errDim, color:C.err, fontWeight:800, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
                 Áno, zmazať
@@ -3861,7 +3895,7 @@ export default function App() {
             {/* Urgent toggle */}
             <button onMouseDown={e => {
               e.stopPropagation();
-              setTasks({...tasks, [subTab]: tasks[subTab].map(x => x.id === quickTask.id ? {...x, urgent: !x.urgent} : x)});
+              setTasks({...tasks, [effectiveTab]: tasks[effectiveTab].map(x => x.id === quickTask.id ? {...x, urgent: !x.urgent} : x)});
               setQuickTask(null);
             }} style={{
               display:'block', width:'100%', padding:'14px 16px', marginBottom:7,
