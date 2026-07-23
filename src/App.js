@@ -73,7 +73,7 @@ const MENINY = {
 };
 
 // Zvýš pri zmene denného/víkendového checklistu — migrácia nahradí úlohy na všetkých zariadeniach
-const TASKS_VERSION = '3';
+const TASKS_VERSION = '4';
 
 const INIT_TASKS = {
   ranné: [
@@ -729,6 +729,7 @@ export default function App() {
       parsed = {
         ...parsed,
         ranné: mergeDone(INIT_TASKS.ranné, parsed.ranné),
+        večerné: mergeDone(INIT_TASKS.večerné, parsed.večerné),
         víkendové: mergeDone(INIT_TASKS.víkendové, parsed.víkendové),
       };
       localStorage.setItem('foxford-tasks-version', TASKS_VERSION);
