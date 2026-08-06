@@ -912,6 +912,7 @@ export default function App() {
   const fsLastWrittenRef = useRef('');              // naposledy zapísané dáta — zapisuje sa len pri zmene
   const [lastBackupAt, setLastBackupAt] = useState(() => +localStorage.getItem(LS_LAST_BACKUP) || 0);
   const [backupReminder, setBackupReminder] = useState(false);
+  const [cloudRestoring, setCloudRestoring] = useState(false);
 
   // ── DYNAMICKÁ FARBA POBOČKY ───────────────────────────────────────────────
   const branchGold = (branch && BRANCH_COLORS[branch]) || BASE_C.gold;
@@ -1441,6 +1442,35 @@ export default function App() {
       }
     };
     reader.readAsText(file);
+  };
+
+  // Obnova zo zálohy uloženej v tabuľke pobočky (GAS `?backup=latest`).
+  // Na tabletoch je to jediná cesta k zálohe — Android Chrome nevie vybrať súbor na disku.
+  const restoreFromCloud = async () => {
+    if (!scriptUrl || /^URL_POBOCKA/.test(scriptUrl) || !/^https?:\/\//.test(scriptUrl)) {
+      alert('Táto pobočka zatiaľ nemá napojenú tabuľku.');
+      return;
+    }
+    setCloudRestoring(true);
+    try {
+      const res = await fetch(`${scriptUrl}?backup=latest`);
+      const parsed = JSON.parse(await res.text());
+      if (parsed.error) { alert(parsed.error); return; }
+      if (parsed._app !== 'foxford' || !parsed.data || typeof parsed.data !== 'object') {
+        alert('V tabuľke zatiaľ nie je platná záloha.');
+        return;
+      }
+      const when = parsed._exported ? new Date(parsed._exported).toLocaleString('sk-SK') : 'neznámy dátum';
+      if (!window.confirm(`Obnoviť zálohu z tabuľky?\n\nPobočka: ${parsed._branch || '—'}\nUložená: ${when}\n\nAktuálne dáta v appke budú PREPÍSANÉ.`)) return;
+      Object.entries(parsed.data).forEach(([k, v]) => {
+        if (k.startsWith('foxford-') && typeof v === 'string') localStorage.setItem(k, v);
+      });
+      window.location.reload();
+    } catch (e) {
+      alert('Zálohu sa nepodarilo načítať: ' + e.message);
+    } finally {
+      setCloudRestoring(false);
+    }
   };
 
   const doShake = (setter, ref) => {
@@ -3018,6 +3048,19 @@ export default function App() {
             </div>
             <div style={{ fontSize:10, color:C.muted, textAlign:'center', marginTop:4, lineHeight:1.5 }}>
               Záloha obsahuje úlohy, katalóg, inventúru, odpisy aj nastavenia.<br />Ulož si ju pred výmenou zariadenia alebo čistením prehliadača.
+            </div>
+
+            {/* Obnova z tabuľky — na tablete jediná cesta k zálohe (súbor na disku Android nevie) */}
+            <button onClick={restoreFromCloud} disabled={cloudRestoring} style={{
+              width:'100%', padding:'12px', marginTop:8, borderRadius:14,
+              border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold,
+              fontWeight:800, fontSize:12.5, cursor: cloudRestoring ? 'default' : 'pointer',
+              fontFamily:'inherit', opacity: cloudRestoring ? .6 : 1,
+            }}>
+              {cloudRestoring ? '⏳ Načítavam zálohu…' : '☁ Obnoviť poslednú zálohu z tabuľky'}
+            </button>
+            <div style={{ fontSize:10, color:C.muted, textAlign:'center', marginTop:4, lineHeight:1.5 }}>
+              Appka si sama ukladá zálohu do tabuľky pobočky — odtiaľ ju stiahneš aj po vyčistení prehliadača.
             </div>
 
             {/* Auto-záloha na disk — len desktop Chrome/Edge (Android showSaveFilePicker nemá) */}
