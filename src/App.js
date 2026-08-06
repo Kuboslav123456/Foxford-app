@@ -613,6 +613,56 @@ function performDailyClose(endingDate) {
   }
 }
 
+// ── AUTO-ZÁLOHA NA DISK (File System Access API) ─────────────────────────────
+// Všetky dáta žijú len v localStorage jedného prehliadača — vymazanie dát stránky = strata
+// všetkého. Auto-záloha priebežne zapisuje snapshot do súboru na disku, ktorý si používateľ
+// raz vyberie (napr. v Dokumentoch alebo na OneDrive/Disku Google → rovno aj cloud záloha).
+// Handle na súbor sa pamätá v IndexedDB (do localStorage sa serializovať nedá).
+// Funguje len v desktop Chrome/Edge — Android Chrome showSaveFilePicker nemá (feature-detect).
+const LS_LAST_BACKUP = 'foxford-last-backup';   // timestamp poslednej zálohy (ručnej aj automatickej)
+const FS_DB = 'foxford-fs';
+const fsdbOpen = () => new Promise((res, rej) => {
+  const rq = indexedDB.open(FS_DB, 1);
+  rq.onupgradeneeded = () => rq.result.createObjectStore('h');
+  rq.onsuccess = () => res(rq.result);
+  rq.onerror = () => rej(rq.error);
+});
+async function fsdbGet(key) {
+  try {
+    const db = await fsdbOpen();
+    return await new Promise((res) => {
+      const g = db.transaction('h', 'readonly').objectStore('h').get(key);
+      g.onsuccess = () => res(g.result || null);
+      g.onerror = () => res(null);
+    });
+  } catch (_) { return null; }
+}
+async function fsdbSet(key, val) {
+  try {
+    const db = await fsdbOpen();
+    return await new Promise((res) => {
+      const tx = db.transaction('h', 'readwrite');
+      tx.objectStore('h').put(val, key);
+      tx.oncomplete = () => res(true);
+      tx.onerror = () => res(false);
+    });
+  } catch (_) { return false; }
+}
+// Snapshot všetkých foxford-* kľúčov — dynamický sken, žiadny hardcoded zoznam (nech sa pri
+// pridaní nového kľúča nedá zabudnúť). Timestamp zálohy sa vynecháva: nie sú to dáta a po
+// obnove starej zálohy by falošne resetol pripomienku.
+function backupSnapshotData() {
+  const keys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('foxford-') && k !== LS_LAST_BACKUP) keys.push(k);
+  }
+  keys.sort();
+  const data = {};
+  keys.forEach(k => { data[k] = localStorage.getItem(k); });
+  return data;
+}
+
 // ── APP ───────────────────────────────────────────────────────────────────────
 export default function App() {
 
@@ -853,6 +903,13 @@ export default function App() {
   const [newAlkAlk, setNewAlkAlk]       = useState('');   // % alkoholu
   const [newAlkDodav, setNewAlkDodav]   = useState('');   // dodávateľ
   const [newAlkOprav, setNewAlkOprav]   = useState('');   // číslo oprávnenia dodávateľa
+
+  // ── AUTO-ZÁLOHA NA DISK — stav ────────────────────────────────────────────
+  const [fsState, setFsState] = useState('off');   // off | need-permission | on | error | unsupported
+  const fsHandleRef = useRef(null);                 // FileSystemFileHandle vybraného súboru zálohy
+  const fsLastWrittenRef = useRef('');              // naposledy zapísané dáta — zapisuje sa len pri zmene
+  const [lastBackupAt, setLastBackupAt] = useState(() => +localStorage.getItem(LS_LAST_BACKUP) || 0);
+  const [backupReminder, setBackupReminder] = useState(false);
 
   // ── DYNAMICKÁ FARBA POBOČKY ───────────────────────────────────────────────
   const branchGold = (branch && BRANCH_COLORS[branch]) || BASE_C.gold;
@@ -1234,13 +1291,90 @@ export default function App() {
   };
 
   // ── ZÁLOHA DÁT — export/import celého foxford-* localStorage ────────────────
-  const exportBackup = () => {
-    const data = {};
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith('foxford-')) data[k] = localStorage.getItem(k);
+  // ── AUTO-ZÁLOHA NA DISK — logika ──────────────────────────────────────────
+  const autoBackupWrite = async () => {
+    if (!fsHandleRef.current) return;
+    const dataJson = JSON.stringify(backupSnapshotData());
+    if (dataJson === fsLastWrittenRef.current) return;   // zapisuj len keď sa dáta reálne zmenili
+    try {
+      const payload = { _app: 'foxford', _exported: new Date().toISOString(), _branch: localStorage.getItem('foxford-branch') || '', data: JSON.parse(dataJson) };
+      const w = await fsHandleRef.current.createWritable();
+      await w.write(JSON.stringify(payload, null, 2));
+      await w.close();
+      fsLastWrittenRef.current = dataJson;
+      const t = Date.now();
+      localStorage.setItem(LS_LAST_BACKUP, String(t));
+      setLastBackupAt(t);
+    } catch (_) {
+      setFsState('error');   // súbor zmazaný/presunutý alebo odobraté povolenie
     }
-    const payload = { _app: 'foxford', _exported: new Date().toISOString(), _branch: branch || '', data };
+  };
+
+  // Init pri mount-e: načítaj handle z IndexedDB, zisti stav povolenia, príp. ukáž pripomienku
+  useEffect(() => {
+    (async () => {
+      let st = 'off';
+      try {
+        if (!window.showSaveFilePicker) st = 'unsupported';
+        else {
+          const h = await fsdbGet('backup');
+          if (h) {
+            fsHandleRef.current = h;
+            const perm = await h.queryPermission({ mode: 'readwrite' });
+            st = perm === 'granted' ? 'on' : 'need-permission';
+          }
+        }
+      } catch (_) { st = 'off'; }
+      setFsState(st);
+      // pripomienka pri štarte: auto-záloha nebeží a posledná záloha je staršia než 7 dní — max raz denne
+      if (st !== 'on'
+          && Date.now() - (+localStorage.getItem(LS_LAST_BACKUP) || 0) > 7 * 86400000
+          && localStorage.getItem('foxford-backup-prompt-day') !== new Date().toDateString()) {
+        setBackupReminder(true);
+      }
+    })();
+  }, []);
+
+  // Beh: zapíš hneď pri zapnutí, potom každú minútu + best-effort pri odchode z karty
+  useEffect(() => {
+    if (fsState !== 'on') return;
+    autoBackupWrite();
+    const t = setInterval(autoBackupWrite, 60000);
+    const onVis = () => { if (document.visibilityState === 'hidden') autoBackupWrite(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVis); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fsState]);
+
+  // Klik na prepínač — podľa stavu: zapnúť (výber súboru) / obnoviť povolenie / vypnúť
+  const backupChipClick = async () => {
+    try {
+      if (fsState === 'on') {
+        if (!window.confirm('Vypnúť automatickú zálohu na disk?\n(Súbor so zálohou na disku ostane.)')) return;
+        await fsdbSet('backup', null);
+        fsHandleRef.current = null; fsLastWrittenRef.current = '';
+        setFsState('off');
+        return;
+      }
+      if (fsState === 'need-permission' && fsHandleRef.current) {
+        const p = await fsHandleRef.current.requestPermission({ mode: 'readwrite' });
+        if (p === 'granted') { fsLastWrittenRef.current = ''; setFsState('on'); }
+        return;
+      }
+      // off / error → vybrať (nový) súbor
+      const h = await window.showSaveFilePicker({
+        suggestedName: `foxford-zaloha_${(branch || 'pobocka').replace(/\s+/g, '-')}.json`,
+        types: [{ description: 'Záloha Foxford (JSON)', accept: { 'application/json': ['.json'] } }],
+      });
+      fsHandleRef.current = h;
+      await fsdbSet('backup', h);
+      fsLastWrittenRef.current = '';
+      setFsState('on');   // efekt vyššie spraví okamžitý prvý zápis
+    } catch (_) { /* zrušený výber súboru */ }
+  };
+
+  const exportBackup = () => {
+    const payload = { _app: 'foxford', _exported: new Date().toISOString(), _branch: branch || '', data: backupSnapshotData() };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
@@ -1248,6 +1382,10 @@ export default function App() {
     a.download = `foxford-zaloha_${(branch || 'pobocka').replace(/\s+/g, '-')}_${localDayKey(new Date())}.json`;
     document.body.appendChild(a); a.click();
     document.body.removeChild(a); URL.revokeObjectURL(url);
+    const t = Date.now();
+    localStorage.setItem(LS_LAST_BACKUP, String(t));
+    setLastBackupAt(t);
+    setBackupReminder(false);
   };
 
   const importBackup = (file) => {
@@ -1979,6 +2117,16 @@ export default function App() {
                 <span style={{ position:'absolute', top:-3, right:-3, width:9, height:9, borderRadius:'50%', background:C.ok, border:'1.5px solid #f2ede4' }} />
               )}
             </button>
+            {/* auto-záloha — badge len keď treba zásah (povolenie po reštarte / chyba zápisu) */}
+            {(fsState === 'need-permission' || fsState === 'error') && (
+              <button onClick={backupChipClick}
+                title={fsState === 'error' ? 'Auto-záloha: chyba zápisu — klikni a vyber súbor znova' : 'Auto-záloha: klikni a povoľ zápis na disk'}
+                style={{ width:32, height:32, borderRadius:9, border:`1.5px solid ${fsState === 'error' ? C.err : '#d97706'}`,
+                         background:'rgba(255,255,255,0.6)', fontSize:14, cursor:'pointer',
+                         display:'flex', alignItems:'center', justifyContent:'center', padding:0 }}>
+                💾
+              </button>
+            )}
             {/* pobočka */}
             <div onClick={() => { setPinInput(''); setPinError(false); setPinStep(true); }} title="Zmeniť prevádzku"
               style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 11px 6px 9px', borderRadius:99, background:C.goldDim, border:`1px solid ${C.goldLine}`, cursor:'pointer' }}>
@@ -2012,6 +2160,34 @@ export default function App() {
       </header>
 
 <div style={{ padding: isTablet ? '0 24px' : '0 14px' }}>
+
+        {/* ── PRIPOMIENKA ZÁLOHY — auto-záloha nebeží a posledná záloha >7 dní ── */}
+        {backupReminder && (
+          <div style={{ marginTop:12, padding:'12px 14px', borderRadius:14, border:`1.5px solid ${C.goldLine}`,
+                        background:C.goldDim, display:'flex', alignItems:'center', gap:10 }}>
+            <span style={{ fontSize:18, lineHeight:1 }}>💾</span>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:12.5, fontWeight:800, color:C.gold }}>Záloha je staršia než 7 dní</div>
+              <div style={{ fontSize:11, color:C.sub, marginTop:2, lineHeight:1.5 }}>
+                {fsState === 'unsupported'
+                  ? 'Stiahni si zálohu dát — pri vyčistení prehliadača by si o všetko prišiel.'
+                  : 'Zapni auto-zálohu na disk alebo si stiahni ručnú zálohu.'}
+              </div>
+            </div>
+            <button onClick={() => {
+                if (fsState === 'unsupported') exportBackup();
+                else backupChipClick();
+                setBackupReminder(false);
+                localStorage.setItem('foxford-backup-prompt-day', new Date().toDateString());
+              }}
+              style={{ padding:'9px 13px', borderRadius:11, border:`1px solid ${C.goldLine}`, background:'rgba(255,255,255,0.7)',
+                       color:C.gold, fontWeight:800, fontSize:11.5, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
+              {fsState === 'unsupported' ? '⬇ Zálohovať' : '💾 Zapnúť'}
+            </button>
+            <button onClick={() => { setBackupReminder(false); localStorage.setItem('foxford-backup-prompt-day', new Date().toDateString()); }}
+              style={{ background:'none', border:'none', color:C.muted, fontSize:16, cursor:'pointer', padding:'0 2px', lineHeight:1, flexShrink:0 }}>×</button>
+          </div>
+        )}
 
         {/* ── TASKS ────────────────────────────────────────────────────────── */}
         {tab === 'tasks' && (
@@ -2810,6 +2986,36 @@ export default function App() {
             <div style={{ fontSize:10, color:C.muted, textAlign:'center', marginTop:4, lineHeight:1.5 }}>
               Záloha obsahuje úlohy, katalóg, inventúru, odpisy aj nastavenia.<br />Ulož si ju pred výmenou zariadenia alebo čistením prehliadača.
             </div>
+
+            {/* Auto-záloha na disk — len desktop Chrome/Edge (Android showSaveFilePicker nemá) */}
+            {fsState !== 'unsupported' && (
+              <div onClick={backupChipClick}
+                style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginTop:8,
+                         padding:'12px 14px', borderRadius:14, cursor:'pointer', userSelect:'none',
+                         border:`1px solid ${fsState === 'on' ? C.ok : fsState === 'error' ? C.err : fsState === 'need-permission' ? '#d97706' : C.border}`,
+                         background: fsState === 'on' ? 'rgba(42,154,85,0.08)' : 'transparent' }}>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontSize:13, fontWeight:700, letterSpacing:.3,
+                                color: fsState === 'on' ? C.ok : fsState === 'error' ? C.err : fsState === 'need-permission' ? '#d97706' : C.muted }}>
+                    💾 Auto-záloha na disk{fsState === 'on' ? ': zapnutá' : fsState === 'need-permission' ? ': povoliť zápis' : fsState === 'error' ? ': chyba zápisu' : ''}
+                  </div>
+                  <div style={{ fontSize:10, color:C.muted, marginTop:2, lineHeight:1.5 }}>
+                    {fsState === 'on' && (lastBackupAt
+                      ? `Každá zmena sa do minúty uloží do vybraného súboru — naposledy ${new Date(lastBackupAt).toLocaleString('sk-SK', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}. Klik = vypnúť.`
+                      : 'Každá zmena sa do minúty uloží do vybraného súboru. Klik = vypnúť.')}
+                    {fsState === 'need-permission' && 'Chrome po reštarte potrebuje jedno potvrdenie — klikni a povoľ zápis (ideálne „Povoliť pri každej návšteve“).'}
+                    {fsState === 'error' && 'Zápis zlyhal (súbor presunutý alebo zmazaný?). Klikni a vyber súbor znova.'}
+                    {fsState === 'off' && 'Vyber raz súbor (napr. v Dokumentoch alebo na OneDrive/Disku Google) a appka doň bude priebežne ukladať zálohu sama.'}
+                  </div>
+                </div>
+                <div style={{ width:38, height:22, borderRadius:11, padding:2, transition:'background .2s', flexShrink:0,
+                              background: fsState === 'on' ? C.ok : 'rgba(150,120,80,0.25)' }}>
+                  <div style={{ width:18, height:18, borderRadius:'50%', background:'#fff', transition:'transform .2s',
+                                transform: fsState === 'on' ? 'translateX(16px)' : 'translateX(0)',
+                                boxShadow:'0 1px 3px rgba(0,0,0,0.3)' }} />
+                </div>
+              </div>
+            )}
           </div>
         )}
 

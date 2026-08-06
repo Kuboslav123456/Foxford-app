@@ -89,18 +89,24 @@ The Foxford logo image is at `public/foxford-logo.png.png` (double extension —
 
 ## Deployment
 
-Deployed to GitHub Pages at `https://kuboslav123456.github.io/Foxford-app`. `gh-pages` package IS installed.
+Appka je nasadená na **GitHub Pages**: `https://kuboslav123456.github.io/Foxford-app`
 
-**IMPORTANT — vždy po zmene treba urobiť OBE veci:**
+### Deploy postup (každá nová verzia)
 
-```bash
-# 1) Build + nasadenie na gh-pages branch (čo užívateľ vidí live)
-npm run deploy
+1. Bump verzie v **dvoch** súboroch naraz:
+   - `public/version.json` → `{ "v": N }`
+   - `src/index.js` → `const APP_VERSION = N;`
+2. Spustiť deploy:
+   ```bash
+   & "C:\Program Files\nodejs\npm.cmd" run deploy
+   ```
+3. Pushnúť zdroják:
+   ```bash
+   git push origin main
+   ```
 
-# 2) Push source code na main branch (synchronizácia repo)
-git push origin main
-```
+`npm run deploy` = `predeploy` (build) + `gh-pages -d build` → pushne `build/` na vetvu `gh-pages`.
 
-`npm run deploy` push-uje len build artifacts na `gh-pages` branch. Source code commity na `main` musia byť osobitne pushnuté cez `git push origin main`, inak je GitHub history desynchronizovaný s live appkou.
+Tablety/zariadenia si samy detekujú novú verziu cez `version.json?t=<timestamp>` — ak `v > APP_VERSION`, vyčistia SW cache a reloadnú sa.
 
-Po nasadení nového buildu má service worker `network-first` stratégiu pre HTML, takže používatelia vidia novú verziu okamžite pri ďalšom otvorení (nemusia twice-reload).
+Dev server na lokálne testovanie: `npm start` / `preview_start` názov `kaviaren-app` (port 3000).

@@ -1,112 +1,104 @@
-# Foxford App — Handoff zo session (2026-06-29)
+# SESSION HANDOFF — August 2026
 
-> Lokálny záznam kontextu, aby sa pri vyčistení četu nič nestratilo. Tento súbor nie je
-> potrebný v git histórii — pokojne ho presuň/zmaž, alebo si ho nechaj ako referenciu.
+## Aktuálna verzia
+**v50** — `src/index.js` APP_VERSION = 50, `public/version.json` v = 50
 
-## Aktuálny stav
-- **Live verzia: v39** (GitHub Pages: `https://kuboslav123456.github.io/Foxford-app`)
-- Repo: `https://github.com/Kuboslav123456/Foxford-app` (branch `main`)
-- Posledný commit: `2767d5d`
+### v50: Auto-záloha na disk (File System Access API)
+- Prepínač **💾 Auto-záloha na disk** v tabe Sklad pod ručnou zálohou — používateľ raz vyberie súbor (Dokumenty/OneDrive/Disk Google), appka doň priebežne zapisuje snapshot všetkých `foxford-*` kľúčov (interval 60 s + visibilitychange, len pri reálnej zmene dát)
+- Handle súboru v IndexedDB (`foxford-fs`); stavy: off / on / need-permission (po reštarte Chrome) / error / unsupported
+- Badge 💾 v hlavičke keď treba zásah (povolenie/chyba); pripomienka pri štarte ak záloha >7 dní (`foxford-last-backup`, dismiss per deň cez `foxford-backup-prompt-day`)
+- **Android Chrome `showSaveFilePicker` nepodporuje** → na tabletoch sa prepínač skrýva, pripomienka ponúka ručný export (download funguje)
+- Formát súboru = ručná záloha (`{ _app:'foxford', _exported, _branch, data }`) → obnova cez 📥 Obnoviť zálohu
+- `exportBackup`/auto-záloha zdieľajú `backupSnapshotData()` — dynamický sken `foxford-*` kľúčov (bez hardcoded zoznamu)
 
-## Architektúra (rýchle pripomenutie)
-- Celá appka je v **jednom súbore** `src/App.js` (~3800 riadkov). React PWA, offline-first.
-- Verziovanie: bumpni **OBE** `public/version.json` a `src/index.js` (`APP_VERSION`) naraz.
-- **Deploy = vždy 2 kroky:** `npm run deploy` (gh-pages build) **+** `git push origin main` (source).
-- npm je na `C:\Program Files\nodejs\npm.cmd` (nie v PATH).
-- Backend = per-pobočka Google Apps Script (`BRANCHES` v App.js, riadok ~45). Posiela sa cez
-  `sendToSheets(type, payload)` / `sendOrQueue` (no-cors POST + offline fronta).
-  - Obchodná + Nivy majú reálne URL; ostatné pobočky placeholdery `URL_POBOCKA_*`.
-- Dev server: `preview_start` názov `kaviaren-app` (port 3000).
-- **Pozn.:** screenshot v preview občas timeoutuje (živé hodiny držia renderer busy) —
-  overovať sa dá cez `preview_eval` (čítanie DOM/innerText) a `preview_console_logs`.
+### Incident 6.8.2026 (poučenie)
+Tablet sa nenačítal (zaseknutý service worker po v49 deployi). Pri záchrane dát cez provizórnu `export-data.html` bol hardcoded zoznam kľúčov **bez `foxford-odpisy` a `foxford-alkohol`** → stratené nedoslané odpisy a alkohol za deň. Preto v50 auto-záloha + dynamický sken kľúčov. Pomocné stránky `public/clear-sw.html`, `export-data.html` (opravená, už so všetkými kľúčmi), `import-data.html` ostávajú nasadené pre budúce záchrany.
 
-## Čo spravila táto session (v30 → v39)
+---
 
-### v30 — OCR z bločka v Uzávierke (Tesseract.js)
-- Tlačidlo „Nafotiť bloček" v tabe Uzávierka → `Tesseract.js` (`slk+eng`, dynamic import) rozpozná text.
-- `parseUzavOcr()` vypĺňa polia z PORTOS bločka aj z výpisu platobného terminálu:
-  - `OBRAT → SPOLU` → **B** (tržba); `Kartou` → **C**; `Qerko` → **D**; `Tringelt` → **E**;
-    `Stravné lístky` → **F**; `Zaokrúhlenie` → **L**.
-  - Terminál: `CELKOVÉ SÚČTY → CELKOM` → **C**; `DOXX` + `MOVEUPSK` → **sk** (stravné karty).
-- Fix `extractNum`: „2254,69" sa už nerozbije na „69" (toleruje čiarku aj medzeru-z-čiarky).
-- Fix: `±` (plus/mínus) na numpade len pre pole **L** (predtým omylom menilo K → zlé M).
+## Čo sme urobili
 
-### v31 — Odpisy: Prehľad po dňoch + DST-safe dátumy
-- Nová karta „Prehľad po dňoch" medzi denným a mesačným súhrnom (read-only): ◀/▶ navigácia,
-  rýchle skoky Dnes/Včera/Predvčerom, položky s dôvodom + množstvom + odkaz dňa.
-- Bugfix: `yesterdayKey` a default prehliadača používajú kalendárovú aritmetiku `setDate()`
-  namiesto odčítania 86 400 000 ms (DST-safe, inak ~1h okno po jarnom prechode chybovalo).
+### GAS: odpis_daily — flat Odpisy hárok
+Handler `odpis_daily` v Google Apps Script upravený: namiesto per-dňových tabov (napr. "Streda 9.7") sa všetky záznamy zapisujú do jedného hárku **Odpisy**. Hárok sa vytvorí automaticky ak neexistuje (tučný header, zmrazené riadky, šírky stĺpcov).
 
-### v32 — HACCP gauge karty (Teploty)
-- Každé zariadenie ako „gauge" karta: max pill, veľké číslo, status (Nevyplnené/V norme/Nad limitom),
-  farebný horizontálny bar + škála. Chladnička škála −10..+15, mraznička −30..0.
-- Zachované: zámok smeny (`activeDone`), editMode vetva.
-- Fix: `% Alk.` aj tu — toleruje percento aj zlomok.
+Štruktúra riadku: `Dátum | Zodpovedný | Produkt | Množstvo | Jednotka | Dôvod | Odkaz kolegovi`
 
-### v33 — PWA install ikona
-- `public/logo192.png` + `logo512.png` = zlatý 3D hexagón na tmavom pozadí (bezpečná zóna ~74 %
-  pre Android maskable). Pozn.: už nainštalovanú PWA treba preinštalovať, aby sa ikona zmenila.
+GAS kód nasadený ručne — nie je v repozitári.
 
-### v34 — Čierny symbol na úvodnej obrazovke
-- Branch picker: `<Logo>` SVG nahradený `public/foxford-symbol.png` (čierny hexagón). *(neskôr v35 nahradené wordmarkom)*
+### v47: Auto-odoslanie denných úloh
+- Keď sú všetky úlohy vyriešené (done alebo issue) a inšpektor vyplnený → `autoSend()` odošle automaticky
+- Dedup cez `localStorage` kľúče `foxford-ranné-autosent` / `foxford-večerné-autosent` (hodnota = SK locale dátum)
+- `performDailyClose` (polnočná uzávierka) kontroluje rovnaký kľúč — ak už odoslané, preskočí
 
-### v35 — Plný FOXFORD wordmark na úvodnej obrazovke
-- `public/foxford-wordmark.png` — vektor z `Foxford_logo_3.pdf` rasterizovaný vo vysokom rozlíšení
-  (2268 px) cez pdfjs, biele pozadie odstránené keyovaním → priehľadné. Odstránený text „FOXFORD"
-  aj nepoužívaný `foxford-symbol.png`.
+### v48: Ranné / Večerné rozdelenie denných úloh
+- Tab DENNÉ zostal ako outer tab
+- Vnútri pribudol prepínač **RANNÉ / VEČERNÉ** (`denneTab` state)
+- `effectiveTab` computed variable: `subTab === 'denné' ? denneTab : subTab` — všetky task operácie používajú `effectiveTab`
+- Každý tab má vlastného inšpektora, progress bar, autoSend, polnočné odosielanie
+- Migrácia: detekuje starý kľúč `denné` v localStorage a prenesie na `ranné`
+- `INIT_TASKS.ranné` = 17 pôvodných ranných úloh (id 101–117)
 
-### v36 — Store picker Warm + loading screen + Evidencia liehu (XLSX)
-- **Store picker (Warm dizajn):** biele karty, terakota `#C4472B`, pin ikona, chevron, 3px press-bar.
-  Štýly v `src/index.css` (`.store-btn`). Použité na úvodnej obrazovke **aj** v prepínači pobočky
-  (🏪 modal — predtým mal starý dizajn). Klik → krátky selected stav (220 ms) → vstup.
-- **Loading screen:** čierny wordmark + animácie (vstup/plávanie/shine sweep maskou cez písmená/glow/
-  progress bar), trvanie 2000 ms. Odstránený starý `Logo` SVG komponent.
-- **Evidencia liehu (XLSX):** závislosť **ExcelJS**. Tab Alkohol → per-fľaša stále polia
-  (objem, % alk., dodávateľ, číslo oprávnenia) + tlačidlo „Export evidencie liehu (XLSX)".
-  Export v oficiálnom formáte (17 stĺpcov A–Q), vzorce: **M** `=H+I*E−K−L*E`, **N** `=P−M`,
-  **Q (LAA)** `=P*F`, riadok SPOLU. % sa píše ako zlomok s formátom `0.0%`, toleruje „40" aj „0,4".
-  Mesačné pohyby (G–L, O, P) sa dopĺňajú ručne v Exceli.
+### v49: Večerné úlohy — 46 položiek v 10 sekciách
+`INIT_TASKS.večerné` naplnené (id 500–604):
 
-### v37 — Meniny v statusovom riadku
-- V datetime bare pod dátumom „🎂 Meniny má <meno>", auto z dnešného dátumu (prepína sa o polnoci).
-- Zabudovaný offline dataset `MENINY` (366 dní, konštanta v App.js), krížovo overený web-researchom.
-  Dvojmená, priestupný 29.2 (Radomír), dni bez mena (sviatky) → „Dnes meniny nemá nikto".
+| Sekcia | IDs | Počet úloh |
+|--------|-----|------------|
+| Rajóny všeobecne | 500–503 | 3 |
+| 300 | 510–513 | 3 |
+| 400 | 520–525 | 5 |
+| CW | 530–532 | 2 |
+| 500 | 540–541 | 1 |
+| 600 | 550–551 | 1 |
+| Vitrínka | 560–566 | 6 |
+| Bar | 570–583 | 13 |
+| WC | 590–596 | 6 |
+| Vysávanie a umytie podlahy | 598–604 | 6 |
 
-### v38 — HACCP automatické „Nahlásené VZ"
-- Pri teplote nad limitom (`status === 'err'`) sa pri karte automaticky zobrazí „🔴 Nahlásené VZ"
-  popri „Nad limitom!".
-- HACCP payload (`readings`) má teraz per položku `status` (OK/NAD LIMITOM) a `poznamka`
-  ('Nahlásené VZ' pri prekročení) — doložiteľné pre RÚVZ.
+`TASKS_VERSION` bumped `'3'` → `'4'` — migrácia pri prvom načítaní nahradí prázdne `večerné: []` novým zoznamom na všetkých zariadeniach.
 
-### v39 — Víkendové úlohy: pondelkové upozornenie + nočný/ručný flush
-- Víkendové sa už **neresetujú** cez víkend; v pondelok ostávajú otvorené na dorobenie.
-- Pri otvorení tabu Úlohy **v pondelok** (ak ostali nedokončené a bola aktivita) → upozornenie:
-  počet nesplnených + „Dokončiť úlohy" / „Resetovať zoznam na ďalší víkend".
-- Odoslanie do Sheets: **automaticky v noci Po→Ut** (`performDailyClose` flushne víkendové + reset,
-  raz za týždeň cez marker `foxford-vikend-week-done`), alebo hneď pri ručnom/popup resete.
-- Zrušený okamžitý `autoSend` víkendových pri „všetky hotové" (proti duplicitám).
+---
 
-## Nové localStorage kľúče (tejto session)
-- `foxford-zoom` (v29), `foxford-offline-queue`
-- `foxford-vikend-week-done` = kľúč pondelka týždňa (dedup víkendového flushu)
-- `foxford-vikend-prompt-day` = dateString (pondelkové upozornenie raz za deň)
-- Alkohol katalóg položky majú nové polia: `objem, alk, dodavatel, cisloOpravnenia`
+## Bugy opravené
 
-## Pridané závislosti
-- `tesseract.js` (OCR, v30), `exceljs` (XLSX export, v36).
-- Dočasne (—no-save) bol pri v35 použitý `pdf-to-img`/`pdfjs-dist`/`@napi-rs/canvas` na rasterizáciu
-  loga — do `package.json` sa nedostali.
+1. **Večerné sa nezobrazili po nasadení** — `TASKS_VERSION` zostala `'3'`, zariadenie preskočilo migráciu. Navyše `večerné` chýbalo v `mergeDone` bloku. Fix: verzia na `'4'` + pridanie `večerné: mergeDone(INIT_TASKS.večerné, parsed.večerné)`.
 
-## Otvorené nápady (z konkurenčného researchu — NEimplementované)
-Priorita (hodnota/námaha): 1) HACCP nápravné akcie (✓ čiastočne spravené vo v38),
-2) meno+čas na každej úlohe, 3) kasa: dôvod + PIN pri manku, 4) Sklad: par hladiny + objednávací
-zoznam, 5) foto dôkaz pri úlohách, 6) potvrdenie prečítania správ, 7) detekcia nesplnených denných
-úloh, 8) otváracie/zatváracie úlohy podľa času. Ďalšie: ceny na odpisoch + € waste report,
-EAN skenovanie, príjem tovaru, audit-ready compliance PDF, cross-branch dashboard, alergénová matica.
+2. **React uncontrolled input warning (v48)** — `inspectors[effectiveTab]` mohol byť `undefined`. Fix: `value={inspectors[effectiveTab] || ''}`.
 
-## TODO / pozn. do budúcna
-- Mesačné úlohy: zatiaľ bez automatického flushu (rieši len `autoSend` pri „všetky hotové"). Dá sa
-  pridať obdoba víkendového flushu (1. v mesiaci).
-- GAS na strane pobočiek: voliteľne pridať stĺpce `status`/`poznamka` (HACCP) a prijímať
-  `tasks_summary` kategóriu `víkendové` (už spracúva).
-- Placeholder URL pobočiek (Cubicon…Košice) — doplniť reálne Apps Script URL keď budú.
+3. **Štyri miesta s `[subTab]` namiesto `[effectiveTab]` (v48)** — `replace_all` nezachytil všetky výskyty v `setTasks(...)`. Fix: ručná oprava.
+
+4. **UTF-8 v PowerShell testoch** — PS 5.1 neposiela UTF-8 automaticky. Fix: `[System.Text.Encoding]::UTF8.GetBytes($body)` + `charset=utf-8`. (Appka cez `fetch()` posiela UTF-8 správne.)
+
+5. **curl 411 Length Required** — curl strácal POST body po GAS redirecte. Fix: `Invoke-RestMethod -MaximumRedirection 5`.
+
+6. **GAS `appendRow()` error** — starý script mal prázdny separator riadok. Fix: nasadiť nový script.
+
+---
+
+## Stav kľúčových súborov
+
+| Súbor | Stav |
+|-------|------|
+| `src/App.js` | TASKS_VERSION = '4'; INIT_TASKS.večerné = 56 položiek (46 úloh + 10 headerov) |
+| `src/index.js` | APP_VERSION = 49 |
+| `public/version.json` | { "v": 49 } |
+| `.env.local` | REACT_APP_GAS_TOKEN nastavený (nie v gite) |
+| GAS script | Nasadený ručne — handlery: haccp, tasks_summary, odpis_daily, alkohol_daily, uzavierka, inventory |
+
+---
+
+## Otvorené úlohy / TODO
+
+- [ ] Placeholder GAS URL pre pobočky Cubicon, Levice, Martin, Žilina, Poprad, Prešov, Košice (`URL_POBOCKA_*`)
+- [ ] Mesačné úlohy — zatiaľ bez auto-flushu (1. v mesiaci)
+- [ ] Agregácia tržieb / cross-branch dashboard (odložené)
+- [ ] Nivy GAS — chýba `alkohol_daily` handler
+
+---
+
+## Nasadenie
+
+**GitHub Pages**: `https://kuboslav123456.github.io/Foxford-app` — tablety pristupujú cez tento URL a samy detekujú novú verziu cez `version.json`.
+
+Deploy = bump verzie v 2 súboroch (`public/version.json` + `src/index.js`) → `npm run deploy` → `git push origin main`. Detail v CLAUDE.md.
+
+Dev server: `npm start` / `preview_start` s názvom `kaviaren-app` (.claude/launch.json).
