@@ -43,7 +43,8 @@ const BRANCH_PIN = '1234';
 const INV_DATA_VERSION = '4';
 
 const BRANCHES = [
-  { name: 'Obchodná', url: 'https://script.google.com/macros/s/AKfycbzlcPT4Yu8Pk-Y_5-9-oOHag0oVsFVS-gAtwujfDqn0yjXwEiKcfKbcVwmoW1UF5te9rA/exec' },
+  // Nasadenie pod účtom obchodna@foxford.sk (v50) — staré AKfycbz… ostalo na staršej verzii kódu
+  { name: 'Obchodná', url: 'https://script.google.com/macros/s/AKfycby5DTfik3nfQMhiUjMpYnQdkwrc-M0xkHi1vl_BJEXmg8ol8txnIzcWzPYrFOD5Rytsog/exec' },
   { name: 'Nivy',     url: 'https://script.google.com/macros/s/AKfycbwXWxgtsrJFEb6s9cEP_sPZujYLYjicaiL881vrroLxlf335Rll9nHkwW1bqWFa_sM4/exec' },
   { name: 'Cubicon',  url: 'URL_POBOCKA_3' },
   { name: 'Levice',   url: 'URL_POBOCKA_4' },

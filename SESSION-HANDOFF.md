@@ -12,7 +12,10 @@
 - `exportBackup`/auto-záloha zdieľajú `backupSnapshotData()` — dynamický sken `foxford-*` kľúčov (bez hardcoded zoznamu)
 
 ### v50: Cloud záloha cez GAS (pre tablety)
-- `maybeGasBackup()` — pošle celý snapshot ako event `backup` na GAS pobočky; GAS ho uloží ako JSON súbor na Google Drive (priečinok „Foxford zálohy“, 1 súbor/deň/pobočka, retencia 60)
+- `maybeGasBackup()` — pošle celý snapshot ako event `backup` na GAS pobočky; GAS ho uloží do **skrytého hárku „Zálohy“** v tabuľke pobočky (1 riadok/deň/pobočka, JSON delený po 45k znakov do stĺpcov D+, retencia 60)
+- **Drive sa NEPOUŽÍVA**: `DriveApp.createFolder` hádže Unauthorized — Workspace účet pobočky (obchodna@foxford.sk) dostane len `drive.readonly`, zápis Google neudelí ani cez opakovanú autorizáciu. Hárok tabuľky žiadne nové povolenie nepotrebuje.
+- Stiahnutie zálohy: URL webhooku s `?backup=latest` (alebo `?backup=YYYY-MM-DD`) → JSON → uložiť ako .json → Sklad → 📥 Obnoviť zálohu
+- **Obchodná má novú webhook URL** `AKfycby5DTfik…` (nasadenie pod obchodna@foxford.sk). Staré `AKfycbzlcPT4…` ostalo na staršej verzii kódu — appka naň už neposiela, ale OBRATY tabuľka ho stále používa pre `doGet`.
 - Trigger: 10 s po otvorení appky + visibilitychange hidden; throttle 4 h (`foxford-gas-backup-ts`); len online, offline sa nequeue-uje
 - Optimisticky nastavuje `foxford-last-backup` (no-cors → doručenie sa nedá overiť) → utíši 7-dňovú pripomienku
 - Obnova: stiahnuť JSON z Drive → Sklad → 📥 Obnoviť zálohu
