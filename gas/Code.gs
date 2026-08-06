@@ -12,6 +12,10 @@
 // HANDLERY (doPost): haccp, tasks_summary, inventory, odpis_daily,
 //   alkohol_daily, uzavierka_daily, bug_report, backup (NOVÉ — Drive záloha)
 // doGet: číta hárok Uzávierky pre OBRATY tabuľku — NEMAZAŤ.
+//
+// ODPISY: odteraz jeden hárok „Odpisy“ (riadok = záznam), NIE per-dňové taby.
+//   Staré taby „Odpisy 31. 7. 2026“ zmigruješ jednorazovo: v editore hore vyber
+//   funkciu `migrateOdpisyTabs` → Spustiť (presunie záznamy a taby zmaže).
 // ═══════════════════════════════════════════════════════════════════════════
 
 const TOKEN = 'SEM_VLOZ_SVOJ_TOKEN';
@@ -277,6 +281,64 @@ function doPost(e) {
   } catch (err) {
     return ContentService.createTextOutput('Error: ' + err.message);
   }
+}
+
+// ── JEDNORAZOVÁ MIGRÁCIA — staré per-dňové taby „Odpisy X. Y. ZZZZ“ → flat hárok ──
+// Spusti RUČNE v editore: hore vyber funkciu `migrateOdpisyTabs` → Spustiť.
+// Každý starý tab prečíta (položky + zodpovedný/dátum/odkaz z pätičky), riadky
+// pridá do hárku „Odpisy“ a tab zmaže. Bezpečné spustiť aj viackrát.
+function migrateOdpisyTabs() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  var flat = ss.getSheetByName('Odpisy');
+  if (!flat) {
+    flat = ss.insertSheet('Odpisy');
+    flat.appendRow(['Dátum', 'Zodpovedný', 'Produkt', 'Množstvo', 'Jednotka', 'Dôvod', 'Odkaz kolegovi']);
+    flat.getRange(1, 1, 1, 7).setFontWeight('bold').setBackground('#e8f0e8');
+    flat.setFrozenRows(1);
+    flat.setColumnWidth(3, 250);
+    flat.setColumnWidth(6, 140);
+    flat.setColumnWidth(7, 260);
+  }
+
+  var moved = 0, tabs = 0;
+  ss.getSheets().forEach(function(sheet) {
+    var name = sheet.getName();
+    if (!/^Odpisy \d/.test(name)) return;   // len taby „Odpisy 31. 7. 2026“ a pod.
+
+    var rows = sheet.getDataRange().getValues();
+    var entries = [];
+    var author = '—', note = '—';
+    var date = name.replace(/^Odpisy /, '');   // fallback — dátum z názvu tabu
+
+    rows.forEach(function(r) {
+      var a = String(r[0] || '').trim();
+      if (!a || a === 'Produkt') return;                       // prázdny riadok / hlavička
+      if (a === 'Zodpovedný:') {                               // pätička: Zodpovedný | meno | Dátum: | dátum
+        if (r[1]) author = String(r[1]);
+        if (String(r[2] || '').trim() === 'Dátum:' && r[3]) date = formatDMY(r[3]);
+        return;
+      }
+      if (a === 'Odkaz kolegovi:') { if (r[1]) note = String(r[1]); return; }
+      entries.push(r);                                          // položka: Produkt | Množstvo | Jednotka | Dôvod
+    });
+
+    entries.forEach(function(r) {
+      flat.appendRow([date, author, r[0], r[1], r[2], r[3] || 'Spotreba', note]);
+      moved++;
+    });
+
+    ss.deleteSheet(sheet);
+    tabs++;
+  });
+
+  Logger.log('Hotovo: ' + moved + ' záznamov z ' + tabs + ' tabov presunutých do hárku Odpisy.');
+}
+
+// Dátum z bunky (Date objekt alebo text) → „31. 7. 2026“ (formát ako posiela appka)
+function formatDMY(val) {
+  if (val instanceof Date) return val.getDate() + '. ' + (val.getMonth() + 1) + '. ' + val.getFullYear();
+  return String(val).trim();
 }
 
 function parseDate(val) {
