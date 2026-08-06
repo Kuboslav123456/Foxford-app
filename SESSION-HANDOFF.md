@@ -11,6 +11,13 @@
 - Formát súboru = ručná záloha (`{ _app:'foxford', _exported, _branch, data }`) → obnova cez 📥 Obnoviť zálohu
 - `exportBackup`/auto-záloha zdieľajú `backupSnapshotData()` — dynamický sken `foxford-*` kľúčov (bez hardcoded zoznamu)
 
+### v50: Cloud záloha cez GAS (pre tablety)
+- `maybeGasBackup()` — pošle celý snapshot ako event `backup` na GAS pobočky; GAS ho uloží ako JSON súbor na Google Drive (priečinok „Foxford zálohy“, 1 súbor/deň/pobočka, retencia 60)
+- Trigger: 10 s po otvorení appky + visibilitychange hidden; throttle 4 h (`foxford-gas-backup-ts`); len online, offline sa nequeue-uje
+- Optimisticky nastavuje `foxford-last-backup` (no-cors → doručenie sa nedá overiť) → utíši 7-dňovú pripomienku
+- Obnova: stiahnuť JSON z Drive → Sklad → 📥 Obnoviť zálohu
+- **Kompletný GAS skript je teraz v repo: `gas/Code.gs`** (zrekonštruovaný z transcriptu session 22.6. + júlový flat Odpisy + nový backup handler; TOKEN placeholder — doplniť z doterajšieho scriptu). `doGet` číta Uzávierky pre OBRATY tabuľku — nemazať. Nasadiť treba na každú pobočku s reálnou URL (Obchodná, Nivy).
+
 ### Incident 6.8.2026 (poučenie)
 Tablet sa nenačítal (zaseknutý service worker po v49 deployi). Pri záchrane dát cez provizórnu `export-data.html` bol hardcoded zoznam kľúčov **bez `foxford-odpisy` a `foxford-alkohol`** → stratené nedoslané odpisy a alkohol za deň. Preto v50 auto-záloha + dynamický sken kľúčov. Pomocné stránky `public/clear-sw.html`, `export-data.html` (opravená, už so všetkými kľúčmi), `import-data.html` ostávajú nasadené pre budúce záchrany.
 

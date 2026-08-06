@@ -620,6 +620,7 @@ function performDailyClose(endingDate) {
 // Handle na súbor sa pamätá v IndexedDB (do localStorage sa serializovať nedá).
 // Funguje len v desktop Chrome/Edge — Android Chrome showSaveFilePicker nemá (feature-detect).
 const LS_LAST_BACKUP = 'foxford-last-backup';   // timestamp poslednej zálohy (ručnej aj automatickej)
+const LS_GAS_BACKUP_TS = 'foxford-gas-backup-ts'; // timestamp poslednej cloud zálohy cez GAS
 const FS_DB = 'foxford-fs';
 const fsdbOpen = () => new Promise((res, rej) => {
   const rq = indexedDB.open(FS_DB, 1);
@@ -655,7 +656,7 @@ function backupSnapshotData() {
   const keys = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (k && k.startsWith('foxford-') && k !== LS_LAST_BACKUP) keys.push(k);
+    if (k && k.startsWith('foxford-') && k !== LS_LAST_BACKUP && k !== LS_GAS_BACKUP_TS) keys.push(k);
   }
   keys.sort();
   const data = {};
@@ -1372,6 +1373,37 @@ export default function App() {
       setFsState('on');   // efekt vyššie spraví okamžitý prvý zápis
     } catch (_) { /* zrušený výber súboru */ }
   };
+
+  // ── CLOUD ZÁLOHA CEZ GAS — funguje aj na tabletoch ────────────────────────
+  // Android Chrome nemá showSaveFilePicker, preto tablety zálohujú cez Apps Script
+  // pobočky: appka pošle snapshot, GAS ho uloží ako JSON súbor na Google Drive
+  // (handler 'backup', priečinok „Foxford zálohy“, 1 súbor na deň). Max raz za 4 h,
+  // len online — offline sa nequeue-uje, ďalší trigger pošle čerstvejší snapshot.
+  const maybeGasBackup = () => {
+    if (!branch || !navigator.onLine) return;
+    if (!scriptUrl || /^URL_POBOCKA/.test(scriptUrl) || !/^https?:\/\//.test(scriptUrl)) return;
+    const last = +localStorage.getItem(LS_GAS_BACKUP_TS) || 0;
+    if (Date.now() - last < 4 * 3600000) return;
+    doFetch(scriptUrl, 'backup', {
+      day: localDayKey(new Date()),
+      branch,
+      snapshot: { _app: 'foxford', _exported: new Date().toISOString(), _branch: branch, data: backupSnapshotData() },
+    });
+    // no-cors = doručenie sa nedá overiť; berieme optimisticky ako zálohu (utíši 7-dňovú pripomienku)
+    const t = Date.now();
+    localStorage.setItem(LS_GAS_BACKUP_TS, String(t));
+    localStorage.setItem(LS_LAST_BACKUP, String(t));
+    setLastBackupAt(t);
+  };
+
+  // Cloud záloha: po otvorení appky + pri odchode z karty (frekvenciu rieši 4 h throttle)
+  useEffect(() => {
+    const t = setTimeout(maybeGasBackup, 10000);   // odklad po štarte — nech sa stihne flushnúť offline queue
+    const onVis = () => { if (document.visibilityState === 'hidden') maybeGasBackup(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { clearTimeout(t); document.removeEventListener('visibilitychange', onVis); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branch]);
 
   const exportBackup = () => {
     const payload = { _app: 'foxford', _exported: new Date().toISOString(), _branch: branch || '', data: backupSnapshotData() };
