@@ -10,8 +10,12 @@
 //      URL webhooku zostane rovnaká, v appke netreba nič meniť.
 //
 // HANDLERY (doPost): haccp, tasks_summary, inventory, odpis_daily,
-//   alkohol_daily, uzavierka_daily, bug_report, backup (NOVÉ — Drive záloha)
+//   alkohol_daily, uzavierka_daily, bug_report, backup (NOVÉ — záloha dát appky)
 // doGet: číta hárok Uzávierky pre OBRATY tabuľku — NEMAZAŤ.
+//   Navyše ?backup=latest vráti poslednú zálohu appky ako JSON.
+//
+// ŽIADNE NOVÉ POVOLENIA: zálohy idú do skrytého hárku „Zálohy“ v tejto tabuľke,
+//   nie na Google Drive (naň Workspace účet pobočky nedostane povolenie na zápis).
 //
 // ODPISY: odteraz jeden hárok „Odpisy“ (riadok = záznam), NIE per-dňové taby.
 //   Staré taby „Odpisy 31. 7. 2026“ zmigruješ jednorazovo: v editore hore vyber
@@ -23,6 +27,12 @@ const TOKEN = 'SEM_VLOZ_SVOJ_TOKEN';
 function doGet(e) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    // ?backup=latest (alebo ?backup=2026-08-06) → vráti uloženú zálohu appky.
+    // Bez parametra sa správa ako predtým — dáta Uzávierok pre OBRATY tabuľku.
+    var wanted = (e && e.parameter && e.parameter.backup) ? String(e.parameter.backup) : '';
+    if (wanted) return backupResponse(ss, wanted);
+
     var sheet = ss.getSheetByName('Uzávierky');
     if (!sheet) return jsonResponse({ error: 'Hárok "Uzávierky" nebol nájdený.' });
 
@@ -248,32 +258,51 @@ function doPost(e) {
       ]);
     }
 
-    // ── BACKUP — automatická záloha dát appky na Google Drive ────────────────
+    // ── BACKUP — automatická záloha dát appky do skrytého hárku „Zálohy“ ─────
     // Appka posiela celý snapshot localStorage (rovnaký formát ako ručná záloha).
-    // Ukladá sa ako JSON súbor do priečinka „Foxford zálohy“ na Drive účtu,
-    // pod ktorým je script nasadený. Jeden súbor na deň a pobočku (prepíše sa),
-    // drží sa posledných 60 súborov. Obnova: stiahnuť súbor z Drive →
-    // v appke Sklad → 📥 Obnoviť zálohu.
+    // ZÁMERNE bez Google Drive: DriveApp vyžaduje povolenie na zápis, ktoré
+    // Workspace účtu pobočky Google neudelí. Hárok tejto tabuľky žiadne nové
+    // povolenie nepotrebuje. Jeden riadok = jeden deň a pobočka (prepisuje sa),
+    // drží sa posledných 60. Bunka má limit 50 000 znakov, preto sa JSON delí
+    // na časti do stĺpcov D, E, F…
+    // Stiahnutie zálohy: otvor URL webovej aplikácie s ?backup=latest
+    // (alebo ?backup=2026-08-06) → JSON ulož ako .json → appka Sklad → 📥 Obnoviť zálohu.
     else if (type === 'backup') {
-      const folderName = 'Foxford zálohy';
-      const fIt = DriveApp.getFoldersByName(folderName);
-      const folder = fIt.hasNext() ? fIt.next() : DriveApp.createFolder(folderName);
-      const fileName = 'foxford-zaloha_' + String(data.branch || 'pobocka').replace(/\s+/g, '-') + '_' + (data.day || 'bez-datumu') + '.json';
-      const content = JSON.stringify(data.snapshot || {}, null, 2);
-      const existing = folder.getFilesByName(fileName);
-      if (existing.hasNext()) {
-        existing.next().setContent(content);
-      } else {
-        folder.createFile(fileName, content, 'application/json');
+      const CHUNK = 45000;
+      let sheet = ss.getSheetByName('Zálohy');
+      if (!sheet) {
+        sheet = ss.insertSheet('Zálohy');
+        sheet.appendRow(['Deň', 'Pobočka', 'Uložené', 'Dáta (JSON, delené na časti)']);
+        sheet.getRange(1, 1, 1, 4).setFontWeight('bold').setBackground('#e8eef5');
+        sheet.setFrozenRows(1);
+        sheet.hideSheet();
       }
-      // Retencia: ponechaj max 60 najnovších záloh (názvy obsahujú dátum → triedenie podľa mena)
-      const all = [];
-      const it = folder.getFiles();
-      while (it.hasNext()) all.push(it.next());
-      if (all.length > 60) {
-        all.sort(function(a, b) { return a.getName() < b.getName() ? -1 : 1; });
-        for (var i = 0; i < all.length - 60; i++) all[i].setTrashed(true);
+      const json = JSON.stringify(data.snapshot || {});
+      const chunks = [];
+      for (let i = 0; i < json.length; i += CHUNK) chunks.push(json.substring(i, i + CHUNK));
+      const row = [String(data.day || ''), String(data.branch || ''), new Date()].concat(chunks);
+
+      if (row.length > sheet.getMaxColumns()) {
+        sheet.insertColumnsAfter(sheet.getMaxColumns(), row.length - sheet.getMaxColumns());
       }
+
+      // riadok pre ten istý deň + pobočku prepíš, inak pridaj nový
+      let target = 0;
+      const last = sheet.getLastRow();
+      if (last > 1) {
+        const keys = sheet.getRange(2, 1, last - 1, 2).getValues();
+        for (let i = 0; i < keys.length; i++) {
+          if (String(keys[i][0]) === row[0] && String(keys[i][1]) === row[1]) { target = i + 2; break; }
+        }
+      }
+      if (!target) target = last + 1;
+      // vyčisti celý riadok — predošlá záloha mohla mať viac častí ako táto
+      sheet.getRange(target, 1, 1, sheet.getMaxColumns()).clearContent();
+      sheet.getRange(target, 1, 1, row.length).setValues([row]);
+
+      // retencia: ponechaj posledných 60 záloh
+      const count = sheet.getLastRow() - 1;
+      if (count > 60) sheet.deleteRows(2, count - 60);
     }
 
     return ContentService.createTextOutput('OK');
@@ -339,6 +368,22 @@ function migrateOdpisyTabs() {
 function formatDMY(val) {
   if (val instanceof Date) return val.getDate() + '. ' + (val.getMonth() + 1) + '. ' + val.getFullYear();
   return String(val).trim();
+}
+
+// Vráti uloženú zálohu z hárku „Zálohy“ — 'latest' = posledná zapísaná,
+// inak riadok s daným dňom (formát 2026-08-06). Časti JSON zo stĺpcov D+ sa spoja.
+function backupResponse(ss, wanted) {
+  var sheet = ss.getSheetByName('Zálohy');
+  if (!sheet || sheet.getLastRow() < 2) return jsonResponse({ error: 'Zatiaľ tu nie je žiadna záloha.' });
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
+  var pick = null;
+  for (var i = 0; i < rows.length; i++) {
+    if (wanted === 'latest' || String(rows[i][0]) === wanted) pick = rows[i];
+  }
+  if (!pick) return jsonResponse({ error: 'Záloha pre „' + wanted + '“ sa nenašla.' });
+  return ContentService
+    .createTextOutput(pick.slice(3).join(''))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function parseDate(val) {
