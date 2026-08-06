@@ -21,13 +21,14 @@
   <div id="out"></div>
   <div id="all"></div>
   <script>
-    const KEYS = [
-      'foxford-tasks','foxford-last-reset-date','foxford-batch',
-      'foxford-inspectors','foxford-temp-fields','foxford-inventory-data',
-      'foxford-inventory','foxford-inventory-notes','foxford-notes',
-      'foxford-haccp-date','foxford-branch',
-      'foxford-tasks-version','foxford-ranné-autosent','foxford-večerné-autosent'
-    ];
+    // Dynamický sken — všetky foxford-* kľúče, žiadny pevný zoznam
+    // (pevný zoznam spôsobil 6.8.2026 stratu odpisov a alkoholu)
+    const KEYS = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('foxford-')) KEYS.push(k);
+    }
+    KEYS.sort();
     const out = document.getElementById('out');
     const allData = {};
     KEYS.forEach(k => {
