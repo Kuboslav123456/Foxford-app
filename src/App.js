@@ -619,7 +619,8 @@ function performDailyClose(endingDate) {
 // všetkého. Auto-záloha priebežne zapisuje snapshot do súboru na disku, ktorý si používateľ
 // raz vyberie (napr. v Dokumentoch alebo na OneDrive/Disku Google → rovno aj cloud záloha).
 // Handle na súbor sa pamätá v IndexedDB (do localStorage sa serializovať nedá).
-// Funguje len v desktop Chrome/Edge — Android Chrome showSaveFilePicker nemá (feature-detect).
+// Dostupnosť sa zisťuje feature-detectom (`window.showSaveFilePicker`) — overené 2026-08-06,
+// že to funguje aj na tablete, nielen na desktope. Kde API nie je, prepínač sa skryje.
 const LS_LAST_BACKUP = 'foxford-last-backup';   // timestamp poslednej zálohy (ručnej aj automatickej)
 const LS_GAS_BACKUP_TS = 'foxford-gas-backup-ts'; // timestamp poslednej cloud zálohy cez GAS
 const FS_DB = 'foxford-fs';
@@ -1445,7 +1446,7 @@ export default function App() {
   };
 
   // Obnova zo zálohy uloženej v tabuľke pobočky (GAS `?backup=latest`).
-  // Na tabletoch je to jediná cesta k zálohe — Android Chrome nevie vybrať súbor na disku.
+  // Funguje aj na zariadení, ktoré prišlo o localStorage aj o súborovú zálohu.
   const restoreFromCloud = async () => {
     if (!scriptUrl || /^URL_POBOCKA/.test(scriptUrl) || !/^https?:\/\//.test(scriptUrl)) {
       alert('Táto pobočka zatiaľ nemá napojenú tabuľku.');
@@ -3050,7 +3051,7 @@ export default function App() {
               Záloha obsahuje úlohy, katalóg, inventúru, odpisy aj nastavenia.<br />Ulož si ju pred výmenou zariadenia alebo čistením prehliadača.
             </div>
 
-            {/* Obnova z tabuľky — na tablete jediná cesta k zálohe (súbor na disku Android nevie) */}
+            {/* Obnova z tabuľky — záchrana aj keď zariadenie prišlo o dáta aj o súborovú zálohu */}
             <button onClick={restoreFromCloud} disabled={cloudRestoring} style={{
               width:'100%', padding:'12px', marginTop:8, borderRadius:14,
               border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold,
@@ -3063,7 +3064,7 @@ export default function App() {
               Appka si sama ukladá zálohu do tabuľky pobočky — odtiaľ ju stiahneš aj po vyčistení prehliadača.
             </div>
 
-            {/* Auto-záloha na disk — len desktop Chrome/Edge (Android showSaveFilePicker nemá) */}
+            {/* Auto-záloha na disk — zobrazí sa všade, kde prehliadač vie showSaveFilePicker */}
             {fsState !== 'unsupported' && (
               <div onClick={backupChipClick}
                 style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginTop:8,

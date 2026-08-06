@@ -7,7 +7,7 @@
 - Prepínač **💾 Auto-záloha na disk** v tabe Sklad pod ručnou zálohou — používateľ raz vyberie súbor (Dokumenty/OneDrive/Disk Google), appka doň priebežne zapisuje snapshot všetkých `foxford-*` kľúčov (interval 60 s + visibilitychange, len pri reálnej zmene dát)
 - Handle súboru v IndexedDB (`foxford-fs`); stavy: off / on / need-permission (po reštarte Chrome) / error / unsupported
 - Badge 💾 v hlavičke keď treba zásah (povolenie/chyba); pripomienka pri štarte ak záloha >7 dní (`foxford-last-backup`, dismiss per deň cez `foxford-backup-prompt-day`)
-- **Android Chrome `showSaveFilePicker` nepodporuje** → na tabletoch sa prepínač skrýva, pripomienka ponúka ručný export (download funguje)
+- Dostupnosť cez feature-detect `window.showSaveFilePicker`; kde chýba, prepínač sa skryje a pripomienka ponúkne ručný export. **Overené 6.8.2026: funguje aj na prevádzkovom tablete** — staršie tvrdenie „Android to nevie“ neplatí, netreba to obchádzať
 - Formát súboru = ručná záloha (`{ _app:'foxford', _exported, _branch, data }`) → obnova cez 📥 Obnoviť zálohu
 - `exportBackup`/auto-záloha zdieľajú `backupSnapshotData()` — dynamický sken `foxford-*` kľúčov (bez hardcoded zoznamu)
 
