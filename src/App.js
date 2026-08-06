@@ -914,6 +914,7 @@ export default function App() {
   const [lastBackupAt, setLastBackupAt] = useState(() => +localStorage.getItem(LS_LAST_BACKUP) || 0);
   const [backupReminder, setBackupReminder] = useState(false);
   const [cloudRestoring, setCloudRestoring] = useState(false);
+  const [showBackupModal, setShowBackupModal] = useState(false);
 
   // ── DYNAMICKÁ FARBA POBOČKY ───────────────────────────────────────────────
   const branchGold = (branch && BRANCH_COLORS[branch]) || BASE_C.gold;
@@ -2163,6 +2164,16 @@ export default function App() {
                 ✓ {offlineFlushed} odoslaných
               </div>
             )}
+            {/* zálohovanie — ozubené koliesko */}
+            <button onClick={() => setShowBackupModal(true)} title="Zálohovanie dát"
+              style={{ position:'relative', width:32, height:32, borderRadius:9, border:`1px solid ${C.border}`, background:'rgba(255,255,255,0.6)', color:C.sub, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', padding:0 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              {/* bodka keď auto-záloha potrebuje zásah alebo dlho nebola žiadna záloha */}
+              {(fsState === 'need-permission' || fsState === 'error' || backupReminder) && (
+                <span style={{ position:'absolute', top:-3, right:-3, width:9, height:9, borderRadius:'50%',
+                               background: fsState === 'error' ? C.err : '#d97706', border:'1.5px solid #f2ede4' }} />
+              )}
+            </button>
             {/* zoom − / + */}
             <button onClick={() => setUiZoom(z => Math.max(0.8, +((z - 0.1).toFixed(1))))} title="Zmenšiť text"
               style={{ width:32, height:32, borderRadius:9, border:`1px solid ${C.border}`, background:'rgba(255,255,255,0.6)', color:C.sub, fontSize:11, fontWeight:800, cursor:'pointer', fontFamily:'inherit', userSelect:'none' }}>A−</button>
@@ -2181,16 +2192,6 @@ export default function App() {
                 <span style={{ position:'absolute', top:-3, right:-3, width:9, height:9, borderRadius:'50%', background:C.ok, border:'1.5px solid #f2ede4' }} />
               )}
             </button>
-            {/* auto-záloha — badge len keď treba zásah (povolenie po reštarte / chyba zápisu) */}
-            {(fsState === 'need-permission' || fsState === 'error') && (
-              <button onClick={backupChipClick}
-                title={fsState === 'error' ? 'Auto-záloha: chyba zápisu — klikni a vyber súbor znova' : 'Auto-záloha: klikni a povoľ zápis na disk'}
-                style={{ width:32, height:32, borderRadius:9, border:`1.5px solid ${fsState === 'error' ? C.err : '#d97706'}`,
-                         background:'rgba(255,255,255,0.6)', fontSize:14, cursor:'pointer',
-                         display:'flex', alignItems:'center', justifyContent:'center', padding:0 }}>
-                💾
-              </button>
-            )}
             {/* pobočka */}
             <div onClick={() => { setPinInput(''); setPinError(false); setPinStep(true); }} title="Zmeniť prevádzku"
               style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 11px 6px 9px', borderRadius:99, background:C.goldDim, border:`1px solid ${C.goldLine}`, cursor:'pointer' }}>
@@ -2233,20 +2234,17 @@ export default function App() {
             <div style={{ flex:1, minWidth:0 }}>
               <div style={{ fontSize:12.5, fontWeight:800, color:C.gold }}>Záloha je staršia než 7 dní</div>
               <div style={{ fontSize:11, color:C.sub, marginTop:2, lineHeight:1.5 }}>
-                {fsState === 'unsupported'
-                  ? 'Stiahni si zálohu dát — pri vyčistení prehliadača by si o všetko prišiel.'
-                  : 'Zapni auto-zálohu na disk alebo si stiahni ručnú zálohu.'}
+                Otvor zálohovanie a ulož si dáta — pri vyčistení prehliadača by si o ne prišiel.
               </div>
             </div>
             <button onClick={() => {
-                if (fsState === 'unsupported') exportBackup();
-                else backupChipClick();
+                setShowBackupModal(true);
                 setBackupReminder(false);
                 localStorage.setItem('foxford-backup-prompt-day', new Date().toDateString());
               }}
               style={{ padding:'9px 13px', borderRadius:11, border:`1px solid ${C.goldLine}`, background:'rgba(255,255,255,0.7)',
                        color:C.gold, fontWeight:800, fontSize:11.5, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
-              {fsState === 'unsupported' ? '⬇ Zálohovať' : '💾 Zapnúť'}
+              💾 Otvoriť
             </button>
             <button onClick={() => { setBackupReminder(false); localStorage.setItem('foxford-backup-prompt-day', new Date().toDateString()); }}
               style={{ background:'none', border:'none', color:C.muted, fontSize:16, cursor:'pointer', padding:'0 2px', lineHeight:1, flexShrink:0 }}>×</button>
@@ -3027,72 +3025,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Záloha dát — export/import localStorage */}
-            <div style={{ display:'flex', gap:8, marginTop:8 }}>
-              <button onClick={exportBackup} style={{
-                flex:1, padding:'12px', borderRadius:14, border:`1px solid ${C.border}`,
-                background:'transparent', color:C.sub, fontWeight:700, fontSize:12,
-                cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:6,
-              }}>
-                💾 Exportovať zálohu
-              </button>
-              <label style={{
-                flex:1, padding:'12px', borderRadius:14, border:`1px solid ${C.border}`,
-                background:'transparent', color:C.sub, fontWeight:700, fontSize:12,
-                cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:6,
-                boxSizing:'border-box',
-              }}>
-                📥 Obnoviť zálohu
-                <input type="file" accept=".json,application/json" style={{ display:'none' }}
-                  onChange={e => { const f = e.target.files?.[0]; if (f) importBackup(f); e.target.value = ''; }} />
-              </label>
-            </div>
-            <div style={{ fontSize:10, color:C.muted, textAlign:'center', marginTop:4, lineHeight:1.5 }}>
-              Záloha obsahuje úlohy, katalóg, inventúru, odpisy aj nastavenia.<br />Ulož si ju pred výmenou zariadenia alebo čistením prehliadača.
-            </div>
-
-            {/* Obnova z tabuľky — záchrana aj keď zariadenie prišlo o dáta aj o súborovú zálohu */}
-            <button onClick={restoreFromCloud} disabled={cloudRestoring} style={{
-              width:'100%', padding:'12px', marginTop:8, borderRadius:14,
-              border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold,
-              fontWeight:800, fontSize:12.5, cursor: cloudRestoring ? 'default' : 'pointer',
-              fontFamily:'inherit', opacity: cloudRestoring ? .6 : 1,
-            }}>
-              {cloudRestoring ? '⏳ Načítavam zálohu…' : '☁ Obnoviť poslednú zálohu z tabuľky'}
-            </button>
-            <div style={{ fontSize:10, color:C.muted, textAlign:'center', marginTop:4, lineHeight:1.5 }}>
-              Appka si sama ukladá zálohu do tabuľky pobočky — odtiaľ ju stiahneš aj po vyčistení prehliadača.
-            </div>
-
-            {/* Auto-záloha na disk — zobrazí sa všade, kde prehliadač vie showSaveFilePicker */}
-            {fsState !== 'unsupported' && (
-              <div onClick={backupChipClick}
-                style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginTop:8,
-                         padding:'12px 14px', borderRadius:14, cursor:'pointer', userSelect:'none',
-                         border:`1px solid ${fsState === 'on' ? C.ok : fsState === 'error' ? C.err : fsState === 'need-permission' ? '#d97706' : C.border}`,
-                         background: fsState === 'on' ? 'rgba(42,154,85,0.08)' : 'transparent' }}>
-                <div style={{ minWidth:0 }}>
-                  <div style={{ fontSize:13, fontWeight:700, letterSpacing:.3,
-                                color: fsState === 'on' ? C.ok : fsState === 'error' ? C.err : fsState === 'need-permission' ? '#d97706' : C.muted }}>
-                    💾 Auto-záloha na disk{fsState === 'on' ? ': zapnutá' : fsState === 'need-permission' ? ': povoliť zápis' : fsState === 'error' ? ': chyba zápisu' : ''}
-                  </div>
-                  <div style={{ fontSize:10, color:C.muted, marginTop:2, lineHeight:1.5 }}>
-                    {fsState === 'on' && (lastBackupAt
-                      ? `Každá zmena sa do minúty uloží do vybraného súboru — naposledy ${new Date(lastBackupAt).toLocaleString('sk-SK', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}. Klik = vypnúť.`
-                      : 'Každá zmena sa do minúty uloží do vybraného súboru. Klik = vypnúť.')}
-                    {fsState === 'need-permission' && 'Chrome po reštarte potrebuje jedno potvrdenie — klikni a povoľ zápis (ideálne „Povoliť pri každej návšteve“).'}
-                    {fsState === 'error' && 'Zápis zlyhal (súbor presunutý alebo zmazaný?). Klikni a vyber súbor znova.'}
-                    {fsState === 'off' && 'Vyber raz súbor (napr. v Dokumentoch alebo na OneDrive/Disku Google) a appka doň bude priebežne ukladať zálohu sama.'}
-                  </div>
-                </div>
-                <div style={{ width:38, height:22, borderRadius:11, padding:2, transition:'background .2s', flexShrink:0,
-                              background: fsState === 'on' ? C.ok : 'rgba(150,120,80,0.25)' }}>
-                  <div style={{ width:18, height:18, borderRadius:'50%', background:'#fff', transition:'transform .2s',
-                                transform: fsState === 'on' ? 'translateX(16px)' : 'translateX(0)',
-                                boxShadow:'0 1px 3px rgba(0,0,0,0.3)' }} />
-                </div>
-              </div>
-            )}
+            {/* Zálohovanie sa presunulo do ozubeného kolieska v hlavičke */}
           </div>
         )}
 
@@ -4315,6 +4248,99 @@ export default function App() {
       )}
 
       {/* ── NOTIFICATION SETTINGS MODAL ─────────────────────────────────────── */}
+      {/* ── ZÁLOHOVANIE ──────────────────────────────────────────────────────── */}
+      {showBackupModal && (
+        <div onMouseDown={() => setShowBackupModal(false)} style={{ position:'fixed', inset:0, background:'rgba(30,22,8,.55)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2000, padding:24 }}>
+          <div onMouseDown={e => e.stopPropagation()} style={{ background:C.modal, border:`1px solid ${C.borderM}`, width:'100%', maxWidth:430, maxHeight:'86vh', overflowY:'auto', borderRadius:24, padding:'28px 22px 24px', boxShadow:'0 8px 40px rgba(0,0,0,.12)' }}>
+            <div style={{ fontSize:30, textAlign:'center', marginBottom:10 }}>💾</div>
+            <div style={{ fontSize:16, fontWeight:800, color:C.text, textAlign:'center', marginBottom:4 }}>Zálohovanie dát</div>
+            <div style={{ fontSize:12, color:C.sub, textAlign:'center', marginBottom:22, lineHeight:1.5 }}>
+              Úlohy, katalóg, inventúra, odpisy, alkohol aj nastavenia
+            </div>
+
+            <Tag text="Automaticky" />
+            <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:8, marginBottom:20 }}>
+              {/* Záloha do tabuľky — beží vždy, netreba nič nastavovať */}
+              <div style={{ borderRadius:14, border:`1px solid ${C.ok}55`, background:'rgba(42,154,85,0.08)', padding:'12px 16px' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                  <span style={{ width:8, height:8, borderRadius:'50%', background:C.ok, flexShrink:0 }} />
+                  <div style={{ fontSize:13, fontWeight:700, color:C.ok }}>Záloha do tabuľky pobočky</div>
+                </div>
+                <div style={{ fontSize:11, color:C.sub, marginTop:4, lineHeight:1.6 }}>
+                  Beží sama každé 4 hodiny. Prežije aj vyčistenie prehliadača či stratu zariadenia.
+                  {lastBackupAt ? ` Naposledy ${new Date(lastBackupAt).toLocaleString('sk-SK', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}.` : ''}
+                </div>
+              </div>
+
+              {/* Auto-záloha na disk — zobrazí sa všade, kde prehliadač vie showSaveFilePicker */}
+              {fsState !== 'unsupported' && (
+                <div onClick={backupChipClick}
+                  style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10,
+                           padding:'12px 16px', borderRadius:14, cursor:'pointer', userSelect:'none',
+                           border:`1px solid ${fsState === 'on' ? C.ok + '55' : fsState === 'error' ? C.err : fsState === 'need-permission' ? '#d97706' : C.border}`,
+                           background: fsState === 'on' ? 'rgba(42,154,85,0.08)' : C.panel }}>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontSize:13, fontWeight:700,
+                                  color: fsState === 'on' ? C.ok : fsState === 'error' ? C.err : fsState === 'need-permission' ? '#d97706' : C.text }}>
+                      Záloha do súboru{fsState === 'need-permission' ? ' — povoliť zápis' : fsState === 'error' ? ' — chyba zápisu' : ''}
+                    </div>
+                    <div style={{ fontSize:11, color:C.sub, marginTop:3, lineHeight:1.6 }}>
+                      {fsState === 'on' && 'Zapisuje do vybraného súboru do minúty od každej zmeny. Ťuknutím vypneš.'}
+                      {fsState === 'need-permission' && 'Prehliadač po reštarte potrebuje jedno potvrdenie. Ťukni a povoľ zápis — ideálne „Povoliť pri každej návšteve“.'}
+                      {fsState === 'error' && 'Zápis zlyhal — súbor bol presunutý alebo zmazaný. Ťukni a vyber ho znova.'}
+                      {fsState === 'off' && 'Vyber raz súbor (ideálne v priečinku, ktorý sa synchronizuje na Disk Google alebo OneDrive) a appka doň bude zálohovať sama.'}
+                    </div>
+                  </div>
+                  <div style={{ width:42, height:24, borderRadius:12, background: fsState === 'on' ? C.ok : 'rgba(150,120,80,0.22)', position:'relative', transition:'background .2s', flexShrink:0 }}>
+                    <div style={{ position:'absolute', top:2, left: fsState === 'on' ? 20 : 2, width:20, height:20, borderRadius:'50%', background:'white', boxShadow:'0 1px 4px rgba(0,0,0,0.2)', transition:'left .2s' }} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <Tag text="Obnova a ručná záloha" />
+            <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:8 }}>
+              <button onClick={restoreFromCloud} disabled={cloudRestoring} style={{
+                width:'100%', padding:'13px', borderRadius:14,
+                border:`1px solid ${C.goldLine}`, background:C.goldDim, color:C.gold,
+                fontWeight:800, fontSize:13, cursor: cloudRestoring ? 'default' : 'pointer',
+                fontFamily:'inherit', opacity: cloudRestoring ? .6 : 1,
+              }}>
+                {cloudRestoring ? '⏳ Načítavam zálohu…' : '☁ Obnoviť poslednú zálohu z tabuľky'}
+              </button>
+
+              <div style={{ display:'flex', gap:8 }}>
+                <button onClick={exportBackup} style={{
+                  flex:1, padding:'12px', borderRadius:14, border:`1px solid ${C.border}`,
+                  background:'transparent', color:C.sub, fontWeight:700, fontSize:12,
+                  cursor:'pointer', fontFamily:'inherit',
+                }}>
+                  💾 Stiahnuť zálohu
+                </button>
+                <label style={{
+                  flex:1, padding:'12px', borderRadius:14, border:`1px solid ${C.border}`,
+                  background:'transparent', color:C.sub, fontWeight:700, fontSize:12,
+                  cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center',
+                  boxSizing:'border-box',
+                }}>
+                  📥 Obnoviť zo súboru
+                  <input type="file" accept=".json,application/json" style={{ display:'none' }}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) importBackup(f); e.target.value = ''; }} />
+                </label>
+              </div>
+            </div>
+
+            <div style={{ fontSize:10.5, color:C.muted, textAlign:'center', marginTop:12, lineHeight:1.6 }}>
+              Obnova prepíše dáta v tomto zariadení dátami zo zálohy.
+            </div>
+
+            <button onClick={() => setShowBackupModal(false)} style={{ width:'100%', padding:'13px', borderRadius:14, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit', marginTop:14 }}>
+              Zavrieť
+            </button>
+          </div>
+        </div>
+      )}
+
       {showNotifModal && (
         <div onMouseDown={() => setShowNotifModal(false)} style={{ position:'fixed', inset:0, background:'rgba(30,22,8,.55)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2000, padding:24 }}>
           <div onMouseDown={e => e.stopPropagation()} style={{ background:C.modal, border:`1px solid ${C.borderM}`, width:'100%', borderRadius:24, padding:'28px 22px 24px', boxShadow:'0 8px 40px rgba(0,0,0,.12)' }}>
