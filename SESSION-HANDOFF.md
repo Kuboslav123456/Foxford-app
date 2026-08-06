@@ -1,7 +1,24 @@
 # SESSION HANDOFF — August 2026
 
 ## Aktuálna verzia
-**v50** — `src/index.js` APP_VERSION = 50, `public/version.json` v = 50
+**Kód = v51, živé na tabletoch = v50.** Deploy v51 zlyhal na GitHub Pages (viď „Nedokončené“ nižšie).
+
+### v51: Zálohovanie presunuté do ozubeného kolieska
+- Nový gear button v hlavičke (vľavo od zoomu) otvára modal **Zálohovanie dát**
+- Modal: sekcia *Automaticky* (stav zálohy do tabuľky + prepínač zálohy do súboru) a *Obnova a ručná záloha* (☁ obnova z tabuľky, stiahnuť, obnoviť zo súboru)
+- Bodka na koliesku keď auto-záloha potrebuje zásah alebo je záloha stará
+- Tab Sklad vyčistený od záloh; 7-dňová pripomienka otvára modal; samostatný 💾 badge odstránený
+
+## ⚠ Nedokončené — deploy v51
+`npm run deploy` prešiel („Published“, gh-pages má v51), ale GitHubov workflow *pages build and deployment* dvakrát zlyhal na **„Timeout reached, aborting!“**. Príčina: deployment stojí vo fronte 9+ min, krok `actions/deploy-pages@v5` má limit 10 min. Jeden beh (v50, 11:00Z) sa stihol za 8 m 49 s, ďalšie dva nie.
+
+**Ako pokračovať:**
+1. Retrigger prázdnym commitom nad gh-pages (gh-pages sám nič nepushne, keď je build identický):
+   `$t=git rev-parse 'origin/gh-pages^{tree}'; $p=git rev-parse origin/gh-pages; $n=git commit-tree $t -p $p -m retry; git push origin "$($n):gh-pages"`
+2. Overiť beh: `api.github.com/repos/Kuboslav123456/Foxford-app/actions/runs?per_page=3` a živú verziu cez `version.json?x=<random>` (bare URL vracia cache).
+3. Ak padá ďalej → vlastný `.github/workflows/deploy.yml` s `timeout: 1800000` + Settings → Pages → Source: GitHub Actions.
+
+Pozn.: v50 obsahuje všetko podstatné (zálohy do tabuľky, obnova, flat Odpisy). v51 je iba presun UI.
 
 ### v50: Auto-záloha na disk (File System Access API)
 - Prepínač **💾 Auto-záloha na disk** v tabe Sklad pod ručnou zálohou — používateľ raz vyberie súbor (Dokumenty/OneDrive/Disk Google), appka doň priebežne zapisuje snapshot všetkých `foxford-*` kľúčov (interval 60 s + visibilitychange, len pri reálnej zmene dát)
