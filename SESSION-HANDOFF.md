@@ -1,7 +1,14 @@
 # SESSION HANDOFF — August 2026
 
 ## Aktuálna verzia
-**Kód = v51, živé na tabletoch = v50.** Deploy v51 zlyhal na GitHub Pages (viď „Nedokončené“ nižšie).
+**v52 — nasadené a živé** (2026-08-07). Obsahuje v51 (zálohovanie pod ozubeným kolieskom) + opravu tichej straty polnočných odoslaní.
+
+### v52: Zlyhané odoslanie končí vo fronte, nie v koši
+`sendOrQueue` aj `doFetch` pri chybe siete položku zaradia do `foxford-offline-queue`. Predtým `.catch(() => {})` chybu zahodil — a keďže odpisy/úlohy/alkohol sa posielajú **iba raz** (polnočná uzávierka, bez markera o odoslaní), dáta sa stratili navždy. `navigator.onLine` býva true aj keď je tablet uspatý alebo vypadne wifi, takže offline vetva to nezachytila.
+
+Fronta sa navyše skúša odoslať **každých 5 minút** (`flushQueue` v `useCallback` + interval), nielen pri štarte a zmene konektivity — inak by položka z polnoci čakala do ďalšieho otvorenia appky. Záloha (`type: 'backup'`) sa do fronty **nezaraďuje** (`doFetch(..., false)`) — opakuje sa sama každé 4 h a snapshot je veľký.
+
+**Incident 7.8.2026:** odpis za 6.8. (káva 0,02 kg) sa nedostal do tabuľky presne z tohto dôvodu. Diagnostikované cez `?backup=latest` — snapshot ukázal, že odpis v localStorage je, `foxford-last-reset-date` = 7.8. (uzávierka prebehla) a offline fronta je prázdna → odoslanie zlyhalo a bolo zahodené. Odpis doposlaný ručne cez POST na GAS.
 
 ### v51: Zálohovanie presunuté do ozubeného kolieska
 - Nový gear button v hlavičke (vľavo od zoomu) otvára modal **Zálohovanie dát**
@@ -9,16 +16,17 @@
 - Bodka na koliesku keď auto-záloha potrebuje zásah alebo je záloha stará
 - Tab Sklad vyčistený od záloh; 7-dňová pripomienka otvára modal; samostatný 💾 badge odstránený
 
-## ⚠ Nedokončené — deploy v51
-`npm run deploy` prešiel („Published“, gh-pages má v51), ale GitHubov workflow *pages build and deployment* dvakrát zlyhal na **„Timeout reached, aborting!“**. Príčina: deployment stojí vo fronte 9+ min, krok `actions/deploy-pages@v5` má limit 10 min. Jeden beh (v50, 11:00Z) sa stihol za 8 m 49 s, ďalšie dva nie.
+## Deploy — na čo si dať pozor
+**„Published“ z `gh-pages` NEZNAMENÁ, že je to živé.** GitHub potom ešte púšťa workflow *pages build and deployment*. 6.8.2026 tri behy po sebe zlyhali na **„Timeout reached, aborting!“** — deployment stál vo fronte 9+ min, kým krok `actions/deploy-pages@v5` má limit 10 min (`timeout: 600000`). 7.8. už prešlo bez zásahu, čiže išlo o prechodné spomalenie na strane GitHubu.
 
-**Ako pokračovať:**
-1. Retrigger prázdnym commitom nad gh-pages (gh-pages sám nič nepushne, keď je build identický):
-   `$t=git rev-parse 'origin/gh-pages^{tree}'; $p=git rev-parse origin/gh-pages; $n=git commit-tree $t -p $p -m retry; git push origin "$($n):gh-pages"`
-2. Overiť beh: `api.github.com/repos/Kuboslav123456/Foxford-app/actions/runs?per_page=3` a živú verziu cez `version.json?x=<random>` (bare URL vracia cache).
-3. Ak padá ďalej → vlastný `.github/workflows/deploy.yml` s `timeout: 1800000` + Settings → Pages → Source: GitHub Actions.
+**Po každom deployi overiť:**
+1. Beh: `api.github.com/repos/Kuboslav123456/Foxford-app/actions/runs?per_page=3` (bez tokenu, nízky rate limit — nepolluj v cykle)
+2. Živú verziu: `version.json?x=<random>` — **bare URL vracia cache** (Fastly `max-age=600`), query param ju obíde
 
-Pozn.: v50 obsahuje všetko podstatné (zálohy do tabuľky, obnova, flat Odpisy). v51 je iba presun UI.
+**Retrigger bez zmeny obsahu** (gh-pages nič nepushne, keď je build identický) — prázdny commit:
+`$t=git rev-parse 'origin/gh-pages^{tree}'; $p=git rev-parse origin/gh-pages; $n=git commit-tree $t -p $p -m retry; git push origin "$($n):gh-pages"`
+
+**Ak by padalo opakovane:** vlastný `.github/workflows/deploy.yml` s `actions/deploy-pages` a `timeout: 1800000` + používateľ prepne Settings → Pages → Source na „GitHub Actions“ (odpadol by aj `npm run deploy`). Zatiaľ neurobené — nebolo treba.
 
 ### v50: Auto-záloha na disk (File System Access API)
 - Prepínač **💾 Auto-záloha na disk** v tabe Sklad pod ručnou zálohou — používateľ raz vyberie súbor (Dokumenty/OneDrive/Disk Google), appka doň priebežne zapisuje snapshot všetkých `foxford-*` kľúčov (interval 60 s + visibilitychange, len pri reálnej zmene dát)
