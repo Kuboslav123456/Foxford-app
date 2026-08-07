@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 // ── LIGHT WARM PALETTE ───────────────────────────────────────────────────────
 const BASE_C = {
@@ -473,6 +473,17 @@ function safeParse(key, fallback) {
   }
 }
 
+// Uloží položku do offline fronty — App effect ju odošle keď príde online.
+// Modulová úroveň, aby to vedel použiť aj performDailyClose (beží mimo React stavu).
+function queueSend(url, type, payload) {
+  try {
+    const raw = localStorage.getItem('foxford-offline-queue');
+    const q = raw ? JSON.parse(raw) : [];
+    q.push({ type, payload, url, ts: Date.now() });
+    localStorage.setItem('foxford-offline-queue', JSON.stringify(q));
+  } catch (_) {}
+}
+
 // ── Offline-aware send: pošle alebo uloží do fronty (modulová úroveň, bez React stavu) ──
 function sendOrQueue(url, type, payload) {
   // Ochrana proti placeholder URL pre nenakonfigurované pobočky
@@ -483,16 +494,14 @@ function sendOrQueue(url, type, payload) {
   const token = process.env.REACT_APP_GAS_TOKEN || '';
   const body = JSON.stringify({ type, ...payload, _token: token });
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    // Uložiť do localStorage fronty — App effect ju odošle keď príde online
-    try {
-      const raw = localStorage.getItem('foxford-offline-queue');
-      const q = raw ? JSON.parse(raw) : [];
-      q.push({ type, payload, url, ts: Date.now() });
-      localStorage.setItem('foxford-offline-queue', JSON.stringify(q));
-    } catch (_) {}
+    queueSend(url, type, payload);
     return;
   }
-  fetch(url, { method:'POST', mode:'no-cors', headers:{ 'Content-Type':'application/json' }, body }).catch(() => {});
+  // Zlyhanie siete NEZAHADZOVAŤ: `navigator.onLine` býva true aj keď je zariadenie
+  // uspaté alebo wifi vypadla — bez tohto by sa polnočné odoslanie odpisov/úloh
+  // stratilo navždy (odosielajú sa iba raz). Pri chybe to teda ide do fronty.
+  fetch(url, { method:'POST', mode:'no-cors', headers:{ 'Content-Type':'application/json' }, body })
+    .catch(() => queueSend(url, type, payload));
 }
 
 // ── DAILY CLOSE — odošle denné úlohy + odpisy končiaceho dňa do GS a vyresetuje stav ──
@@ -1017,7 +1026,9 @@ export default function App() {
 
   const scriptUrl = BRANCHES.find(b => b.name === branch)?.url || BRANCHES[0].url;
 
-  const doFetch = (url, type, payload) => {
+  // queueOnFail=false len pre zálohu — tá sa opakuje sama každé 4 h, nemá zmysel
+  // držať vo fronte starý (a veľký) snapshot.
+  const doFetch = (url, type, payload, queueOnFail = true) => {
     if (!url || /^URL_POBOCKA/.test(url) || !/^https?:\/\//.test(url)) {
       console.warn('doFetch: skipped — placeholder/invalid URL', url);
       return;
@@ -1026,7 +1037,10 @@ export default function App() {
       method: 'POST', mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type, ...payload, _token: process.env.REACT_APP_GAS_TOKEN }),
-    }).catch(console.error);
+    }).catch(err => {
+      console.error(err);
+      if (queueOnFail) queueSend(url, type, payload);
+    });
   };
 
   const sendToSheets = (type, payload) => {
@@ -1047,8 +1061,8 @@ export default function App() {
   };
 
   // Odošli frontu keď príde konektivita. Failed položky (network-level) vrátime späť do fronty.
-  useEffect(() => {
-    if (!online) return;
+  const flushQueue = useCallback(() => {
+    if (!navigator.onLine) return;
     const rawQueue = safeParse('foxford-offline-queue', []);
     if (rawQueue.length === 0) return;
     // Položky s neplatnou/placeholder URL natrvalo zahodiť — opakovaný pokus by aj tak nikdy neuspel
@@ -1086,8 +1100,16 @@ export default function App() {
         setTimeout(() => setOfflineFlushed(0), 4000);
       }
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [online]);
+  }, []);
+
+  // Skúšaj frontu pri štarte, pri návrate konektivity a potom každých 5 minút.
+  // Periodické opakovanie je dôležité pre polnočnú uzávierku: keď vtedy odoslanie
+  // zlyhá a appka ostane otvorená, bez neho by položka čakala až do ďalšieho otvorenia.
+  useEffect(() => {
+    flushQueue();
+    const iv = setInterval(flushQueue, 5 * 60 * 1000);
+    return () => clearInterval(iv);
+  }, [online, flushQueue]);
 
   // Kľúče dňa (YYYY-MM-DD) — používajú odpisy aj uzávierka; deklarované pred effectmi (TDZ)
   // Kalendárová aritmetika (setDate) je DST-safe — odčítanie 86400000 ms zlyháva v ~1h okne po jarnom prechode na letný čas.
@@ -1392,7 +1414,7 @@ export default function App() {
       day: localDayKey(new Date()),
       branch,
       snapshot: { _app: 'foxford', _exported: new Date().toISOString(), _branch: branch, data: backupSnapshotData() },
-    });
+    }, false);
     // no-cors = doručenie sa nedá overiť; berieme optimisticky ako zálohu (utíši 7-dňovú pripomienku)
     const t = Date.now();
     localStorage.setItem(LS_GAS_BACKUP_TS, String(t));
