@@ -46,7 +46,7 @@ if (new URLSearchParams(window.location.search).get('reset') === '1') {
 // ── Automatická detekcia novej verzie ────────────────────────────────────────
 // APP_VERSION musí zodpovedať "v" v public/version.json.
 // Keď deployuješ novú verziu: zvýš číslo TU aj v public/version.json.
-const APP_VERSION = 52;
+const APP_VERSION = 53;
 
 window.addEventListener('load', () => {
   // Oneskorenie 2s aby sa app stihla vyrenderovať pred prípadným reload-om
@@ -56,19 +56,29 @@ window.addEventListener('load', () => {
       .then(r => r.json())
       .then(data => {
         if (typeof data.v === 'number' && data.v > APP_VERSION) {
-          // Nová verzia na serveri — vyčisti SW + caches a reload
+          // Poistka proti nekonečnému reloadu: keby sa `version.json` a APP_VERSION
+          // v builde rozišli (bump len na jednom mieste), appka by sa reloadovala
+          // dokola a v nainštalovanej PWA by to vyzeralo ako nefunkčná appka.
+          // sessionStorage → v rámci behu skúsime raz, po novom spustení znova.
+          try {
+            if (sessionStorage.getItem('foxford-update-reload') === String(data.v)) return;
+            sessionStorage.setItem('foxford-update-reload', String(data.v));
+          } catch (_) {}
+
+          // Nová verzia na serveri — NEmažeme cache ani neodregistrujeme SW.
+          // Navigácia je v SW network-first, takže reload stiahne nový index.html
+          // a s ním aj nové hashované súbory. Predtým sa tu mazalo úplne všetko;
+          // appka potom nabiehala s prázdnou cache a keď v tej chvíli zakolísala
+          // sieť (typicky tablet po prebudení), nemala sa z čoho načítať —
+          // v nainštalovanej PWA to vyzeralo ako nenávratná porucha.
           (async () => {
             try {
               if ('serviceWorker' in navigator) {
-                const regs = await navigator.serviceWorker.getRegistrations();
-                await Promise.all(regs.map(r => r.unregister()));
-              }
-              if ('caches' in window) {
-                const keys = await caches.keys();
-                await Promise.all(keys.map(k => caches.delete(k)));
+                const reg = await navigator.serviceWorker.getRegistration();
+                if (reg) await reg.update();
               }
             } catch (_) {}
-            window.location.reload(true);
+            window.location.reload();
           })();
         }
       })

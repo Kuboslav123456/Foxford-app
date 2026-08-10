@@ -1,13 +1,20 @@
-const CACHE = 'foxford-v6';
-const ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/favicon.ico',
-];
+const CACHE = 'foxford-v7';
+
+// Cesty MUSIA byť odvodené od scope SW (…/Foxford-app/), nie od koreňa domény.
+// Absolútne '/index.html' ukazovalo na koreň github.io, kde nič nie je → všetky
+// štyri requesty 404 → addAll() (atomické) zlyhalo → precache ostávala prázdna
+// a appka nemala offline fallback. To rozbíjalo hlavne nainštalovanú PWA.
+const SCOPE = self.registration.scope;
+const ASSETS = ['', 'index.html', 'manifest.json', 'favicon.ico'].map(p => SCOPE + p);
+const HOME = SCOPE;
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS).catch(() => {})));
+  e.waitUntil(
+    caches.open(CACHE).then(c =>
+      // Po jednom, nie addAll() — jeden chýbajúci súbor nesmie zhodiť celú precache
+      Promise.all(ASSETS.map(a => c.add(a).catch(() => {})))
+    )
+  );
   self.skipWaiting();
 });
 
@@ -42,13 +49,19 @@ self.addEventListener('fetch', e => {
 
   const isNavigation = e.request.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('/index.html');
 
-  // Pre HTML navigáciu: network-first (aby user videl nový build hneď po deploy)
+  // Pre HTML navigáciu: network-first (aby user videl nový build hneď po deploy),
+  // pri výpadku siete padáme na cache — inak PWA ukáže prázdnu obrazovku.
   if (isNavigation) {
     e.respondWith(
       fetch(e.request).then(res => {
         if (res.ok) caches.open(CACHE).then(c => c.put(e.request, res.clone()));
         return res;
-      }).catch(() => caches.match(e.request).then(c => c || caches.match('/')))
+      }).catch(() =>
+        caches.match(e.request)
+          .then(c => c || caches.match(HOME))
+          .then(c => c || caches.match(HOME + 'index.html'))
+          .then(c => c || Response.error())
+      )
     );
     return;
   }
