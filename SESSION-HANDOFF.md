@@ -1,7 +1,19 @@
 # SESSION HANDOFF — August 2026
 
 ## Aktuálna verzia
-**v52 — nasadené a živé** (2026-08-07). Obsahuje v51 (zálohovanie pod ozubeným kolieskom) + opravu tichej straty polnočných odoslaní.
+**v54 — nasadené a živé** (2026-08-10).
+
+### v54: Aktualizácia sa aplikuje až ráno o 5:00
+Reload uprostred zmeny zhadzoval obsluhe rozpísanú inventúru/odpis. Nová verzia sa teraz iba zaznamená (`window.FOXFORD_PENDING_UPDATE` + event `foxford-update-pending`) a reload sa spustí len keď `new Date().getHours() === UPDATE_HOUR` (=5). Kontrola beží každých 15 min, aby ju tablet bežiaci nonstop zachytil. `SW_UPDATED` reload je gatovaný rovnako.
+
+Cez deň svieti na ozubenom koliesku zelená bodka a v modáli je tlačidlo **⟳ Aktualizovať teraz** (`window.foxfordApplyUpdate`). Hodina = konštanta `UPDATE_HOUR` v `src/index.js`.
+
+### v53: Oprava nenačítania nainštalovanej PWA po update
+Dve chyby, obe bili hlavne do PWA (v Chrome sa dali obísť):
+1. `service-worker.js` mal precache cesty od koreňa domény (`/index.html`) namiesto od scope SW (`/Foxford-app/`). Všetky štyri vracali 404, `addAll()` je atomické → **precache ostávala vždy prázdna** a offline fallback ukazoval na neexistujúce `/`. Teraz sa cesty odvodzujú z `self.registration.scope`, cachujú sa po jednom (`c.add().catch()`) a navigačný fallback padá na scope + `index.html`. Cache bumpnutá na `foxford-v7`.
+2. Detekcia novej verzie mazala **všetky** cache a odregistrovala SW, až potom reloadla. V tom okne appka nabiehala s prázdnymi rukami a pri zakolísaní siete (tablet po prebudení) nemala z čoho nabehnúť. Navigácia je pritom network-first, takže stačí `reload()`. Pridaná poistka proti nekonečnému reloadu cez `sessionStorage`.
+
+**Cache/SW ≠ dáta.** `caches.delete()` + `unregister()` localStorage NEmažú (overené empiricky na živej appke). Dáta zmaže len „Vymazať údaje/úložisko“ v Androide alebo „cookies a údaje stránok“ v Chrome.
 
 ### v52: Zlyhané odoslanie končí vo fronte, nie v koši
 `sendOrQueue` aj `doFetch` pri chybe siete položku zaradia do `foxford-offline-queue`. Predtým `.catch(() => {})` chybu zahodil — a keďže odpisy/úlohy/alkohol sa posielajú **iba raz** (polnočná uzávierka, bez markera o odoslaní), dáta sa stratili navždy. `navigator.onLine` býva true aj keď je tablet uspatý alebo vypadne wifi, takže offline vetva to nezachytila.
