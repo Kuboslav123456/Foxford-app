@@ -924,6 +924,13 @@ export default function App() {
   const [backupReminder, setBackupReminder] = useState(false);
   const [cloudRestoring, setCloudRestoring] = useState(false);
   const [showBackupModal, setShowBackupModal] = useState(false);
+  // Nová verzia čaká na ranné okno (5:00) — index.js ju len ohlási, nereloaduje cez deň
+  const [pendingUpdate, setPendingUpdate] = useState(() => window.FOXFORD_PENDING_UPDATE || 0);
+  useEffect(() => {
+    const h = e => setPendingUpdate(e.detail);
+    window.addEventListener('foxford-update-pending', h);
+    return () => window.removeEventListener('foxford-update-pending', h);
+  }, []);
 
   // ── DYNAMICKÁ FARBA POBOČKY ───────────────────────────────────────────────
   const branchGold = (branch && BRANCH_COLORS[branch]) || BASE_C.gold;
@@ -2190,10 +2197,11 @@ export default function App() {
             <button onClick={() => setShowBackupModal(true)} title="Zálohovanie dát"
               style={{ position:'relative', width:32, height:32, borderRadius:9, border:`1px solid ${C.border}`, background:'rgba(255,255,255,0.6)', color:C.sub, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', padding:0 }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-              {/* bodka keď auto-záloha potrebuje zásah alebo dlho nebola žiadna záloha */}
-              {(fsState === 'need-permission' || fsState === 'error' || backupReminder) && (
+              {/* bodka keď auto-záloha potrebuje zásah, dlho nebola záloha, alebo čaká nová verzia */}
+              {(fsState === 'need-permission' || fsState === 'error' || backupReminder || pendingUpdate > 0) && (
                 <span style={{ position:'absolute', top:-3, right:-3, width:9, height:9, borderRadius:'50%',
-                               background: fsState === 'error' ? C.err : '#d97706', border:'1.5px solid #f2ede4' }} />
+                               background: fsState === 'error' ? C.err : pendingUpdate > 0 && fsState !== 'need-permission' && !backupReminder ? C.ok : '#d97706',
+                               border:'1.5px solid #f2ede4' }} />
               )}
             </button>
             {/* zoom − / + */}
@@ -4279,6 +4287,24 @@ export default function App() {
             <div style={{ fontSize:12, color:C.sub, textAlign:'center', marginBottom:22, lineHeight:1.5 }}>
               Úlohy, katalóg, inventúra, odpisy, alkohol aj nastavenia
             </div>
+
+            {/* Čakajúca aktualizácia — appka sa cez deň zámerne nereštartuje */}
+            {pendingUpdate > 0 && (
+              <div style={{ marginBottom:20, padding:'13px 16px', borderRadius:14,
+                            border:`1px solid ${C.ok}55`, background:'rgba(42,154,85,0.08)' }}>
+                <div style={{ fontSize:13, fontWeight:800, color:C.ok }}>Je pripravená nová verzia</div>
+                <div style={{ fontSize:11, color:C.sub, marginTop:4, lineHeight:1.6 }}>
+                  Nainštaluje sa sama ráno o 5:00, aby nikoho nevyrušila počas zmeny.
+                  Ak chceš, môžeš ju nasadiť hneď — appka sa reštartuje, dáta zostanú.
+                </div>
+                <button onClick={() => window.foxfordApplyUpdate && window.foxfordApplyUpdate()}
+                  style={{ width:'100%', marginTop:10, padding:'11px', borderRadius:12,
+                           border:`1px solid ${C.ok}`, background:'rgba(255,255,255,0.7)', color:C.ok,
+                           fontWeight:800, fontSize:12.5, cursor:'pointer', fontFamily:'inherit' }}>
+                  ⟳ Aktualizovať teraz
+                </button>
+              </div>
+            )}
 
             <Tag text="Automaticky" />
             <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:8, marginBottom:20 }}>
