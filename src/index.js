@@ -47,7 +47,7 @@ if (new URLSearchParams(window.location.search).get('reset') === '1') {
 // ── Automatická detekcia novej verzie ────────────────────────────────────────
 // APP_VERSION musí zodpovedať "v" v public/version.json.
 // Keď deployuješ novú verziu: zvýš číslo TU aj v public/version.json.
-const APP_VERSION = 54;
+const APP_VERSION = 55;
 
 // Aktualizácia sa NEaplikuje hocikedy — reload uprostred zmeny by obsluhe zhodil
 // rozpísanú inventúru či odpis. Appka novú verziu iba zaznamená a nainštaluje ju
@@ -55,6 +55,11 @@ const APP_VERSION = 54;
 // Cez deň sa dá aktualizovať ručne v ozubenom koliesku.
 const UPDATE_HOUR = 5;
 const CHECK_INTERVAL_MS = 15 * 60 * 1000;
+
+// Pre UI — appka zobrazuje verziu v ozubenom koliesku, nech sa dá overiť,
+// či sa zariadenie aktualizovalo (a či ranné okno naozaj funguje).
+window.FOXFORD_VERSION = APP_VERSION;
+window.FOXFORD_UPDATE_HOUR = UPDATE_HOUR;
 
 function inUpdateWindow() {
   return new Date().getHours() === UPDATE_HOUR;

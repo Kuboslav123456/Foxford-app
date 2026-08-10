@@ -4382,6 +4382,14 @@ export default function App() {
               Obnova prepíše dáta v tomto zariadení dátami zo zálohy.
             </div>
 
+            {/* Verzia zariadenia — nech sa dá overiť, či sa appka aktualizovala */}
+            <div style={{ fontSize:10.5, color:C.muted, textAlign:'center', marginTop:10, paddingTop:10, borderTop:`1px solid ${C.border}`, lineHeight:1.6 }}>
+              Verzia v tomto zariadení: <strong style={{ color:C.sub }}>v{window.FOXFORD_VERSION || '?'}</strong>
+              {pendingUpdate > 0
+                ? <> · čaká v{pendingUpdate} na {window.FOXFORD_UPDATE_HOUR ?? 5}:00</>
+                : <> · najnovšia</>}
+            </div>
+
             <button onClick={() => setShowBackupModal(false)} style={{ width:'100%', padding:'13px', borderRadius:14, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit', marginTop:14 }}>
               Zavrieť
             </button>
