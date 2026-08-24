@@ -1,7 +1,13 @@
 # SESSION HANDOFF — August 2026
 
 ## Aktuálna verzia
-**v54 — nasadené a živé** (2026-08-10).
+**v56 — nasadené** (2026-08-10). Tablety na v55+ ju aplikujú ráno o 5:00 (ranné okno) — toto je zároveň prvý ostrý test toho mechanizmu.
+
+### v56: Mesačný flush úloh
+Mesačné úlohy sa doteraz nikdy neodosielali ani neresetovali. Teraz zrkadlia víkendový vzor v `performDailyClose`: posledný deň mesiaca (real-time polnoc) alebo 1. v mesiaci (catch-up) → `tasks_summary` kategórie `mesačné` → reset úloh (headery zostanú) + vymazanie inšpektora. Dedup cez `foxford-mesacne-month-done` (kľúč `YYYY-MM` končiaceho mesiaca). Hraničné prípady (prelom roka, priestupný február) overené.
+
+### v55: Zobrazenie verzie
+Modal zálohovania (ozubené koliesko) dole ukazuje `Verzia v tomto zariadení: vNN · najnovšia` alebo `· čaká vMM na 5:00`. `window.FOXFORD_VERSION` + `window.FOXFORD_UPDATE_HOUR` nastavuje `src/index.js`.
 
 ### v54: Aktualizácia sa aplikuje až ráno o 5:00
 Reload uprostred zmeny zhadzoval obsluhe rozpísanú inventúru/odpis. Nová verzia sa teraz iba zaznamená (`window.FOXFORD_PENDING_UPDATE` + event `foxford-update-pending`) a reload sa spustí len keď `new Date().getHours() === UPDATE_HOUR` (=5). Kontrola beží každých 15 min, aby ju tablet bežiaci nonstop zachytil. `SW_UPDATED` reload je gatovaný rovnako.
@@ -136,9 +142,9 @@ GAS kód nasadený ručne — nie je v repozitári.
 ## Otvorené úlohy / TODO
 
 - [ ] Placeholder GAS URL pre pobočky Cubicon, Levice, Martin, Žilina, Poprad, Prešov, Košice (`URL_POBOCKA_*`)
-- [ ] Mesačné úlohy — zatiaľ bez auto-flushu (1. v mesiaci)
+- [x] Mesačné úlohy — auto-flush na prelome mesiaca (v56)
 - [ ] Agregácia tržieb / cross-branch dashboard (odložené)
-- [ ] Nivy GAS — chýba `alkohol_daily` handler
+- [ ] Nivy GAS — beží na starom kóde: chýba `alkohol_daily`, `backup`, flat Odpisy. Fix = vložiť `gas/Code.gs` (s tokenom Nivy) do jej skriptu a nasadiť novú verziu — rovnaký postup ako Obchodná 6.-7.8. Pozor na účet: nasadzovať prihlásený ako účet pobočky (nivy@foxford.sk?), ideálne v samostatnom Chrome profile.
 
 ---
 
