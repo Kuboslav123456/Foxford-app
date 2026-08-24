@@ -599,6 +599,35 @@ function performDailyClose(endingDate) {
       }
     }
 
+    // 2d) Mesačné: na prelome mesiaca odošli súhrn (hotové aj nehotové) + priprav reset — raz za mesiac.
+    // Zrkadlí víkendový vzor: real-time polnoc zatvára posledný deň mesiaca, catch-up môže
+    // prísť až 1. v novom mesiaci — obe cesty flushujú KONČIACI mesiac, dedup cez mesačný kľúč.
+    const _nextDay = new Date(endingDate); _nextDay.setDate(_nextDay.getDate() + 1);
+    const isLastOfMonth  = _nextDay.getDate() === 1;
+    const isFirstOfMonth = endingDate.getDate() === 1;
+    let flushMesacne = false;
+    if (isLastOfMonth || isFirstOfMonth) {
+      // Ktorý mesiac sa uzatvára: posledný deň → tento; 1. v mesiaci → predchádzajúci
+      const mRef = new Date(endingDate);
+      if (isFirstOfMonth) mRef.setDate(0);   // setDate(0) = posledný deň predošlého mesiaca
+      const mk = `${mRef.getFullYear()}-${String(mRef.getMonth() + 1).padStart(2, '0')}`;
+      if (localStorage.getItem('foxford-mesacne-month-done') !== mk) {
+        flushMesacne = true;
+        const mes = Array.isArray(tasksData.mesačné) ? tasksData.mesačné : [];
+        const mesList = mes.filter(t => !t.header);
+        const inspMes = (inspectorsData.mesačné || '').trim();
+        if (mesList.length > 0 && (mesList.some(t => t.done || t.issue) || inspMes)) {
+          sendOrQueue(url, 'tasks_summary', {
+            date: sendDate,
+            category: 'mesačné',
+            inspector: inspMes || 'Anonym',
+            tasks: mesList.map(t => ({ text: t.text, done: !!t.done, time: t.time || null, date: t.date || null, issue: t.issue || null, by: t.by || null })),
+          });
+        }
+        localStorage.setItem('foxford-mesacne-month-done', mk);
+      }
+    }
+
     // 3) Reset localStorage stavu pre nový deň — zachovať vlastné úlohy, len resetnúť stav
     const baseRanne = (Array.isArray(tasksData.ranné) && tasksData.ranné.length > 0) ? tasksData.ranné : INIT_TASKS.ranné;
     const baseVecerne = (Array.isArray(tasksData.večerné) && tasksData.večerné.length > 0) ? tasksData.večerné : INIT_TASKS.večerné;
@@ -611,9 +640,14 @@ function performDailyClose(endingDate) {
       const baseVik = (Array.isArray(tasksData.víkendové) && tasksData.víkendové.length > 0) ? tasksData.víkendové : INIT_TASKS.víkendové;
       resetTasks.víkendové = baseVik.map(t => t.header ? t : ({ ...t, done: false, time: null, date: null, issue: null, by: null }));
     }
+    if (flushMesacne) {
+      const baseMes = (Array.isArray(tasksData.mesačné) && tasksData.mesačné.length > 0) ? tasksData.mesačné : INIT_TASKS.mesačné;
+      resetTasks.mesačné = baseMes.map(t => t.header ? t : ({ ...t, done: false, time: null, date: null, issue: null, by: null }));
+    }
     localStorage.setItem('foxford-tasks', JSON.stringify(resetTasks));
     const resetInspectors = { ...inspectorsData, ranné: '', večerné: '' };
     if (flushVikend) resetInspectors.víkendové = '';
+    if (flushMesacne) resetInspectors.mesačné = '';
     localStorage.setItem('foxford-inspectors', JSON.stringify(resetInspectors));
     localStorage.setItem('foxford-haccp-date', '');
     localStorage.setItem('foxford-haccp-date-vecerne', '');
