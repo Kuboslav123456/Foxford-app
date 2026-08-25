@@ -1,7 +1,17 @@
 # SESSION HANDOFF — August 2026
 
 ## Aktuálna verzia
-**v56 — nasadené** (2026-08-10). Tablety na v55+ ju aplikujú ráno o 5:00 (ranné okno) — toto je zároveň prvý ostrý test toho mechanizmu.
+**v57 — nasadené** (2026-08-25). Tablety na v54+ ju aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳ v ozubenom koliesku.
+
+### v57: Pridávanie úlohy do vybranej sekcie
+`+` pridával úlohu vždy na koniec CELÉHO zoznamu — pri víkendových (majú sekcie Rajón/Bar/Zázemie a sklad) pristála mimo obrazovky pod poslednou sekciou, takže to vyzeralo, že + nefunguje (nahlásené používateľom).
+
+- V editácii je hore zvýraznený box **Nová úloha** (dashed zlatý rámik, `Tag`): pri zoznamoch so sekciami chipy na výber sekcie (default prvá), hint pod vstupom hovorí, kam sa úloha vloží
+- `addTask()`: vloženie na koniec VYBRANEJ sekcie (pred ďalší header); bez sekcií na koniec zoznamu; Enter aj + zdieľajú tú istú funkciu
+- Po pridaní `scrollIntoView` na novú úlohu + 2,4 s flash (`.task-flash`, keyframes `taskFlash` v globálnom `<style>`); riadky úloh majú `id="task-<id>"`
+- Stavy: `newTaskSection` (resetuje sa pri zmene `effectiveTab`), `justAddedId`
+
+**Pozor (PowerShell):** commit message s dvojitými úvodzovkami sa v PS 5.1 rozbije pri odovzdaní gitu (argument sa rozsekne) — v messagi ich nepoužívať. A nikdy nerobiť bump verzie cez `Get-Content -Raw | Set-Content` — rozbije UTF-8 diakritiku (stalo sa, súbor bolo treba vrátiť z gitu); na úpravy používať Edit tool.
 
 ### v56: Mesačný flush úloh
 Mesačné úlohy sa doteraz nikdy neodosielali ani neresetovali. Teraz zrkadlia víkendový vzor v `performDailyClose`: posledný deň mesiaca (real-time polnoc) alebo 1. v mesiaci (catch-up) → `tasks_summary` kategórie `mesačné` → reset úloh (headery zostanú) + vymazanie inšpektora. Dedup cez `foxford-mesacne-month-done` (kľúč `YYYY-MM` končiaceho mesiaca). Hraničné prípady (prelom roka, priestupný február) overené.
