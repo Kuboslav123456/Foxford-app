@@ -841,6 +841,11 @@ export default function App() {
     return saved;
   });
   const [newTask, setNewTask]       = useState('');
+  // Pridávanie do zoznamov so sekciami: kam sa úloha vloží (id headera); null = prvá sekcia.
+  // Bez tohto padala nová úloha vždy na koniec CELÉHO zoznamu — pri víkendových
+  // (ktoré majú sekcie) mimo obrazovky, takže + vyzeral, že nefunguje.
+  const [newTaskSection, setNewTaskSection] = useState(null);
+  const [justAddedId, setJustAddedId] = useState(null);   // flash zvýraznenie čerstvo pridanej úlohy
   const [tempFields, setTempFields] = useState(() => {
     // Migrácia: pri novej verzii nahraď zoznam zariadení na všetkých zariadeniach (prepíše vlastné úpravy)
     if (localStorage.getItem('foxford-temp-fields-version') !== TEMP_FIELDS_VERSION) {
@@ -2060,6 +2065,40 @@ export default function App() {
 
   const resetList = () => setConfirmReset(true);
 
+  // Pri prepnutí tabu zabudni vybranú sekciu — v inom tabe sú iné sekcie
+  useEffect(() => { setNewTaskSection(null); }, [effectiveTab]);
+
+  // Pridanie úlohy: pri zozname so sekciami sa vloží na KONIEC VYBRANEJ sekcie
+  // (pred ďalší header), nie na koniec celého zoznamu. Potom scroll + flash,
+  // aby bolo vidno, kam pribudla.
+  const addTask = () => {
+    const text = newTask.trim();
+    if (!text) return;
+    const item = { id: Date.now(), text, done: false, time: null, issue: null };
+    setTasks(prev => {
+      const list = prev[effectiveTab] || [];
+      const headers = list.filter(t => t.header);
+      if (headers.length === 0) return { ...prev, [effectiveTab]: [...list, item] };
+      const secId = newTaskSection ?? headers[0].id;
+      const start = list.findIndex(t => t.header && t.id === secId);
+      if (start === -1) return { ...prev, [effectiveTab]: [...list, item] };
+      let end = list.length;
+      for (let i = start + 1; i < list.length; i++) {
+        if (list[i].header) { end = i; break; }
+      }
+      const copy = [...list];
+      copy.splice(end, 0, item);
+      return { ...prev, [effectiveTab]: copy };
+    });
+    setNewTask('');
+    setJustAddedId(item.id);
+    setTimeout(() => setJustAddedId(null), 2600);
+    setTimeout(() => {
+      const el = document.getElementById('task-' + item.id);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
+  };
+
   const doReset = () => {
     if (!inspectors[effectiveTab].trim()) { doShake(setShakeInsp, inspRef); setConfirmReset(false); return; }
     const taskList = (tasks[effectiveTab] || []).filter(t => !t.header);
@@ -2201,7 +2240,8 @@ export default function App() {
   return (
     <div style={{ maxWidth: isDesktop ? 1100 : isTablet ? 860 : 500, margin:'0 auto', minHeight:'100vh', fontFamily:'-apple-system,sans-serif', color:C.text, paddingBottom: isTablet ? 120 : 110, overflowX:'hidden', background: C.bg, position:'relative' }}>
       <div className="bg-parallax" />
-      <style>{`.shake{animation:shake .4s ease-in-out;border-color:${C.err}!important;} @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}`}</style>
+      <style>{`.shake{animation:shake .4s ease-in-out;border-color:${C.err}!important;} @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+        .task-flash{animation:taskFlash 2.4s ease-out;} @keyframes taskFlash{0%{box-shadow:0 0 0 3px ${C.gold};background:${C.goldDim};}60%{box-shadow:0 0 0 3px ${C.gold}66;}100%{box-shadow:0 0 0 0 transparent;background:transparent;}}`}</style>
 
       {/* HEADER — logo vľavo, čistý rad akcií vpravo, dátum+čas zlúčený dnu */}
       <header style={{
@@ -2375,16 +2415,47 @@ export default function App() {
             {/* Task list */}
             <Glass style={{ padding:'10px 10px' }}>
               {/* Add — len v editMode (pridávanie aj mazanie sú pod jedným prepínačom) */}
-              {editMode && (
-              <div style={{ display:'flex', gap:8, marginBottom:8 }}>
-                <Inp value={newTask} onChange={e => setNewTask(e.target.value)}
-                  onKeyDown={e => { if(e.key==='Enter'&&newTask.trim()){setTasks({...tasks,[effectiveTab]:[...(tasks[effectiveTab]||[]),{id:Date.now(),text:newTask,done:false,time:null,issue:null}]});setNewTask('');} }}
-                  placeholder="Pridať úlohu…"
-                  style={{ flex:1, fontSize:14, padding:'10px 12px' }} />
-                <button onClick={() => { if(newTask.trim()){setTasks({...tasks,[effectiveTab]:[...(tasks[effectiveTab]||[]),{id:Date.now(),text:newTask,done:false,time:null,issue:null}]});setNewTask('');} }}
-                  style={{ width:42, borderRadius:12, border:`1px solid ${C.border}`, background:C.panelHov, color:C.gold, fontSize:22, fontWeight:300, cursor:'pointer' }}>+</button>
-              </div>
-              )}
+              {editMode && (() => {
+                const secHeaders = (tasks[effectiveTab] || []).filter(t => t.header);
+                const activeSec = newTaskSection ?? secHeaders[0]?.id ?? null;
+                return (
+                  <div style={{ marginBottom:10, padding:'12px 12px 13px', borderRadius:12,
+                                border:`1.5px dashed ${C.goldLine}`, background:C.goldDim }}>
+                    <Tag text="Nová úloha" />
+                    {/* Zoznam so sekciami → najprv vyber, do ktorej sekcie sa úloha pridá */}
+                    {secHeaders.length > 0 && (
+                      <div style={{ display:'flex', gap:6, flexWrap:'wrap', margin:'9px 0 2px' }}>
+                        {secHeaders.map(h => {
+                          const on = activeSec === h.id;
+                          return (
+                            <button key={h.id} onClick={() => setNewTaskSection(h.id)}
+                              style={{ padding:'6px 11px', borderRadius:99, fontSize:11, fontWeight:700, letterSpacing:.4,
+                                       textTransform:'uppercase', cursor:'pointer', fontFamily:'inherit',
+                                       border:`1px solid ${on ? C.gold : C.border}`,
+                                       background: on ? C.gold : 'rgba(255,255,255,0.7)',
+                                       color: on ? '#fff' : C.sub }}>
+                              {h.text}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <div style={{ display:'flex', gap:8, marginTop:8 }}>
+                      <Inp value={newTask} onChange={e => setNewTask(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') addTask(); }}
+                        placeholder={secHeaders.length > 0 ? 'Napíš úlohu…' : 'Pridať úlohu…'}
+                        style={{ flex:1, fontSize:14, padding:'10px 12px', background:'rgba(255,255,255,0.85)' }} />
+                      <button onClick={addTask}
+                        style={{ width:46, borderRadius:12, border:`1px solid ${C.gold}`, background:C.gold, color:'#fff', fontSize:24, fontWeight:400, cursor:'pointer', lineHeight:1 }}>+</button>
+                    </div>
+                    <div style={{ fontSize:10, color:C.muted, marginTop:6, lineHeight:1.4 }}>
+                      {secHeaders.length > 0
+                        ? <>Úloha sa pridá na koniec sekcie <strong style={{ color:C.gold }}>{secHeaders.find(h => h.id === activeSec)?.text || '—'}</strong>.</>
+                        : 'Úloha sa pridá na koniec zoznamu.'}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Tasks — pri sekciách (nadpisoch) zachovaj poradie; inak urgentné hore, splnené dole */}
               {(() => {
@@ -2405,7 +2476,9 @@ export default function App() {
                   )}
                 </div>
               ) : (
-                <div key={t.id} style={{ position:'relative', borderRadius:12, marginBottom:5 }}>
+                <div key={t.id} id={'task-' + t.id}
+                  className={justAddedId === t.id ? 'task-flash' : ''}
+                  style={{ position:'relative', borderRadius:12, marginBottom:5 }}>
                   <div
                     onMouseDown={e => longStart(t, e)} onMouseUp={longEnd}
                     onTouchStart={e => { longStart(t, e); onTouchStart(e,t.id); }}
