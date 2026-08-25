@@ -18,7 +18,12 @@ Fix: modulový helper `reminderCounts(...lists)` — denné = ranné + večerné
 - 🟡 v hárku Zálohy (Obchodná) sú TEST riadky z 6.–7.8. diagnostiky — zmazať
 - 🟡 retencia: odpisy/uzávierky/alkohol/notes rastú donekonečna (návrh: pri polnočnej uzávierke držať ~13 mesiacov)
 - ℹ️ PIN 1234 + GAS token vytiahnuteľné z verejného bundle (nízke riziko, vedieť o tom)
-- 💡 minihra ako odmena po dokončení úloh — koncept odsúhlasený v chate (trigger: celebrate overlay, 1–3 hry/odomknutie, lokálna Top 10, voliteľne GAS `game_score` rebríček pobočiek); čaká sa na výber hry
+- 💡 **NÁPAD (odložené, neimplementovať bez pokynu): minihra ako odmena** — používateľ si to zatiaľ len ukladá. Koncept dohodnutý 2026-08-25:
+  - favorit: **Latte art timing** — kmitajúca čiara, ťuknutie v zelenej zóne = nálev; 5 nálevov dokreslí latte art (SVG vrstvy), každý nálev rýchlejšia čiara + užšia zóna; body podľa presnosti, hodnosti Junior barista → Latte art šampión (alternatívy: chytanie zrniek, pexeso, líška runner)
+  - trigger: tlačidlo „🎁 Odmena“ v celebrate overlayi ([App.js ~3927](src/App.js)) — len po dokončení všetkých úloh, 1–3 hry na odomknutie (localStorage per deň)
+  - dotyk: `pointerdown` + `touch-action: manipulation` (bez 300 ms delay), celoobrazovkový overlay, lišta cez celú šírku ~60 px
+  - skóre: lokálna Top 10 s menom kontrolóra; voliteľne GAS event `game_score` → hárok Skóre → rebríček pobočiek
+  - hrateľný prototyp existuje v chate z 2026-08-25 (widget `latte_art_timing_demo`)
 
 ### v57: Pridávanie úlohy do vybranej sekcie
 `+` pridával úlohu vždy na koniec CELÉHO zoznamu — pri víkendových (majú sekcie Rajón/Bar/Zázemie a sklad) pristála mimo obrazovky pod poslednou sekciou, takže to vyzeralo, že + nefunguje (nahlásené používateľom).
