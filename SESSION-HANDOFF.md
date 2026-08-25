@@ -1,7 +1,24 @@
 # SESSION HANDOFF — August 2026
 
 ## Aktuálna verzia
-**v57 — nasadené** (2026-08-25). Tablety na v54+ ju aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳ v ozubenom koliesku.
+**v58 — nasadené** (2026-08-25). Tablety na v54+ ju aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳ v ozubenom koliesku.
+
+### v58: Fix pádu appky — notifikácie čítali zaniknutý kľúč `denné`
+Kľúč `denné` zanikol pri rozdelení na ranné/večerné (v48), ale tri notifikačné miesta ho ďalej čítali:
+1. **Kontrola pri otvorení appky** volala `tasks.denné.filter` na `undefined` → TypeError v useEffect → **biela obrazovka**. Trigger: zapnutá pripomienka denných úloh + granted + čas po pripomienke. Pravdepodobná príčina časti historických „tablet sa nenačíta“.
+2. Denná pripomienka počas dňa videla prázdny zoznam → nikdy nevystrelila.
+3. Víkendová pripomienka rátala hlavičky sekcií ako úlohy → zlé čísla, pripomínala aj po dokončení.
+
+Fix: modulový helper `reminderCounts(...lists)` — denné = ranné + večerné, hlavičky sa nepočítajú, notifikácia len keď `total > 0`. Overené na živých dátach (starý výraz padá, nový ráta 63 denných / 32 víkendových).
+
+### Audit 2026-08-25 — otvorené nálezy (zatiaľ neopravené)
+- 🟠 mesačné autoSend bez dedup markera → duplicitné riadky pri odškrtnutí/dokončení + duplicita s mesačným flushom (víkendové sú z autoSend vyňaté, mesačné nie)
+- 🟠 zmazanie hlavičky sekcie nechá jej úlohy „prilepené“ k predošlej sekcii; ak bola vybraná v Nová úloha, výber ukazuje „—“ a úloha padne na koniec
+- 🟠 **Nivy stále beží na starom GAS** (per-day odpisy taby, žiadny backup) — nasadiť gas/Code.gs s TOKENom Nivy
+- 🟡 v hárku Zálohy (Obchodná) sú TEST riadky z 6.–7.8. diagnostiky — zmazať
+- 🟡 retencia: odpisy/uzávierky/alkohol/notes rastú donekonečna (návrh: pri polnočnej uzávierke držať ~13 mesiacov)
+- ℹ️ PIN 1234 + GAS token vytiahnuteľné z verejného bundle (nízke riziko, vedieť o tom)
+- 💡 minihra ako odmena po dokončení úloh — koncept odsúhlasený v chate (trigger: celebrate overlay, 1–3 hry/odomknutie, lokálna Top 10, voliteľne GAS `game_score` rebríček pobočiek); čaká sa na výber hry
 
 ### v57: Pridávanie úlohy do vybranej sekcie
 `+` pridával úlohu vždy na koniec CELÉHO zoznamu — pri víkendových (majú sekcie Rajón/Bar/Zázemie a sklad) pristála mimo obrazovky pod poslednou sekciou, takže to vyzeralo, že + nefunguje (nahlásené používateľom).
