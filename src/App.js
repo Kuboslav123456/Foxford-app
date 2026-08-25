@@ -461,6 +461,15 @@ function weekMondayKey(d) {
   return localDayKey(x);
 }
 
+// Počty úloh pre notifikačné pripomienky. „Denné“ = ranné + večerné — starý kľúč
+// `denné` zanikol pri rozdelení vo v48, ale pripomienky ho ďalej čítali: denná tým
+// bola mŕtva (prázdny zoznam) a kontrola pri otvorení appky PADALA na
+// `tasks.denné.filter` (undefined) → biela obrazovka. Hlavičky sekcií sa nepočítajú.
+function reminderCounts(...lists) {
+  const t = lists.flatMap(l => (Array.isArray(l) ? l : [])).filter(x => !x.header);
+  return { done: t.filter(x => x.done || x.issue).length, total: t.length };
+}
+
 // ── Safe JSON.parse — defenzívne čítanie localStorage (predchádza white-screen pri poškodenom kľúči) ──
 function safeParse(key, fallback) {
   try {
@@ -1239,9 +1248,8 @@ export default function App() {
       timer = setTimeout(() => {
         // Čerstvé dáta z localStorage — state v closure by bol zastaraný
         const tasksData = safeParse('foxford-tasks', INIT_TASKS);
-        const denne = Array.isArray(tasksData.denné) ? tasksData.denné : [];
-        const done = denne.filter(t => t.done || t.issue).length;
-        if (done < denne.length) showNotification('Foxford ☕', `Nezabudni na denné úlohy! (${done}/${denne.length} hotovo)`);
+        const { done, total } = reminderCounts(tasksData.ranné, tasksData.večerné);
+        if (total > 0 && done < total) showNotification('Foxford ☕', `Nezabudni na denné úlohy! (${done}/${total} hotovo)`);
         arm();
       }, target - now);
     };
@@ -1258,9 +1266,8 @@ export default function App() {
     const now = new Date();
     const reminder = new Date(); reminder.setHours(h, m, 0, 0);
     if (now < reminder) return;
-    const done = tasks.denné.filter(t => t.done || t.issue).length;
-    const total = tasks.denné.length;
-    if (done < total) {
+    const { done, total } = reminderCounts(tasks.ranné, tasks.večerné);
+    if (total > 0 && done < total) {
       const t = setTimeout(() => showNotification('Foxford ☕', `Nezabudni na denné úlohy! (${done}/${total} hotovo)`), 4000);
       return () => clearTimeout(t);
     }
@@ -1281,9 +1288,8 @@ export default function App() {
         const dow = new Date().getDay();
         if (dow === 0 || dow === 6) {
           const tasksData = safeParse('foxford-tasks', INIT_TASKS);
-          const vk = Array.isArray(tasksData['víkendové']) ? tasksData['víkendové'] : [];
-          const done = vk.filter(t => t.done || t.issue).length;
-          if (done < vk.length) showNotification('Foxford ☕', `Víkendové úlohy čakajú! (${done}/${vk.length} hotovo)`);
+          const { done, total } = reminderCounts(tasksData['víkendové']);
+          if (total > 0 && done < total) showNotification('Foxford ☕', `Víkendové úlohy čakajú! (${done}/${total} hotovo)`);
         }
         arm();
       }, target - now);
