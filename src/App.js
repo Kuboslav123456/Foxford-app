@@ -2664,15 +2664,22 @@ export default function App() {
                 );
               })()}
 
-              {/* Tasks — pri sekciách (nadpisoch) zachovaj poradie; inak urgentné hore, splnené dole */}
+              {/* Tasks — urgentné hore, splnené dole; pri sekciách (nadpisoch) v rámci svojej sekcie */}
               {(() => {
                 const list = tasks[effectiveTab] || [];
-                const hasSections = list.some(t => t.header);
-                return hasSections ? list : [...list].sort((a,b) => {
+                const cmp = (a, b) => {
                   if (a.done !== b.done) return a.done ? 1 : -1;
                   if (a.urgent !== b.urgent) return a.urgent ? -1 : 1;
                   return 0;
-                });
+                };
+                if (!list.some(t => t.header)) return [...list].sort(cmp);
+                // so sekciami: hotové klesnú na koniec SVOJEJ sekcie, poradie sekcií sa nemení
+                const out = [];
+                let seg = [];
+                const flushSeg = () => { out.push(...seg.sort(cmp)); seg = []; };
+                list.forEach(t => { if (t.header) { flushSeg(); out.push(t); } else seg.push(t); });
+                flushSeg();
+                return out;
               })().map(t => t.header ? (
                 <div key={t.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'14px 4px 6px', marginTop:2 }}>
                   <div style={{ width:3, height:14, borderRadius:2, background:C.gold, flexShrink:0 }} />

@@ -1,7 +1,10 @@
 # SESSION HANDOFF — August 2026
 
 ## Aktuálna verzia
-**v60 — nasadené** (2026-08-26, overené live cez `version.json`). Tablety na v54+ ju aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳ v ozubenom koliesku.
+**v61 — nasadené** (2026-08-26, overené live cez `version.json`). Tablety na v54+ ju aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳ v ozubenom koliesku.
+
+### v61: Splnené úlohy klesajú dole aj v zoznamoch so sekciami
+Zoznamy so sekciami (víkendové, večerné, mesačné) sa doteraz vôbec netriedili — splnená úloha ostala na mieste, kým pri ranných (bez sekcií) klesla dole (nahlásené používateľom: „víkendové ostávajú na mieste“). Render sort v tabe Úlohy teraz triedi **v rámci každej sekcie**: splnené na koniec svojej sekcie, urgentné na začiatok, poradie sekcií a nadpisov sa nemení, úloha nikdy nepreskočí pod cudzí nadpis. Bez sekcií správanie nezmenené. Triedi sa len zobrazovacia kópia — uložené poradie v `foxford-tasks` (a teda aj poradie vo flushoch do GS) ostáva pôvodné. Overené v prehliadači (2 sekcie × 2 úlohy: splnená klesla pod nesplnenú vo svojej sekcii, druhá sekcia nedotknutá).
 
 ### v60: Víkendové (a všetky) úlohy sa autoodosielajú hneď po dokončení
 Používateľ nahlásil, že víkendové úlohy neprichádzajú do tabuľky — `autoSend` ich zámerne preskakoval (čakalo sa na pondelkový nočný flush, čiže riadky prišli až v utorok s pondelkovým dátumom). Prekopané odosielanie `tasks_summary`, aby sa nič nestrácalo ani neduplikovalo:
