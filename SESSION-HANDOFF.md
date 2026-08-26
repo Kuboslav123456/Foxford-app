@@ -1,7 +1,7 @@
 # SESSION HANDOFF — August 2026
 
 ## Aktuálna verzia
-**v60 — pripravená v kóde, čaká na deploy** (2026-08-26; deploy spúšťa používateľ: `npm run deploy` + `git push origin main`). Live je v59. Tablety na v54+ novú verziu aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳ v ozubenom koliesku.
+**v60 — nasadené** (2026-08-26, overené live cez `version.json`). Tablety na v54+ ju aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳ v ozubenom koliesku.
 
 ### v60: Víkendové (a všetky) úlohy sa autoodosielajú hneď po dokončení
 Používateľ nahlásil, že víkendové úlohy neprichádzajú do tabuľky — `autoSend` ich zámerne preskakoval (čakalo sa na pondelkový nočný flush, čiže riadky prišli až v utorok s pondelkovým dátumom). Prekopané odosielanie `tasks_summary`, aby sa nič nestrácalo ani neduplikovalo:
