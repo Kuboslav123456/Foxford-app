@@ -718,6 +718,171 @@ function backupSnapshotData() {
   return data;
 }
 
+// ── MINIHRA: LATTE ART TIMING ─────────────────────────────────────────────────
+// Odmena po dokončení všetkých úloh — otvára sa VÝHRADNE z celebrate overlaya.
+// PRESNE 1 hra na dokončený zoznam (marker sa zapisuje už pri spustení, žiadne
+// „hrať znova") a fixná dĺžka 5 nálevov ≈ 30 s — obsluha pri nej nestráca čas.
+// Ihla sa hýbe cez rAF + ref (nie setState per frame — plynulé aj na tablete).
+const GAME_RANKS = [
+  { min: 430, label: 'Latte art šampión' },
+  { min: 330, label: 'Hlavný barista' },
+  { min: 200, label: 'Barista' },
+  { min: 0,   label: 'Junior barista' },
+];
+const gameRank = (s) => GAME_RANKS.find(r => s >= r.min).label;
+
+function LatteArtGame({ C, playerName, onClose }) {
+  const [round, setRound] = useState(0);
+  const [score, setScore] = useState(0);
+  const [stages, setStages] = useState([false, false, false, false, false]);
+  const [msg, setMsg] = useState({ text: 'Ťukni kdekoľvek, keď je čiara v zelenej zóne', color: null });
+  const [board, setBoard] = useState(null);   // { list, entry } po konci hry
+  const needleRef = useRef(null);
+  const posRef = useRef(0);
+  const tRef = useRef(Math.random() * 6.28);  // náhodná fáza — nech sa nedá naučiť prvý nálev
+  const speedRef = useRef(0.028);
+  const roundRef = useRef(0);
+  const scoreRef = useRef(0);
+  const doneRef = useRef(false);
+  const rafRef = useRef(0);
+
+  const zoneFor = (r) => { const w = 24 - r * 3.5; return { left: 50 - w / 2, width: w }; };
+
+  useEffect(() => {
+    const loop = () => {
+      tRef.current += speedRef.current;
+      const pos = (Math.sin(tRef.current) + 1) / 2 * 100;
+      posRef.current = pos;
+      if (needleRef.current) needleRef.current.style.left = `calc(${pos}% - 2px)`;
+      rafRef.current = requestAnimationFrame(loop);
+    };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, []);
+
+  const tap = () => {
+    if (doneRef.current) return;
+    const r = roundRef.current;
+    const z = zoneFor(r);
+    const pos = posRef.current;
+    let gained = 0;
+    if (pos >= z.left && pos <= z.left + z.width) {
+      const dist = Math.abs(pos - 50);
+      gained = Math.max(10, Math.min(100, Math.round(100 - dist * (100 / (z.width / 2 + 0.01)))));
+      setStages(prev => prev.map((s, i) => (i === r ? true : s)));
+      setMsg({ text: `${gained >= 85 ? 'Perfektný nálev' : 'Dobrý nálev'}  +${gained}`, color: C.ok });
+    } else {
+      setMsg({ text: 'Rozliate mlieko  +0', color: C.err });
+    }
+    scoreRef.current += gained;
+    speedRef.current += 0.009;
+    roundRef.current = r + 1;
+    setScore(scoreRef.current);
+    setRound(r + 1);
+    if (r + 1 >= 5) {
+      doneRef.current = true;
+      cancelAnimationFrame(rafRef.current);
+      // Zápis do lokálnej Top 10 — kľúč foxford-* → automaticky súčasť záloh
+      const entry = { name: (playerName || '').trim() || 'Anonym', score: scoreRef.current, date: localDayKey(new Date()) };
+      const merged = [...safeParse('foxford-game-scores', []), entry]
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 10);
+      try { localStorage.setItem('foxford-game-scores', JSON.stringify(merged)); } catch (_) {}
+      setBoard({ list: merged, entry });
+    }
+  };
+
+  const finished = board !== null;
+  const zone = zoneFor(Math.min(round, 4));
+  const cream = '#f5ecdc';
+
+  return (
+    <div
+      onPointerDown={finished ? undefined : tap}
+      style={{ position:'fixed', inset:0, zIndex:3200, background:'rgba(6,4,2,.96)',
+               display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+               padding:24, touchAction:'manipulation', userSelect:'none', WebkitUserSelect:'none',
+               WebkitTapHighlightColor:'transparent', cursor: finished ? 'default' : 'pointer' }}>
+      <div style={{ width:'100%', maxWidth:560 }}>
+
+        {/* Hlavička: label + skóre + zavrieť */}
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <span style={{ fontSize:11, fontWeight:800, letterSpacing:2, textTransform:'uppercase', color:C.gold }}>Latte art</span>
+          <span style={{ fontSize:15, fontWeight:800, color:cream, fontVariantNumeric:'tabular-nums' }}>{score} bodov</span>
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); onClose(); }}
+            title="Späť do appky"
+            style={{ width:34, height:34, borderRadius:10, border:'1px solid rgba(240,232,220,0.25)', background:'transparent',
+                     color:'rgba(240,232,220,0.75)', fontSize:16, lineHeight:1, cursor:'pointer', fontFamily:'inherit' }}>✕</button>
+        </div>
+        <div style={{ fontSize:12, color:'rgba(240,232,220,0.5)', marginTop:4, marginBottom:14 }}>
+          {finished ? 'Koniec hry' : `Nálev ${round + 1} / 5`}
+        </div>
+
+        {/* Šálka s latte art */}
+        <div style={{ display:'flex', justifyContent:'center', marginBottom:16 }}>
+          <svg width="170" height="170" viewBox="0 0 150 150" role="img" aria-label="Šálka s latte art">
+            <circle cx="75" cy="75" r="71" fill="#2a2018" stroke="#4a3a28" strokeWidth="3" />
+            <circle cx="75" cy="75" r="62" fill="#BA7517" opacity="0.55" />
+            <g stroke={cream} strokeWidth="7" fill="none" strokeLinecap="round">
+              <path d="M75 105 C60 95 60 78 75 70 C90 78 90 95 75 105" opacity={stages[0] ? 1 : 0} style={{ transition:'opacity .3s' }} />
+              <path d="M75 70 C63 62 63 50 75 44 C87 50 87 62 75 70" opacity={stages[1] ? 1 : 0} style={{ transition:'opacity .3s' }} />
+              <path d="M75 44 C67 39 67 31 75 27 C83 31 83 39 75 44" opacity={stages[2] ? 1 : 0} style={{ transition:'opacity .3s' }} />
+              <path d="M75 110 L75 24" strokeWidth="4" opacity={stages[3] ? 1 : 0} style={{ transition:'opacity .3s' }} />
+              <path d="M60 33 C68 24 82 24 90 33" strokeWidth="4" opacity={stages[4] ? 1 : 0} style={{ transition:'opacity .3s' }} />
+            </g>
+          </svg>
+        </div>
+
+        {!finished ? (
+          <>
+            {/* Lišta s kmitajúcou čiarou */}
+            <div style={{ position:'relative', height:64, borderRadius:14, background:'#241a10', border:'1px solid #4a3a28', overflow:'hidden' }}>
+              <div style={{ position:'absolute', top:0, bottom:0, left:`${zone.left}%`, width:`${zone.width}%`,
+                            background:'rgba(42,154,85,0.30)', borderLeft:`2px solid ${C.ok}`, borderRight:`2px solid ${C.ok}` }} />
+              <div ref={needleRef} style={{ position:'absolute', top:0, bottom:0, left:0, width:4, background:cream }} />
+            </div>
+            <div style={{ textAlign:'center', fontSize:14, minHeight:24, marginTop:12, fontWeight:600,
+                          color: msg.color || 'rgba(240,232,220,0.6)' }}>
+              {msg.text}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Výsledok + Top 10 — žiadne „hrať znova", len návrat do appky */}
+            <div style={{ textAlign:'center', marginBottom:14 }}>
+              <div style={{ fontSize:26, fontWeight:900, color:cream }}>{score} bodov</div>
+              <div style={{ fontSize:14, fontWeight:700, color:C.gold, marginTop:4 }}>{gameRank(score)}</div>
+            </div>
+            <div style={{ maxWidth:300, margin:'0 auto', borderTop:'0.5px solid #3a2f24', paddingTop:10 }}>
+              <div style={{ fontSize:10, fontWeight:800, letterSpacing:1.2, textTransform:'uppercase', color:'rgba(240,232,220,0.45)', marginBottom:6 }}>Najlepší na tomto zariadení</div>
+              {board.list.map((e, i) => (
+                <div key={i} style={{ display:'flex', justifyContent:'space-between', gap:10, padding:'4px 6px', borderRadius:8,
+                                      background: e === board.entry ? 'rgba(184,112,32,0.22)' : 'transparent' }}>
+                  <span style={{ fontSize:12, color: e === board.entry ? cream : 'rgba(240,232,220,0.7)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    {i + 1}. {e.name}
+                  </span>
+                  <span style={{ fontSize:12, fontWeight:800, color: e === board.entry ? C.gold : 'rgba(240,232,220,0.55)', fontVariantNumeric:'tabular-nums', flexShrink:0 }}>{e.score}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ textAlign:'center', marginTop:18 }}>
+              <button
+                onClick={e => { e.stopPropagation(); onClose(); }}
+                style={{ background:C.gold, border:'none', color:'#fff', fontWeight:800, padding:'13px 26px',
+                         borderRadius:14, fontSize:14, cursor:'pointer', fontFamily:'inherit', letterSpacing:.4,
+                         boxShadow:'0 4px 18px rgba(184,112,32,0.35)' }}>
+                Späť do appky
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── APP ───────────────────────────────────────────────────────────────────────
 export default function App() {
 
@@ -912,6 +1077,7 @@ export default function App() {
   const [noteAuthor, setNoteAuthor] = useState('');
   const [celebrate, setCelebrate] = useState(false);
   const [celebrateHaccp, setCelebrateHaccp] = useState(false);
+  const [showGame, setShowGame] = useState(null);   // null | { name } — minihra Latte art (odmena)
   const [confirmResetHaccp, setConfirmResetHaccp] = useState(false);
   const [sending, setSending]   = useState(false);
   const [success, setSuccess]   = useState(false);
@@ -1995,6 +2161,22 @@ export default function App() {
 
   // všetky úlohy (okrem nadpisov sekcií) sú buď splnené alebo majú zaznamenaný problém
   const allResolved = (list) => { const t = list.filter(x => !x.header); return t.length > 0 && t.every(x => x.done || x.issue); };
+
+  // ── MINIHRA — odomykanie ───────────────────────────────────────────────────
+  // Presne 1 hra na dokončený zoznam (deň + tab). Marker sa zapisuje UŽ PRI
+  // SPUSTENÍ hry — zatvorenie uprostred hry pokus nevracia (žiadne farmenie).
+  const gameAvailableFor = (tab) => {
+    const gp = safeParse('foxford-game-played', { day: '', tabs: [] });
+    return !(gp.day === localDayKey(new Date()) && gp.tabs.includes(tab));
+  };
+  const startGame = (tab) => {
+    const today = localDayKey(new Date());
+    const gp = safeParse('foxford-game-played', { day: '', tabs: [] });
+    const next = gp.day === today ? { day: today, tabs: [...new Set([...gp.tabs, tab])] } : { day: today, tabs: [tab] };
+    try { localStorage.setItem('foxford-game-played', JSON.stringify(next)); } catch (_) {}
+    setCelebrate(false);
+    setShowGame({ name: (inspectors[tab] || '').trim() });
+  };
 
   const autoSend = (updatedList) => {
     // víkendové idú cez pondelkový/nočný/ručný flush (žiadne okamžité odoslanie)
@@ -3956,8 +4138,23 @@ export default function App() {
               <span style={{ fontSize:11, color:C.muted }}>Úlohy ostanú viditeľné ako splnené.</span>
             </div>
           )}
+          {/* Odmena: minihra — len keď ešte dnes pre tento zoznam nebola hraná */}
+          {gameAvailableFor(effectiveTab) && (
+            <button className="conf-text"
+              onClick={e => { e.stopPropagation(); startGame(effectiveTab); }}
+              style={{ marginTop:18, background:C.gold, border:'none', color:'#fff', fontWeight:800,
+                       padding:'13px 24px', borderRadius:14, fontSize:14, cursor:'pointer', fontFamily:'inherit',
+                       letterSpacing:.4, boxShadow:'0 4px 18px rgba(184,112,32,0.35)' }}>
+              🎁 Odmena — zahraj si (30 s)
+            </button>
+          )}
           <div className="conf-text" style={{ fontSize:11, color:C.muted, marginTop:20 }}>Klepni kdekoľvek pre pokračovanie</div>
         </div>
+      )}
+
+      {/* ── MINIHRA — LATTE ART (odmena za dokončené úlohy) ─────────────────── */}
+      {showGame && (
+        <LatteArtGame C={C} playerName={showGame.name} onClose={() => setShowGame(null)} />
       )}
 
       {/* ── CONFIRM UNDO ─────────────────────────────────────────────────────── */}
