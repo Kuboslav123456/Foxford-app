@@ -1,7 +1,17 @@
 # SESSION HANDOFF — August 2026
 
 ## Aktuálna verzia
-**v59 — nasadené** (2026-08-26). Tablety na v54+ ju aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳ v ozubenom koliesku.
+**v60 — pripravená v kóde, čaká na deploy** (2026-08-26; deploy spúšťa používateľ: `npm run deploy` + `git push origin main`). Live je v59. Tablety na v54+ novú verziu aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳ v ozubenom koliesku.
+
+### v60: Víkendové (a všetky) úlohy sa autoodosielajú hneď po dokončení
+Používateľ nahlásil, že víkendové úlohy neprichádzajú do tabuľky — `autoSend` ich zámerne preskakoval (čakalo sa na pondelkový nočný flush, čiže riadky prišli až v utorok s pondelkovým dátumom). Prekopané odosielanie `tasks_summary`, aby sa nič nestrácalo ani neduplikovalo:
+
+- **`autoSend` posiela VŠETKY taby** hneď po dokončení celého zoznamu (inšpektor vyplnený). Dedup marker `foxford-{tab}-autosent` = obdobie zoznamu: denné → dnešný dátum (sk-SK), víkendové → kľúč najbližšieho pondelka (`d + (8−getDay())%7` → `weekMondayKey`), mesačné → `YYYY-MM`. Mesačné tým dostali dedup (audit nález 🟠 z 2026-08-25 — dovtedy duplicity pri odškrtnutí/dokončení a s koncomesačným flushom).
+- **Flushy v `performDailyClose`** preskočia odoslanie len ak marker sedí **a zoznam je celý splnený/vyriešený** — ak po autoodoslaní niečo pribudlo alebo sa odškrtlo, flush pošle aktuálny stav (radšej riadok navyše než stratené dáta). Reset zoznamu + week/month markery bežia vždy ako doteraz.
+- **Denný flush filtruje hlavičky sekcií** — večerné hlavičky („Rajóny všeobecne“…) doteraz chodili do hárku Úlohy ako falošné ✗ riadky.
+- **Manuálny reset** (`doReset`, pondelkový `flushVikendNow`) zmaže autosent marker daného tabu = nový cyklus, ďalšie dokončenie v tom istom období sa znova autoodošle.
+
+Overené v prehliadači na pobočke s placeholder URL (Cubicon — vidno `skipped` warn, žiadny reálny GAS traffic): okamžité odoslanie po dokončení víkendových ✓, marker `2026-08-31` ✓, pondelkový flush cez catch-up bez markera pošle ✓, s markerom nepošle ale resetne + zapíše week-done ✓. GAS `tasks_summary` handler kategóriu len zapisuje do stĺpca — na strane tabuľky netreba nič meniť. Pozn.: minihra sa odteraz odomkne aj po dokončení víkendových/mesačných rovnako ako predtým (celebrate logika nezmenená).
 
 ### v59: Minihra Latte art timing (odmena po dokončení úloh)
 - Komponent `LatteArtGame` (module-level, props `C`/`playerName`/`onClose`): kmitajúca čiara (rAF + ref, nie setState per frame), ťuk kdekoľvek na overlay v zelenej zóne = nálev; 5 nálevov postupne dokreslí latte art (SVG vrstvy); každý nálev `speed += 0.009`, zóna `24 − r·3.5 %`; body `max(10, 100 − dist·(100/polovica zóny))`; hodnosti 430/330/200 → Latte art šampión/Hlavný barista/Barista/Junior barista
@@ -20,7 +30,7 @@ Kľúč `denné` zanikol pri rozdelení na ranné/večerné (v48), ale tri notif
 Fix: modulový helper `reminderCounts(...lists)` — denné = ranné + večerné, hlavičky sa nepočítajú, notifikácia len keď `total > 0`. Overené na živých dátach (starý výraz padá, nový ráta 63 denných / 32 víkendových).
 
 ### Audit 2026-08-25 — otvorené nálezy (zatiaľ neopravené)
-- 🟠 mesačné autoSend bez dedup markera → duplicitné riadky pri odškrtnutí/dokončení + duplicita s mesačným flushom (víkendové sú z autoSend vyňaté, mesačné nie)
+- ✅ ~~mesačné autoSend bez dedup markera~~ — **opravené vo v60** (dedup markery pre všetky taby, viď vyššie)
 - 🟠 zmazanie hlavičky sekcie nechá jej úlohy „prilepené“ k predošlej sekcii; ak bola vybraná v Nová úloha, výber ukazuje „—“ a úloha padne na koniec
 - 🟠 **Nivy stále beží na starom GAS** (per-day odpisy taby, žiadny backup) — nasadiť gas/Code.gs s TOKENom Nivy
 - 🟡 v hárku Zálohy (Obchodná) sú TEST riadky z 6.–7.8. diagnostiky — zmazať

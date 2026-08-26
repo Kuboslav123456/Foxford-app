@@ -527,17 +527,21 @@ function performDailyClose(endingDate) {
     try { tasksData = JSON.parse(localStorage.getItem('foxford-tasks')) || {}; } catch (_) {}
     let inspectorsData = {};
     try { inspectorsData = JSON.parse(localStorage.getItem('foxford-inspectors')) || {}; } catch (_) {}
-    const ranne = Array.isArray(tasksData.ranné) ? tasksData.ranné : [];
+    // Dedup s autoSendom: preskoč len ak autoSend už poslal KOMPLETNÝ stav (všetko splnené /
+    // problém) — ak medzitým niečo pribudlo alebo sa odškrtlo, pošli aj tak, nech sa nič nestratí.
+    const ranne = (Array.isArray(tasksData.ranné) ? tasksData.ranné : []).filter(t => !t.header);
     const inspRanne = (inspectorsData.ranné || '').trim();
-    if (ranne.length > 0 && (ranne.some(t => t.done || t.issue) || inspRanne) && localStorage.getItem('foxford-ranné-autosent') !== sendDate) {
+    const ranneSent = localStorage.getItem('foxford-ranné-autosent') === sendDate && ranne.every(t => t.done || t.issue);
+    if (ranne.length > 0 && (ranne.some(t => t.done || t.issue) || inspRanne) && !ranneSent) {
       sendOrQueue(url, 'tasks_summary', {
         date: sendDate, category: 'ranné', inspector: inspRanne || 'Anonym',
         tasks: ranne.map(t => ({ text: t.text, done: !!t.done, time: t.time || null, date: t.date || null, issue: t.issue || null, by: t.by || null })),
       });
     }
-    const vecerne = Array.isArray(tasksData.večerné) ? tasksData.večerné : [];
+    const vecerne = (Array.isArray(tasksData.večerné) ? tasksData.večerné : []).filter(t => !t.header);
     const inspVecerne = (inspectorsData.večerné || '').trim();
-    if (vecerne.length > 0 && (vecerne.some(t => t.done || t.issue) || inspVecerne) && localStorage.getItem('foxford-večerné-autosent') !== sendDate) {
+    const vecerneSent = localStorage.getItem('foxford-večerné-autosent') === sendDate && vecerne.every(t => t.done || t.issue);
+    if (vecerne.length > 0 && (vecerne.some(t => t.done || t.issue) || inspVecerne) && !vecerneSent) {
       sendOrQueue(url, 'tasks_summary', {
         date: sendDate, category: 'večerné', inspector: inspVecerne || 'Anonym',
         tasks: vecerne.map(t => ({ text: t.text, done: !!t.done, time: t.time || null, date: t.date || null, issue: t.issue || null, by: t.by || null })),
@@ -596,7 +600,9 @@ function performDailyClose(endingDate) {
         const vik = Array.isArray(tasksData.víkendové) ? tasksData.víkendové : [];
         const vikList = vik.filter(t => !t.header);
         const inspVik = (inspectorsData.víkendové || '').trim();
-        if (vikList.length > 0 && (vikList.some(t => t.done || t.issue) || inspVik)) {
+        // autoSend už poslal kompletný stav po dokončení → neposielať duplicitne, len resetnúť
+        const vikSent = localStorage.getItem('foxford-víkendové-autosent') === wk && vikList.every(t => t.done || t.issue);
+        if (vikList.length > 0 && (vikList.some(t => t.done || t.issue) || inspVik) && !vikSent) {
           sendOrQueue(url, 'tasks_summary', {
             date: sendDate,
             category: 'víkendové',
@@ -625,7 +631,9 @@ function performDailyClose(endingDate) {
         const mes = Array.isArray(tasksData.mesačné) ? tasksData.mesačné : [];
         const mesList = mes.filter(t => !t.header);
         const inspMes = (inspectorsData.mesačné || '').trim();
-        if (mesList.length > 0 && (mesList.some(t => t.done || t.issue) || inspMes)) {
+        // autoSend už poslal kompletný stav po dokončení → neposielať duplicitne, len resetnúť
+        const mesSent = localStorage.getItem('foxford-mesačné-autosent') === mk && mesList.every(t => t.done || t.issue);
+        if (mesList.length > 0 && (mesList.some(t => t.done || t.issue) || inspMes) && !mesSent) {
           sendOrQueue(url, 'tasks_summary', {
             date: sendDate,
             category: 'mesačné',
@@ -2179,17 +2187,24 @@ export default function App() {
   };
 
   const autoSend = (updatedList) => {
-    // víkendové idú cez pondelkový/nočný/ručný flush (žiadne okamžité odoslanie)
-    if (subTab === 'víkendové') return;
     if (!allResolved(updatedList)) return;
     if (!inspectors[effectiveTab].trim()) return;
-    // ranné/večerné: dedup — polnočná uzávierka preskočí ak sme už dnes odoslali
+    // Dedup — každý zoznam sa autoodošle max. raz za svoje obdobie (deň / víkendový
+    // týždeň / mesiac); flush v performDailyClose potom rovnaké obdobie preskočí.
+    let period;
     if (subTab === 'denné') {
-      const todayStr = new Date().toLocaleDateString('sk-SK');
-      const dedupKey = `foxford-${effectiveTab}-autosent`;
-      if (localStorage.getItem(dedupKey) === todayStr) return;
-      localStorage.setItem(dedupKey, todayStr);
+      period = new Date().toLocaleDateString('sk-SK');
+    } else if (subTab === 'víkendové') {
+      // kľúč pondelka, ktorého nočná uzávierka by tento víkend flushla (dnes, ak je pondelok)
+      const d = new Date(); d.setDate(d.getDate() + (8 - d.getDay()) % 7);
+      period = weekMondayKey(d);
+    } else { // mesačné
+      const n = new Date();
+      period = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
     }
+    const dedupKey = `foxford-${effectiveTab}-autosent`;
+    if (localStorage.getItem(dedupKey) === period) return;
+    localStorage.setItem(dedupKey, period);
     sendToSheets('tasks_summary', {
       date: new Date().toLocaleDateString('sk-SK'),
       category: effectiveTab,
@@ -2301,6 +2316,8 @@ export default function App() {
     setTasks({ ...tasks, [effectiveTab]: tasks[effectiveTab].map(t => t.header ? t : ({ ...t, done: false, time: null, issue: null, by: null })) });
     setInspectors(prev => ({ ...prev, [effectiveTab]: '' }));
     if (subTab === 'víkendové') localStorage.setItem('foxford-vikend-week-done', weekMondayKey(new Date()));
+    // manuálny reset = nový cyklus → ďalšie dokončenie sa má znova autoodoslať
+    localStorage.removeItem(`foxford-${effectiveTab}-autosent`);
     setConfirmReset(false);
   };
 
@@ -2318,6 +2335,8 @@ export default function App() {
     setTasks(prev => ({ ...prev, víkendové: (prev.víkendové || []).map(t => t.header ? t : ({ ...t, done: false, time: null, date: null, issue: null, by: null })) }));
     setInspectors(prev => ({ ...prev, víkendové: '' }));
     localStorage.setItem('foxford-vikend-week-done', weekMondayKey(new Date()));
+    // reset = nový cyklus → ďalšie dokončenie sa má znova autoodoslať
+    localStorage.removeItem('foxford-víkendové-autosent');
   };
 
   const tempColor = (field, val) => {
