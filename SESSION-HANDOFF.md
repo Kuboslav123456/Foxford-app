@@ -1,7 +1,15 @@
 # SESSION HANDOFF — August 2026
 
 ## Aktuálna verzia
-**v58 — nasadené** (2026-08-25). Tablety na v54+ ju aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳ v ozubenom koliesku.
+**v59 — nasadené** (2026-08-26). Tablety na v54+ ju aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳ v ozubenom koliesku.
+
+### v59: Minihra Latte art timing (odmena po dokončení úloh)
+- Komponent `LatteArtGame` (module-level, props `C`/`playerName`/`onClose`): kmitajúca čiara (rAF + ref, nie setState per frame), ťuk kdekoľvek na overlay v zelenej zóne = nálev; 5 nálevov postupne dokreslí latte art (SVG vrstvy); každý nálev `speed += 0.009`, zóna `24 − r·3.5 %`; body `max(10, 100 − dist·(100/polovica zóny))`; hodnosti 430/330/200 → Latte art šampión/Hlavný barista/Barista/Junior barista
+- Otvára sa **výhradne** tlačidlom „🎁 Odmena — zahraj si (30 s)“ v celebrate overlayi (všetky úlohy splnené/vyriešené)
+- **1 hra na dokončený zoznam** (deň+tab): `foxford-game-played` = `{day, tabs[]}` — zapisuje sa **pri spustení** (`startGame`), žiadne „hrať znova“; ďalšia hra až po ďalšom dokončenom zozname
+- Skóre: `foxford-game-scores` = Top 10 `{name, score, date}` (meno z inšpektora tabu, fallback Anonym); zobrazuje sa po konci hry so zvýraznením aktuálneho záznamu; kľúče foxford-* → automaticky v zálohách
+- X vpravo hore = okamžitý návrat kedykoľvek (pokus prepadne — marker už je zapísaný)
+- Overené naostro cez víkendové úlohy (autoSend ich preskakuje → žiadny GAS traffic pri teste): celý flow + blokovanie druhej hry + návrat
 
 ### v58: Fix pádu appky — notifikácie čítali zaniknutý kľúč `denné`
 Kľúč `denné` zanikol pri rozdelení na ranné/večerné (v48), ale tri notifikačné miesta ho ďalej čítali:
@@ -18,13 +26,7 @@ Fix: modulový helper `reminderCounts(...lists)` — denné = ranné + večerné
 - 🟡 v hárku Zálohy (Obchodná) sú TEST riadky z 6.–7.8. diagnostiky — zmazať
 - 🟡 retencia: odpisy/uzávierky/alkohol/notes rastú donekonečna (návrh: pri polnočnej uzávierke držať ~13 mesiacov)
 - ℹ️ PIN 1234 + GAS token vytiahnuteľné z verejného bundle (nízke riziko, vedieť o tom)
-- 💡 **NÁPAD (odložené, neimplementovať bez pokynu): minihra ako odmena** — používateľ si to zatiaľ len ukladá. Koncept dohodnutý 2026-08-25:
-  - favorit: **Latte art timing** — kmitajúca čiara, ťuknutie v zelenej zóne = nálev; 5 nálevov dokreslí latte art (SVG vrstvy), každý nálev rýchlejšia čiara + užšia zóna; body podľa presnosti, hodnosti Junior barista → Latte art šampión (alternatívy: chytanie zrniek, pexeso, líška runner)
-  - trigger: tlačidlo „🎁 Odmena“ v celebrate overlayi ([App.js ~3927](src/App.js)) — len po dokončení všetkých úloh
-  - **PRESNE 1 hra na odomknutie, ŽIADNE „Hrať znova“** (požiadavka 2026-08-25: obsluha nesmie strácať čas) — po konci hry len skóre + návrat do appky; ďalšia hra až po ďalšom dokončenom zozname. Latte art timing má fixnú dĺžku ~30 s (5 nálevov), čo tejto požiadavke sedí najlepšie.
-  - dotyk: `pointerdown` + `touch-action: manipulation` (bez 300 ms delay), celoobrazovkový overlay, lišta cez celú šírku ~60 px
-  - skóre: lokálna Top 10 s menom kontrolóra; voliteľne GAS event `game_score` → hárok Skóre → rebríček pobočiek
-  - hrateľné prototypy existujú v chate z 2026-08-25: `latte_art_timing_demo` (timing) aj `chytaj_zrnka_demo` (akčná — šálka ťahaná prstom chytá padajúce zrnká, červený črep = koniec, zrýchľuje sa). Používateľ zvažuje obe, prípadne striedanie (ráno zrnká, večer latte art).
+- ✅ minihra Latte art timing — **IMPLEMENTOVANÁ vo v59** (detail vyššie). Zostávajúce nápady k nej (neimplementovať bez pokynu): GAS event `game_score` → hárok Skóre → rebríček medzi pobočkami; druhá hra „Chytaj zrnká“ (prototyp `chytaj_zrnka_demo` v chate 2026-08-25, akčná — šálka ťahaná prstom, červený črep = koniec) — prípadné striedanie hier.
 
 ### v57: Pridávanie úlohy do vybranej sekcie
 `+` pridával úlohu vždy na koniec CELÉHO zoznamu — pri víkendových (majú sekcie Rajón/Bar/Zázemie a sklad) pristála mimo obrazovky pod poslednou sekciou, takže to vyzeralo, že + nefunguje (nahlásené používateľom).
