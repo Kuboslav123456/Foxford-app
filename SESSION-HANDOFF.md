@@ -23,7 +23,7 @@ Fix: modulový helper `reminderCounts(...lists)` — denné = ranné + večerné
   - trigger: tlačidlo „🎁 Odmena“ v celebrate overlayi ([App.js ~3927](src/App.js)) — len po dokončení všetkých úloh, 1–3 hry na odomknutie (localStorage per deň)
   - dotyk: `pointerdown` + `touch-action: manipulation` (bez 300 ms delay), celoobrazovkový overlay, lišta cez celú šírku ~60 px
   - skóre: lokálna Top 10 s menom kontrolóra; voliteľne GAS event `game_score` → hárok Skóre → rebríček pobočiek
-  - hrateľný prototyp existuje v chate z 2026-08-25 (widget `latte_art_timing_demo`)
+  - hrateľné prototypy existujú v chate z 2026-08-25: `latte_art_timing_demo` (timing) aj `chytaj_zrnka_demo` (akčná — šálka ťahaná prstom chytá padajúce zrnká, červený črep = koniec, zrýchľuje sa). Používateľ zvažuje obe, prípadne striedanie (ráno zrnká, večer latte art).
 
 ### v57: Pridávanie úlohy do vybranej sekcie
 `+` pridával úlohu vždy na koniec CELÉHO zoznamu — pri víkendových (majú sekcie Rajón/Bar/Zázemie a sklad) pristála mimo obrazovky pod poslednou sekciou, takže to vyzeralo, že + nefunguje (nahlásené používateľom).
