@@ -20,7 +20,8 @@ Fix: modulový helper `reminderCounts(...lists)` — denné = ranné + večerné
 - ℹ️ PIN 1234 + GAS token vytiahnuteľné z verejného bundle (nízke riziko, vedieť o tom)
 - 💡 **NÁPAD (odložené, neimplementovať bez pokynu): minihra ako odmena** — používateľ si to zatiaľ len ukladá. Koncept dohodnutý 2026-08-25:
   - favorit: **Latte art timing** — kmitajúca čiara, ťuknutie v zelenej zóne = nálev; 5 nálevov dokreslí latte art (SVG vrstvy), každý nálev rýchlejšia čiara + užšia zóna; body podľa presnosti, hodnosti Junior barista → Latte art šampión (alternatívy: chytanie zrniek, pexeso, líška runner)
-  - trigger: tlačidlo „🎁 Odmena“ v celebrate overlayi ([App.js ~3927](src/App.js)) — len po dokončení všetkých úloh, 1–3 hry na odomknutie (localStorage per deň)
+  - trigger: tlačidlo „🎁 Odmena“ v celebrate overlayi ([App.js ~3927](src/App.js)) — len po dokončení všetkých úloh
+  - **PRESNE 1 hra na odomknutie, ŽIADNE „Hrať znova“** (požiadavka 2026-08-25: obsluha nesmie strácať čas) — po konci hry len skóre + návrat do appky; ďalšia hra až po ďalšom dokončenom zozname. Latte art timing má fixnú dĺžku ~30 s (5 nálevov), čo tejto požiadavke sedí najlepšie.
   - dotyk: `pointerdown` + `touch-action: manipulation` (bez 300 ms delay), celoobrazovkový overlay, lišta cez celú šírku ~60 px
   - skóre: lokálna Top 10 s menom kontrolóra; voliteľne GAS event `game_score` → hárok Skóre → rebríček pobočiek
   - hrateľné prototypy existujú v chate z 2026-08-25: `latte_art_timing_demo` (timing) aj `chytaj_zrnka_demo` (akčná — šálka ťahaná prstom chytá padajúce zrnká, červený črep = koniec, zrýchľuje sa). Používateľ zvažuje obe, prípadne striedanie (ráno zrnká, večer latte art).
