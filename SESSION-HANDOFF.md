@@ -1,7 +1,15 @@
 # SESSION HANDOFF — August 2026
 
 ## Aktuálna verzia
-**v61 — nasadené** (2026-08-26, overené live cez `version.json`). Tablety na v54+ ju aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳ v ozubenom koliesku.
+**v62 — nasadené** (2026-09-01, overené live cez `version.json`). Tablety na v54+ ju aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳ v ozubenom koliesku.
+
+### v62: Zmena jednotky položky skladu (edit mód)
+Požiadavka: „pri víne máme ks, ale potrebujeme L — tlačidlo zlá jednotka? upraviť“.
+- V edit móde skladu je chip jednotky klikateľný (zlatý dashed rámik + ✎); mimo edit módu je statický ako doteraz
+- Klik otvorí modal **Jednotka položky**: 6 predvolieb (ks/l/kg/g/ml/bal, aktuálna zvýraznená) + vstup na vlastnú jednotku (napr. „fľaša“, Enter alebo OK)
+- Ukladá sa do `invData` → `foxford-inventory-data`; numpad aj GS export automaticky preberajú novú jednotku (PORTOS export jednotku neobsahuje — bez vplyvu)
+- **Migrácia pri budúcom bumpe `INV_DATA_VERSION`**: lokálne zmenené jednotky sa teraz prenášajú (predtým by bump vrátil jednotky na základ; vlastné položky sa prenášali už predtým). Lokálna jednotka má prednosť pred novým základom.
+- Nové stavy: `unitPicker` { category, item }, `unitCustom`
 
 ### v61: Splnené úlohy klesajú dole aj v zoznamoch so sekciami
 Zoznamy so sekciami (víkendové, večerné, mesačné) sa doteraz vôbec netriedili — splnená úloha ostala na mieste, kým pri ranných (bez sekcií) klesla dole (nahlásené používateľom: „víkendové ostávajú na mieste“). Render sort v tabe Úlohy teraz triedi **v rámci každej sekcie**: splnené na koniec svojej sekcie, urgentné na začiatok, poradie sekcií a nadpisov sa nemení, úloha nikdy nepreskočí pod cudzí nadpis. Bez sekcií správanie nezmenené. Triedi sa len zobrazovacia kópia — uložené poradie v `foxford-tasks` (a teda aj poradie vo flushoch do GS) ostáva pôvodné. Overené v prehliadači (2 sekcie × 2 úlohy: splnená klesla pod nesplnenú vo svojej sekcii, druhá sekcia nedotknutá).

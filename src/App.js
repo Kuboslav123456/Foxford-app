@@ -1053,15 +1053,20 @@ export default function App() {
     const savedData = safeParse('foxford-inventory-data', null);
     // Verzia sedí a dáta existujú → použi lokálne (vrátane úprav pobočky)
     if (savedVer === INV_DATA_VERSION && savedData) return savedData;
-    // Nová verzia kódu → štart od INIT_INV, ale zachovaj vlastné pridané položky
+    // Nová verzia kódu → štart od INIT_INV, ale zachovaj vlastné pridané položky aj upravené jednotky
     const customItems = safeParse('foxford-custom-items', []);
-    if (customItems.length === 0) return INIT_INV;
     const merged = INIT_INV.map(g => ({ ...g, items: [...g.items] }));
     customItems.forEach(({ category, item }) => {
       const group = merged.find(g => g.category === category);
       if (group) group.items.push(item);
       else merged.push({ category, items: [item] });
     });
+    // Lokálne zmenené jednotky majú prednosť pred novým základom — pobočka vie, ako počíta
+    if (savedData) {
+      const savedUnit = {};
+      savedData.forEach(g => (g.items || []).forEach(i => { savedUnit[i.id] = i.unit; }));
+      merged.forEach(g => { g.items = g.items.map(i => (savedUnit[i.id] && savedUnit[i.id] !== i.unit) ? { ...i, unit: savedUnit[i.id] } : i); });
+    }
     return merged;
   });
   const [invQty, setInvQty]     = useState(() => {
@@ -1077,6 +1082,8 @@ export default function App() {
   const [newCat, setNewCat]     = useState('');
   const [addingTo, setAddingTo] = useState(null);
   const [editMode, setEditMode] = useState(false); // editácia skladu (mazanie/pridávanie) — predvolene vypnuté
+  const [unitPicker, setUnitPicker] = useState(null); // { category, item } — zmena jednotky položky (len v edit móde)
+  const [unitCustom, setUnitCustom] = useState('');   // vlastná jednotka napísaná v unit pickeri
   const [newItemName, setNewItemName] = useState('');
   const [newItemUnit, setNewItemUnit] = useState('');
   const [newItemCode, setNewItemCode] = useState('');
@@ -3183,7 +3190,12 @@ export default function App() {
                                 ✕ Zmazať</span>}
                               <span style={{ fontSize:13, fontWeight:600, color:C.text }}>{item.name}</span>
                             </div>
-                            <span style={{ fontSize:10, color:C.gold, fontWeight:700, padding:'2px 7px', border:`1px solid ${C.goldLine}`, borderRadius:8 }}>{item.unit}</span>
+                            {/* Jednotka — v edit móde klikateľná (zlá jednotka? ťukni a zmeň) */}
+                            <span onClick={() => { if (editMode) { setUnitCustom(''); setUnitPicker({ category: group.category, item }); } }}
+                              style={{ fontSize:10, color:C.gold, fontWeight:700, padding: editMode ? '5px 9px' : '2px 7px', flexShrink:0,
+                                       border:`1px ${editMode ? 'dashed' : 'solid'} ${C.goldLine}`, borderRadius:8,
+                                       background: editMode ? C.goldDim : 'transparent', cursor: editMode ? 'pointer' : 'default' }}>
+                              {item.unit}{editMode ? ' ✎' : ''}</span>
                           </div>
                           <div style={{ display:'flex', gap:7, alignItems:'flex-start' }}>
                             {/* Portos kód */}
@@ -4335,6 +4347,40 @@ export default function App() {
                 Áno, resetovať
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── UNIT PICKER — zmena jednotky položky skladu (edit mód) ───────────── */}
+      {unitPicker && (
+        <div onMouseDown={() => setUnitPicker(null)} style={{ position:'fixed', inset:0, background:'rgba(30,22,8,.55)', backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2000, padding:24 }}>
+          <div onMouseDown={e => e.stopPropagation()} style={{ background:C.modal, border:`1px solid ${C.borderM}`, width:'100%', maxWidth:360, borderRadius:24, padding:'26px 22px 22px', boxShadow:'0 8px 40px rgba(0,0,0,.12)' }}>
+            <div style={{ fontSize:15, fontWeight:800, color:C.text, textAlign:'center', marginBottom:4 }}>Jednotka položky</div>
+            <div style={{ fontSize:12, color:C.sub, textAlign:'center', marginBottom:6 }}>{unitPicker.item.name}</div>
+            <div style={{ fontSize:11, color:C.muted, textAlign:'center', marginBottom:16 }}>teraz: <strong style={{ color:C.gold }}>{unitPicker.item.unit}</strong></div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:8, marginBottom:12 }}>
+              {['ks','l','kg','g','ml','bal'].map(u => { const on = unitPicker.item.unit === u; return (
+                <button key={u}
+                  onMouseDown={() => { setInvData(prev => prev.map(g => g.category === unitPicker.category ? { ...g, items: g.items.map(i => i.id === unitPicker.item.id ? { ...i, unit: u } : i) } : g)); setUnitPicker(null); }}
+                  style={{ padding:'13px 0', borderRadius:12, fontWeight:800, fontSize:14, cursor:'pointer', fontFamily:'inherit',
+                           border:`1px solid ${on ? C.gold : C.border}`, background: on ? C.gold : 'rgba(255,255,255,0.7)', color: on ? '#fff' : C.sub }}>
+                  {u}
+                </button>
+              ); })}
+            </div>
+            <div style={{ display:'flex', gap:8, marginBottom:14 }}>
+              <Inp value={unitCustom} onChange={e => setUnitCustom(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && unitCustom.trim()) { const u = unitCustom.trim(); setInvData(prev => prev.map(g => g.category === unitPicker.category ? { ...g, items: g.items.map(i => i.id === unitPicker.item.id ? { ...i, unit: u } : i) } : g)); setUnitPicker(null); } }}
+                placeholder="Vlastná (napr. fľaša)…" style={{ flex:1, fontSize:13, padding:'11px 12px', background:'rgba(255,255,255,0.85)' }} />
+              <button
+                onMouseDown={() => { const u = unitCustom.trim(); if (!u) return; setInvData(prev => prev.map(g => g.category === unitPicker.category ? { ...g, items: g.items.map(i => i.id === unitPicker.item.id ? { ...i, unit: u } : i) } : g)); setUnitPicker(null); }}
+                style={{ padding:'0 18px', borderRadius:12, border:`1px solid ${C.gold}`, background: unitCustom.trim() ? C.gold : C.goldDim, color: unitCustom.trim() ? '#fff' : C.gold, fontWeight:800, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                OK
+              </button>
+            </div>
+            <button onMouseDown={() => setUnitPicker(null)} style={{ width:'100%', padding:'12px', borderRadius:14, border:`1px solid ${C.border}`, background:'transparent', color:C.sub, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+              Zrušiť
+            </button>
           </div>
         </div>
       )}
