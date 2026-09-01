@@ -551,6 +551,12 @@ function performDailyClose(endingDate) {
     // 2) Odoslať odpisy končiaceho dňa
     let odpisy = {};
     try { odpisy = JSON.parse(localStorage.getItem('foxford-odpisy')) || {}; } catch (_) {}
+    // Jednotky ber z AKTUÁLNEHO katalógu (pobočka ich mohla medzičasom upraviť);
+    // snapshot v zázname je len fallback pre položky, čo už v katalógu nie sú.
+    const unitById = {};
+    try {
+      (JSON.parse(localStorage.getItem('foxford-inventory-data')) || []).forEach(g => (g.items || []).forEach(i => { unitById[i.id] = i.unit; }));
+    } catch (_) {}
     const rawDay = odpisy[endingDayKey];
     const dayData = !rawDay ? null : Array.isArray(rawDay) ? { entries: rawDay, note: '' } : rawDay;
     const filled = (dayData?.entries || []).filter(e => e.qty);
@@ -563,7 +569,7 @@ function performDailyClose(endingDate) {
         entries: filled.map(e => ({
           name: e.name,
           qty: parseFloat((e.qty || '').toString().replace(',','.')) || 0,
-          unit: e.unit,
+          unit: (e.itemId && unitById[e.itemId]) || e.unit,
           reason: e.reason || 'Spotreba',
         })),
       });
@@ -2104,13 +2110,16 @@ export default function App() {
   const getMonthSummary = (year, month) => {
     const prefix = `${year}-${String(month + 1).padStart(2, '0')}`;
     const map = {};
+    // aktuálne jednotky z katalógu — snapshot v zázname len ako fallback
+    const unitById = {};
+    invData.forEach(g => g.items.forEach(i => { unitById[i.id] = i.unit; }));
     Object.entries(odpisy).forEach(([date, day]) => {
       if (!date.startsWith(prefix)) return;
       const entries = Array.isArray(day) ? day : (day.entries || []);
       entries.forEach(e => {
         const num = parseQty(e.qty);
         if (!e.qty || num === 0) return;
-        if (!map[e.itemId]) map[e.itemId] = { name: e.name, unit: e.unit, total: 0 };
+        if (!map[e.itemId]) map[e.itemId] = { name: e.name, unit: unitById[e.itemId] || e.unit, total: 0 };
         map[e.itemId].total = Math.round((map[e.itemId].total + num) * 1000) / 1000;
       });
     });
@@ -3636,13 +3645,14 @@ export default function App() {
                   <>
                     {browseEntries.map(entry => {
                       const col = dovorColors[entry.reason || 'Spotreba'] || C.muted;
+                      const bUnit = invData.flatMap(g => g.items).find(i => i.id === entry.itemId)?.unit || entry.unit;
                       return (
                         <div key={entry.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 0', borderBottom:`1px solid ${C.border}` }}>
                           <span style={{ flex:1, fontSize:13, color:C.text, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{entry.name}</span>
                           <span style={{ fontSize:10, fontWeight:700, color:col, border:`1px solid ${hexToRgba(col, 0.4)}`, background:hexToRgba(col, 0.1), padding:'2px 8px', borderRadius:20, flexShrink:0 }}>{entry.reason || 'Spotreba'}</span>
                           <div style={{ display:'flex', alignItems:'baseline', gap:4, flexShrink:0, minWidth:50, justifyContent:'flex-end' }}>
                             <span style={{ fontSize:15, fontWeight:800, color:C.gold }}>{entry.qty}</span>
-                            <span style={{ fontSize:11, color:C.muted }}>{entry.unit}</span>
+                            <span style={{ fontSize:11, color:C.muted }}>{bUnit}</span>
                           </div>
                         </div>
                       );

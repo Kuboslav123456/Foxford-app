@@ -1,7 +1,10 @@
 # SESSION HANDOFF — August 2026
 
 ## Aktuálna verzia
-**v62 — nasadené** (2026-09-01, overené live cez `version.json`). Tablety na v54+ ju aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳ v ozubenom koliesku.
+**v63 — nasadené** (2026-09-01, overené live cez `version.json`). Tablety na v54+ ju aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳ v ozubenom koliesku.
+
+### v63: Odpisy všade s aktuálnou jednotkou z katalógu
+Nadväzuje na v62 (zmena jednotky položky). Odpisové záznamy si pri pridaní ukladajú snapshot jednotky — po zmene jednotky v Sklade tak polnočné `odpis_daily` do GS, mesačný súhrn/PDF a prehliadač starších dní ukazovali starú. Teraz všetky tri miesta preferujú aktuálnu jednotku z katalógu (`unitById[e.itemId]`), snapshot `e.unit` je fallback pre položky zmazané z katalógu. Denný zoznam odpisov to tak robil už predtým (`catalogUnit`). PORTOS export jednotky neobsahuje (`kód;množstvo`) — bez vplyvu, ale číslo musí sedieť s jednotkou nastavenou v PORTOSe.
 
 ### v62: Zmena jednotky položky skladu (edit mód)
 Požiadavka: „pri víne máme ks, ale potrebujeme L — tlačidlo zlá jednotka? upraviť“.
