@@ -13,6 +13,7 @@
 //   alkohol_daily, uzavierka_daily, bug_report, backup (NOVÉ — záloha dát appky)
 // doGet: číta hárok Uzávierky pre OBRATY tabuľku — NEMAZAŤ.
 //   Navyše ?backup=latest vráti poslednú zálohu appky ako JSON.
+//   POZOR: doGet aj doPost vyžadujú token — čítanie cez ?token=TVOJ_TOKEN v URL.
 //
 // ŽIADNE NOVÉ POVOLENIA: zálohy idú do skrytého hárku „Zálohy“ v tejto tabuľke,
 //   nie na Google Drive (naň Workspace účet pobočky nedostane povolenie na zápis).
@@ -26,6 +27,13 @@ const TOKEN = 'SEM_VLOZ_SVOJ_TOKEN';
 
 function doGet(e) {
   try {
+    // Aj ČÍTANIE vyžaduje token (?token=…) — inak by si zálohu/uzávierky vedel
+    // stiahnuť ktokoľvek, kto pozná URL. Appka od v64 token posiela sama;
+    // ručné stiahnutie zálohy: ?backup=latest&token=TVOJ_TOKEN.
+    // Ak na túto URL niekedy napojíš OBRATY tabuľku, jej fetch musí pridať &token=.
+    var tok = (e && e.parameter && e.parameter.token) ? String(e.parameter.token) : '';
+    if (tok !== TOKEN) return jsonResponse({ error: 'Unauthorized' });
+
     var ss = SpreadsheetApp.getActiveSpreadsheet();
 
     // ?backup=latest (alebo ?backup=2026-08-06) → vráti uloženú zálohu appky.
@@ -265,8 +273,8 @@ function doPost(e) {
     // povolenie nepotrebuje. Jeden riadok = jeden deň a pobočka (prepisuje sa),
     // drží sa posledných 60. Bunka má limit 50 000 znakov, preto sa JSON delí
     // na časti do stĺpcov D, E, F…
-    // Stiahnutie zálohy: otvor URL webovej aplikácie s ?backup=latest
-    // (alebo ?backup=2026-08-06) → JSON ulož ako .json → appka Sklad → 📥 Obnoviť zálohu.
+    // Stiahnutie zálohy: otvor URL webovej aplikácie s ?backup=latest&token=TVOJ_TOKEN
+    // (alebo ?backup=2026-08-06&token=…) → JSON ulož ako .json → appka Sklad → 📥 Obnoviť zálohu.
     else if (type === 'backup') {
       const CHUNK = 45000;
       let sheet = ss.getSheetByName('Zálohy');

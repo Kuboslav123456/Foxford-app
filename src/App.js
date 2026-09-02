@@ -1707,8 +1707,9 @@ export default function App() {
     reader.readAsText(file);
   };
 
-  // Obnova zo zálohy uloženej v tabuľke pobočky (GAS `?backup=latest`).
+  // Obnova zo zálohy uloženej v tabuľke pobočky (GAS `?backup=latest&token=…`).
   // Funguje aj na zariadení, ktoré prišlo o localStorage aj o súborovú zálohu.
+  // Token je povinný od v64 (GAS doGet bez neho nič nevydá); staršie GAS param ignorujú.
   const restoreFromCloud = async () => {
     if (!scriptUrl || /^URL_POBOCKA/.test(scriptUrl) || !/^https?:\/\//.test(scriptUrl)) {
       alert('Táto pobočka zatiaľ nemá napojenú tabuľku.');
@@ -1716,7 +1717,7 @@ export default function App() {
     }
     setCloudRestoring(true);
     try {
-      const res = await fetch(`${scriptUrl}?backup=latest`);
+      const res = await fetch(`${scriptUrl}?backup=latest&token=${encodeURIComponent(process.env.REACT_APP_GAS_TOKEN || '')}`);
       const parsed = JSON.parse(await res.text());
       if (parsed.error) { alert(parsed.error); return; }
       if (parsed._app !== 'foxford' || !parsed.data || typeof parsed.data !== 'object') {

@@ -1,7 +1,15 @@
 # SESSION HANDOFF — August 2026
 
 ## Aktuálna verzia
-**v63 — nasadené** (2026-09-01, overené live cez `version.json`). Tablety na v54+ ju aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳ v ozubenom koliesku.
+**v64 — nasadené** (2026-09-02, overené live cez `version.json`). Tablety na v54+ ju aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳ v ozubenom koliesku.
+
+### v64: doGet vyžaduje token — zálohy a uzávierky už nie sú čitateľné bez neho
+Bezpečnostná diera: `doGet` (`?backup=latest` = celá záloha appky vrátane súm v uzávierkach; holé URL = JSON Uzávierok pre OBRATY) nekontroloval token — stačila znalosť URL, ktorá je vytiahnuteľná z verejného bundle. Zápis (`doPost`) token kontroloval vždy.
+- `gas/Code.gs`: doGet hneď na začiatku overí `?token=` proti TOKEN, inak `{error:'Unauthorized'}`
+- App.js `restoreFromCloud`: posiela `&token=` (REACT_APP_GAS_TOKEN) — staré GAS nasadenia param ignorujú, takže funguje s oboma verziami skriptu
+- **AKTIVUJE SA až po nasadení novej verzie Code.gs na pobočke** (Obchodná: vložiť + Nová verzia; Nivy: dostane s novou tabuľkou). Ručné stiahnutie zálohy odteraz: `?backup=latest&token=TVOJ_TOKEN`
+- Staré Obchodná nasadenie (AKfycbz…, používa ho OBRATY tabuľka na čítanie Uzávierok) ostáva bez tokenu — jeho URL nie je v bundle appky, len v skripte OBRATY tabuľky. Ak sa OBRATY niekedy prepne na novú URL, musí pridať `&token=`
+- Zostatkové riziko (inherentné client-only architektúre): token je zapečený v bundle — kto ho vytiahne, vie zapisovať riadky a stiahnuť zálohu SVOJEJ pobočky. Riešenia na diskusiu: rotácia tokenu pri prechode na firemný git, per-pobočkové tokeny, backend proxy
 
 ### v63: Odpisy všade s aktuálnou jednotkou z katalógu
 Nadväzuje na v62 (zmena jednotky položky). Odpisové záznamy si pri pridaní ukladajú snapshot jednotky — po zmene jednotky v Sklade tak polnočné `odpis_daily` do GS, mesačný súhrn/PDF a prehliadač starších dní ukazovali starú. Teraz všetky tri miesta preferujú aktuálnu jednotku z katalógu (`unitById[e.itemId]`), snapshot `e.unit` je fallback pre položky zmazané z katalógu. Denný zoznam odpisov to tak robil už predtým (`catalogUnit`). PORTOS export jednotky neobsahuje (`kód;množstvo`) — bez vplyvu, ale číslo musí sedieť s jednotkou nastavenou v PORTOSe.
