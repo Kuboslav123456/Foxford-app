@@ -1,7 +1,13 @@
 # SESSION HANDOFF — August 2026
 
 ## Aktuálna verzia
-**v65 — nasadené** (2026-09-03, overené live cez `version.json`). Tablety na v54+ ju aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳ v ozubenom koliesku.
+**v66 — nasadené** (2026-09-03, overené live cez `version.json`). Tablety na v54+ ju aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳ v ozubenom koliesku.
+
+### v66: Prehľady — detail úloh + inteligentné upozornenia
+Len manažérske Prehľady (`src/Prehlady.js`), tabletová appka nezmenená.
+- **Detail nesplnených/problémových úloh**: nová karta so zoznamom konkrétnych úloh (deň, zmena, úloha, kto, problém/stav). Klik na stĺpec grafu „Úlohy podľa kategórie" filtruje detail podľa kategórie (state `filterKat`, chart onClick).
+- **Inteligentné upozornenia**: karta „⚠️ Upozornenia" (predtým len stav kasy) teraz aj: opakovaný nahlásený problém (tá istá úloha s issue ≥3× v období) a opakované HACCP prekročenie (to isté zariadenie ≥3×).
+- tasks_log select rozšírený o task, issue, done_by. Demo (#prehlady-demo) generuje aj názvy úloh + problémy.
 
 ### v65: Supabase dual-write + manažérske Prehľady (#prehlady)
 Veľký krok — appka odteraz popri Google Sheets zapisuje aj do Supabase (Postgres, EÚ) a pribudol **manažérsky režim**. Prevádzková appka na tabletoch je NEDOTKNUTÁ.

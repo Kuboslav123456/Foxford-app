@@ -99,7 +99,15 @@ function demoRows() {
       uzavierky.push({ day, branch: b, data: { obrat, karta, qerko, qerko_tringelty: qerkoTr,
         gastro_listky: gastro, zaokruhly: 0, odvod, nakupy: 0, excel_drawer: Math.round(kasa[b] * 100) / 100, kasa: 'FXF' } });
       if (i0(d) < 92) { // prevádzkové dáta stačia za ~3 mesiace
-        ['ranné', 'večerné'].forEach(cat => { for (let t = 0; t < 8; t++) tasks.push({ day, branch: b, category: cat, done: Math.random() < 0.91 }); });
+        const kdo = ['Katka', 'Miro', 'Zuzka', 'Peter'][Math.floor(Math.random() * 4)];
+        const ulohy = { ranné: ['Zapnutie umývačky', 'Kontrola čistoty rajóna', 'Doplnenie pások', 'Kontrola vitríny', 'Príprava karáf', 'Vysávanie', 'Kontrola WC', 'Zapnutie hudby'],
+                        večerné: ['Umytie stolov', 'Vypnutie svetiel', 'Kontrola kasy', 'Vyloženie umývačky', 'Utretie barov', 'Poriadok pod stolmi', 'Kontrola zásob', 'Zamknutie'] };
+        ['ranné', 'večerné'].forEach(cat => ulohy[cat].forEach((task, idx) => {
+          // "Doplnenie pások" schválne často problémová → demo opakovaného problému
+          const done = idx === 2 ? Math.random() < 0.55 : Math.random() < 0.93;
+          const issue = !done && Math.random() < 0.6 ? (idx === 2 ? 'Chýba materiál na sklade' : ['Nestihnuté', 'Pokazené zariadenie', 'Nedostatok času'][Math.floor(Math.random() * 3)]) : null;
+          tasks.push({ day, branch: b, category: cat, task, done, issue, done_by: kdo });
+        }));
         items.forEach(([item, unit]) => { if (Math.random() < 0.5) odpisy.push({ day, branch: b, item, qty: +(0.2 + Math.random() * 2.8).toFixed(1), unit, reason: 'Spotreba' }); });
         zar.forEach(([dev, maxn, base]) => {
           const val = +(base + Math.random() * 3.4 - 0.8).toFixed(1);
@@ -272,6 +280,7 @@ function Dashboard({ session, demo }) {
   const [nacitava, setNacitava] = useState(true);
   const [zmenaHesla, setZmenaHesla] = useState(false);
   const [histStrana, setHistStrana] = useState(1);
+  const [filterKat, setFilterKat] = useState(null);   // klik na graf úloh → filter detailu podľa kategórie
 
   const [od, doD] = rozsah(mode, refDate);
   // Ročný pohľad všetkých pobočiek = priveľa surových riadkov úloh/odpisov —
@@ -301,7 +310,7 @@ function Dashboard({ session, demo }) {
     if (pobocky.length === 0) { setNacitava(false); return; }
     let zij = true;
     (async () => {
-      setNacitava(true); setChyba(''); setHistStrana(1);
+      setNacitava(true); setChyba(''); setHistStrana(1); setFilterKat(null);
       if (demo) {
         const all = demoRows();
         const f = rows => rows.filter(r => r.day >= od && r.day <= doD && (vybrana === '*' || r.branch === vybrana));
@@ -319,7 +328,7 @@ function Dashboard({ session, demo }) {
         const [uz, od_, ta, ha] = await Promise.all([
           fetchAll(q('uzavierky_log', 'day, branch, kasa, meno, created_at, data')),
           lenTrzby ? [] : fetchAll(q('odpisy_log', 'day, branch, item, qty, unit, reason')),
-          lenTrzby ? [] : fetchAll(q('tasks_log', 'day, branch, category, done')),
+          lenTrzby ? [] : fetchAll(q('tasks_log', 'day, branch, category, done, task, issue, done_by')),
           lenTrzby ? [] : fetchAll(q('haccp_log', 'day, branch, device, value, max_limit, exceeded')),
         ]);
         if (!zij) return;
@@ -392,8 +401,29 @@ function Dashboard({ session, demo }) {
     const topOdpisy = Object.values(odpMap).sort((a, b) => b.qty - a.qty).slice(0, 7);
     const prekrocenia = data.haccp.filter(h => h.exceeded);
 
+    // Detail: konkrétne nesplnené / problémové úlohy (najnovšie hore)
+    const problemove = data.tasks.filter(t => !t.done || t.issue)
+      .map(t => ({ day: t.day, branch: t.branch, category: t.category, task: t.task || '(bez názvu)', issue: t.issue || null, by: t.done_by || null }))
+      .sort((a, b) => a.day < b.day ? 1 : -1);
+    // Opakovaný nahlásený problém: tá istá úloha s problémom viackrát v období
+    const issMap = {};
+    data.tasks.filter(t => t.issue).forEach(t => {
+      const k = t.task || '(bez názvu)';
+      issMap[k] = issMap[k] || { task: k, count: 0, dni: [] };
+      issMap[k].count++; issMap[k].dni.push(t.day);
+    });
+    const opakProblemy = Object.values(issMap).filter(x => x.count >= 3).sort((a, b) => b.count - a.count);
+    // Opakované HACCP prekročenie: to isté zariadenie prekročilo limit viackrát
+    const devMap = {};
+    prekrocenia.forEach(h => { const k = h.device || '(zariadenie)'; devMap[k] = (devMap[k] || 0) + 1; });
+    const opakHaccp = Object.entries(devMap).filter(([, n]) => n >= 3).map(([device, n]) => ({ device, n })).sort((a, b) => b.n - a.n);
+    // Doplň inteligentné upozornenia (nad rámec stavu kasy)
+    opakProblemy.slice(0, 5).forEach(p => upozornenia.push({ typ: 'warn', text: `Opakovaný problém: „${p.task}" nahlásené ${p.count}× v období — vyžaduje pozornosť.` }));
+    opakHaccp.slice(0, 5).forEach(h => upozornenia.push({ typ: 'err', text: `${h.device}: prekročený teplotný limit ${h.n}× — skontrolujte chladenie/zariadenie.` }));
+
     return { uzRows, trzby, karty, qerko, gastro, hotovost, poDni, kasaPos, kasaSpolu, upozornenia,
-             total, done, pct, katMap, topOdpisy, odpisovSpolu: data.odpisy.length, prekrocenia };
+             total, done, pct, katMap, topOdpisy, odpisovSpolu: data.odpisy.length, prekrocenia,
+             problemove, opakProblemy, opakHaccp };
   }, [data]);
 
   // ── Grafy ──────────────────────────────────────────────────────────────────
@@ -438,7 +468,8 @@ function Dashboard({ session, demo }) {
         { label: 'Nesplnené', data: Object.values(agg.katMap).map(k => k.total - k.done),
           backgroundColor: 'rgba(160,144,128,0.45)', borderColor: C.muted, borderWidth: 1.5, borderRadius: 6 },
       ] },
-    options: { maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } },
+    options: { maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } },
+      onClick: (_e, els) => { if (els && els.length) { const kat = Object.keys(agg.katMap)[els[0].index]; setFilterKat(prev => prev === kat ? null : kat); } } },
   }), [agg]);
 
   const gOdpisy = useMemo(() => agg && agg.topOdpisy.length > 0 && ({
@@ -535,9 +566,9 @@ function Dashboard({ session, demo }) {
                      tone={agg.upozornenia.some(u => u.typ === 'err') ? 'err' : agg.upozornenia.length ? undefined : 'ok'} />
             </div>
 
-            {/* Upozornenia */}
+            {/* Upozornenia (stav kasy + opakované problémy + opakované HACCP) */}
             {agg.upozornenia.length > 0 && (
-              <Karta title="Upozornenia — stav pokladní" style={{ marginBottom: 14 }}>
+              <Karta title="⚠️ Upozornenia" style={{ marginBottom: 14 }}>
                 {agg.upozornenia.map((u, i) => (
                   <div key={i} style={{ padding: '8px 12px', borderRadius: 10, marginBottom: 6, fontSize: 13.5,
                                         background: u.typ === 'err' ? C.errDim : C.goldDim,
@@ -588,6 +619,62 @@ function Dashboard({ session, demo }) {
               <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>
                 ℹ️ Ročný pohľad všetkých pobočiek zobrazuje len tržby — pre úlohy, odpisy a HACCP vyber pobočku alebo kratšie obdobie.
               </div>
+            )}
+
+            {/* Detail: nesplnené a problémové úlohy (klik na graf úloh filtruje podľa kategórie) */}
+            {!lenTrzby && (
+              <Karta style={{ marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: C.sub, letterSpacing: .8, textTransform: 'uppercase' }}>
+                    Nesplnené a problémové úlohy
+                  </span>
+                  {filterKat && (
+                    <span onClick={() => setFilterKat(null)} style={{ cursor: 'pointer', fontSize: 11.5, fontWeight: 700, color: C.gold,
+                          background: C.goldDim, border: `1px solid ${C.goldLine}`, borderRadius: 20, padding: '3px 10px' }}>
+                      filter: {filterKat} ✕
+                    </span>
+                  )}
+                  <span style={{ flex: 1 }} />
+                  <span style={{ fontSize: 11, color: C.muted }}>💡 klikni na stĺpec grafu „Úlohy podľa kategórie" pre filter</span>
+                </div>
+                {(() => {
+                  const list = agg.problemove.filter(p => !filterKat || p.category === filterKat);
+                  if (list.length === 0) return (
+                    <div style={{ color: C.ok, fontSize: 14, fontWeight: 700 }}>✓ Všetky úlohy v období boli splnené bez nahláseného problému.</div>
+                  );
+                  return (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                        <thead><tr style={{ color: C.sub, textAlign: 'left' }}>
+                          <th style={{ padding: '6px 10px' }}>Deň</th>
+                          {vybrana === '*' && <th style={{ padding: '6px 10px' }}>Pobočka</th>}
+                          <th style={{ padding: '6px 10px' }}>Zmena</th>
+                          <th style={{ padding: '6px 10px' }}>Úloha</th>
+                          <th style={{ padding: '6px 10px' }}>Kto</th>
+                          <th style={{ padding: '6px 10px' }}>Stav / problém</th>
+                        </tr></thead>
+                        <tbody>
+                          {list.slice(0, 40).map((p, i) => (
+                            <tr key={i} style={{ borderTop: `1px solid ${C.border}`, background: p.issue ? C.errDim : (i % 2 ? 'rgba(150,120,80,0.05)' : 'transparent') }}>
+                              <td style={{ padding: '7px 10px', whiteSpace: 'nowrap' }}>{dayLabel(p.day)}</td>
+                              {vybrana === '*' && <td style={{ padding: '7px 10px' }}>{p.branch}</td>}
+                              <td style={{ padding: '7px 10px', color: C.sub }}>{p.category}</td>
+                              <td style={{ padding: '7px 10px' }}>{p.task}</td>
+                              <td style={{ padding: '7px 10px', color: C.sub }}>{p.by || '—'}</td>
+                              <td style={{ padding: '7px 10px', fontWeight: 700, color: p.issue ? C.err : C.muted }}>
+                                {p.issue ? `⚠ ${p.issue}` : '✗ nesplnené'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {list.length > 40 && (
+                        <div style={{ fontSize: 12, color: C.muted, marginTop: 8, textAlign: 'right' }}>… a ďalších {fmtNum(list.length - 40)} — zúž obdobie alebo pobočku</div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </Karta>
             )}
 
             {/* HACCP prekročenia */}
