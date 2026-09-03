@@ -10,9 +10,17 @@
 // 2. Projekt → ⚙ Project Settings → Script Properties → Add:
 //      SUPABASE_URL          = https://igkqszltknalqtzhhhhi.supabase.co
 //      SUPABASE_SERVICE_KEY  = <service_role kľúč z Supabase → Settings → API>
-//      PRIJEMCOVIA           = jakub@…, veduci@…   (adresy oddelené čiarkou)
 //    ⚠ service_role kľúč je tajný — TU je bezpečný (beží na serveri Googlu,
 //      nikdy sa nedostane do prehliadača). Do appky ani do repa NEPATRÍ.
+//
+//    Príjemcovia — jeden z dvoch spôsobov:
+//      A) PRIJEMCOVIA = jakub@…, veduci@…      (jeden spoločný report o VŠETKÝCH
+//         pobočkách na tieto adresy — oddelené čiarkou)
+//      B) REPORTY     = jakub@…=*; presov@…=Prešov; kosice@…=Košice,Levice
+//         (KAŽDÝ dostane report len o SVOJICH pobočkách; „*" = všetky pobočky;
+//          jeden príjemca môže mať viac pobočiek oddelených čiarkou; jednotlivé
+//          dvojice oddelené bodkočiarkou alebo na samostatných riadkoch)
+//    Ak je nastavené REPORTY, má prednosť pred PRIJEMCOVIA.
 // 3. Hore vyber funkciu `testReport` → Spustiť. Prvý raz odsúhlas oprávnenia
 //    (Gmail + externé pripojenie). Príde ti testovací report za posledných 7 dní.
 // 4. Keď report sedí: vyber `nastavTriggery` → Spustiť. Tým sa zapnú
@@ -254,19 +262,46 @@ function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').repla
 function isoDay(d) { return Utilities.formatDate(d, TZ, 'yyyy-MM-dd'); }
 function skDate(iso) { var p = String(iso).split('-'); return p.length === 3 ? (parseInt(p[2], 10) + '. ' + parseInt(p[1], 10) + '. ' + p[0]) : iso; }
 
-// ── Odoslanie ────────────────────────────────────────────────────────────────
-function posli(subject, html) {
-  var prij = cfg('PRIJEMCOVIA').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-  if (!prij.length) throw new Error('PRIJEMCOVIA je prázdne');
-  MailApp.sendEmail({ to: prij.join(','), subject: subject, htmlBody: html });
+// ── Príjemcovia ──────────────────────────────────────────────────────────────
+// REPORTY (voliteľné): "email=Pobočka,Pobočka; email2=*" → per-manažérske reporty.
+// Vráti [{email, pobocky:[...]}] alebo null (keď REPORTY nie je nastavené).
+function parseReporty() {
+  var raw = PropertiesService.getScriptProperties().getProperty('REPORTY');
+  if (!raw || !raw.trim()) return null;
+  return raw.split(/[;\n]+/).map(function (s) { return s.trim(); }).filter(Boolean).map(function (seg) {
+    var i = seg.indexOf('=');
+    if (i < 0) i = seg.indexOf(':');
+    if (i < 0) return null;
+    var email = seg.slice(0, i).trim();
+    var pob = seg.slice(i + 1).split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+    return (email && pob.length) ? { email: email, pobocky: pob } : null;
+  }).filter(Boolean);
+}
+function filtrujPobocky(P, pobocky) {
+  if (pobocky.indexOf('*') >= 0) return P;
+  var out = {}; pobocky.forEach(function (b) { if (P[b]) out[b] = P[b]; }); return out;
 }
 
 function report(od, doD, odPrev, doPrev, nadpis) {
   var data = nacitajObdobie(od, doD);
   var trzbyPrev = trzbyPodlaPobocky(nacitajObdobie(odPrev, doPrev).uzavierky);
   var P = agregujPobocky(data, trzbyPrev);
-  var html = generujHtml(P, od, doD, nadpis);
-  posli('Foxford — ' + nadpis + ' (' + skDate(od) + ' – ' + skDate(doD) + ')', html);
+  var subject = 'Foxford — ' + nadpis + ' (' + skDate(od) + ' – ' + skDate(doD) + ')';
+
+  var reporty = parseReporty();
+  if (reporty && reporty.length) {
+    // B) každý dostane report len o svojich pobočkách
+    reporty.forEach(function (r) {
+      var Pf = filtrujPobocky(P, r.pobocky);
+      if (!Object.keys(Pf).length) return;   // pre tohto príjemcu nič v období
+      MailApp.sendEmail({ to: r.email, subject: subject, htmlBody: generujHtml(Pf, od, doD, nadpis) });
+    });
+  } else {
+    // A) jeden spoločný report o všetkých pobočkách
+    var prij = cfg('PRIJEMCOVIA').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+    if (!prij.length) throw new Error('Nastav PRIJEMCOVIA alebo REPORTY v Script Properties');
+    MailApp.sendEmail({ to: prij.join(','), subject: subject, htmlBody: generujHtml(P, od, doD, nadpis) });
+  }
 }
 
 // Pondelok: uplynulý týždeň (Po–Ne) vs. predošlý týždeň
