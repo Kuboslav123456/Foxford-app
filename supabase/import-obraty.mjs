@@ -21,16 +21,32 @@ const URL_ = (cfg.REACT_APP_SUPABASE_URL || '').replace(/\/$/, '');
 const KEY = cfg.REACT_APP_SUPABASE_ANON_KEY || '';
 if (!URL_ || !KEY) { console.error('Chýbajú kľúče v .env.local'); process.exit(1); }
 
+// Živý zdroj: Apps Script hárku "Uzávierky" Obchodnej (má aj najnovšie dni).
+// Pri prekrytí má PREDNOSŤ živý Sheet (database.json je len historická záloha).
+const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwjU6Tls4O2eESssvusbbpU5Lhivj7GfoGWmBZrD-zAwy8RTXHpJTa4hOYsygIy6i7h/exec';
+
 const dbPath = process.argv[2];
-if (!dbPath) { console.error('Použitie: node import-obraty.mjs <cesta k database.json>'); process.exit(1); }
+if (!dbPath) { console.error('Použitie: node import-obraty.mjs <cesta k database.json> [--no-sheet]'); process.exit(1); }
 const db = JSON.parse(readFileSync(dbPath, 'utf8'));
 
-const rows = Object.keys(db).sort().map(day => ({
+// Spojenie: historická záloha + živý Sheet (Sheet prepisuje rovnaké dni)
+const merged = {};
+Object.keys(db).forEach(day => { merged[day] = { ...db[day].fxf }; });
+let sheetDni = 0;
+if (!process.argv.includes('--no-sheet')) {
+  const res = await fetch(SHEET_URL, { redirect: 'follow' });
+  const gs = JSON.parse(await res.text());
+  if (gs.error) { console.error('Sheet chyba:', gs.error); process.exit(1); }
+  Object.keys(gs).forEach(day => { merged[day] = { ...gs[day].fxf }; sheetDni++; });
+  console.log(`Zo živého Sheetu: ${sheetDni} dní (prekrývajúce prepísané novšou verziou)`);
+}
+
+const rows = Object.keys(merged).sort().map(day => ({
   branch: 'Obchodná',
   day,
   kasa: 'FXF',
   meno: 'import OBRATY',
-  data: { ...db[day].fxf, zdroj: 'obraty-import' },
+  data: { ...merged[day], zdroj: 'obraty-import' },
 }));
 console.log(`Pripravených ${rows.length} dní (${rows[0]?.day} → ${rows[rows.length - 1]?.day})`);
 
