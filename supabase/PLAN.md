@@ -31,7 +31,13 @@ Google Sheets ostávajú počas prechodu zdrojom pravdy a dlhodobo minimálne pr
 - Tabuľka `backups` + presun ☁ zálohy/obnovy z GAS do Supabase (zálohy obsahujú citlivé
   dáta → výhradne za prihlásením, nikdy cez anon).
 
-**Fáza 4 — reporting**
+**Fáza 4 — reporting** *(ROZPRACOVANÉ 2026-09-03: modul `src/Prehlady.js` — manažérsky
+režim cez `#prehlady`, prihlásenie Supabase Auth, prístup per pobočka cez tabuľku
+`manager_pobocky` + RLS; tržbové prehľady prenesené z appky OBRATOVÁ TABUĽKA
+(filter Deň/Týždeň/Mesiac/Rok, podiely platieb, stav kasy s upozorneniami, História);
+história Obchodnej 2023–2026 importovaná cez `supabase/import-obraty.mjs`, riadky
+označené meno='import OBRATY'. Ukážka bez prihlásenia: `#prehlady-demo`.
+Looker Studio opustený — nahradený vlastným modulom.)*
 - Looker Studio / Metabase priamo na Postgres (read-only DB user) — dashboardy bez programovania.
 - Neskôr manažérska appka (rola `manager` = select nad všetkými pobočkami).
 

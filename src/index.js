@@ -4,12 +4,25 @@ import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 
+// ── Manažérsky režim (#prehlady) — samostatná vetva, prevádzková appka sa nemení ──
+// Modul Prehľadov sa načítava lenivo: tablety si jeho kód ani nestiahnu do pamäte.
 const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+if (window.location.hash.startsWith('#prehlady')) {
+  const Prehlady = React.lazy(() => import('./Prehlady'));
+  root.render(
+    <React.StrictMode>
+      <React.Suspense fallback={null}>
+        <Prehlady />
+      </React.Suspense>
+    </React.StrictMode>
+  );
+} else {
+  root.render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
+}
 
 reportWebVitals();
 
@@ -47,7 +60,7 @@ if (new URLSearchParams(window.location.search).get('reset') === '1') {
 // ── Automatická detekcia novej verzie ────────────────────────────────────────
 // APP_VERSION musí zodpovedať "v" v public/version.json.
 // Keď deployuješ novú verziu: zvýš číslo TU aj v public/version.json.
-const APP_VERSION = 64;
+const APP_VERSION = 65;
 
 // Aktualizácia sa NEaplikuje hocikedy — reload uprostred zmeny by obsluhe zhodil
 // rozpísanú inventúru či odpis. Appka novú verziu iba zaznamená a nainštaluje ju

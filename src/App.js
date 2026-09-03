@@ -495,6 +495,8 @@ function queueSend(url, type, payload) {
 
 // ── Offline-aware send: pošle alebo uloží do fronty (modulová úroveň, bez React stavu) ──
 function sendOrQueue(url, type, payload) {
+  // Supabase dual-write (pilot) — mirror beží nezávisle od stavu GAS URL
+  sbMirror(type, payload);
   // Ochrana proti placeholder URL pre nenakonfigurované pobočky
   if (!url || /^URL_POBOCKA/.test(url) || !/^https?:\/\//.test(url)) {
     console.warn('sendOrQueue: skipped — placeholder/invalid URL', url);
@@ -511,6 +513,121 @@ function sendOrQueue(url, type, payload) {
   // stratilo navždy (odosielajú sa iba raz). Pri chybe to teda ide do fronty.
   fetch(url, { method:'POST', mode:'no-cors', headers:{ 'Content-Type':'application/json' }, body })
     .catch(() => queueSend(url, type, payload));
+}
+
+// ── SUPABASE — pilot dual-write (fáza 1, viď supabase/PLAN.md) ───────────────
+// Zapisuje POPRI GAS/Sheets (Sheets ostávajú zdrojom pravdy). Bez env kľúčov
+// v .env.local (REACT_APP_SUPABASE_URL + REACT_APP_SUPABASE_ANON_KEY) je no-op.
+// Anon kľúč smie podľa RLS len INSERT — čítanie databáza odmietne.
+const SB_URL  = (process.env.REACT_APP_SUPABASE_URL || '').replace(/\/$/, '');
+const SB_ANON = process.env.REACT_APP_SUPABASE_ANON_KEY || '';
+
+function sbQueue(table, rows) {
+  try {
+    const q = JSON.parse(localStorage.getItem('foxford-sb-queue') || '[]');
+    q.push({ table, rows, ts: Date.now() });
+    localStorage.setItem('foxford-sb-queue', JSON.stringify(q.slice(-200)));
+  } catch (_) {}
+}
+
+function sbInsert(table, rows) {
+  if (!SB_URL || !SB_ANON || !Array.isArray(rows) || rows.length === 0) return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) { sbQueue(table, rows); return; }
+  // Nové kľúče (sb_publishable_…) idú len do `apikey`; Authorization Bearer je pre staré JWT (eyJ…) kľúče
+  const headers = { apikey: SB_ANON, 'Content-Type': 'application/json', Prefer: 'return=minimal' };
+  if (SB_ANON.startsWith('eyJ')) headers.Authorization = `Bearer ${SB_ANON}`;
+  fetch(`${SB_URL}/rest/v1/${table}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(rows),
+  }).then(res => {
+    if (!res.ok) {
+      // 5xx/sieť → do fronty na ďalší pokus; 4xx = trvalá chyba dát, len zalogovať
+      if (res.status >= 500) sbQueue(table, rows);
+      res.text().then(t => console.warn(`Supabase ${table} ${res.status}:`, t)).catch(() => {});
+    }
+  }).catch(() => sbQueue(table, rows));
+}
+
+function sbFlushQueue() {
+  if (!SB_URL || !SB_ANON) return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  let q = [];
+  try { q = JSON.parse(localStorage.getItem('foxford-sb-queue')) || []; } catch (_) {}
+  if (q.length === 0) return;
+  localStorage.setItem('foxford-sb-queue', '[]');
+  q.forEach(item => sbInsert(item.table, item.rows));
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', sbFlushQueue);
+  setTimeout(sbFlushQueue, 4000); // po štarte appky skús doposielať nevybavené
+}
+
+// Prevod sk-SK dátumu ("2. 9. 2026" aj "2. 9. 2026, 14:23:45") na ISO YYYY-MM-DD
+function skDateToIso(s) {
+  const m = /^(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})/.exec((s || '').toString().trim());
+  return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : null;
+}
+
+// ── sbMirror — prevedie GAS payload na riadky pre Supabase a vloží ich ───────
+// Volá sa z sendToSheets/sendOrQueue, čiže presne RAZ na udalosť (retry GAS
+// fronty ide cez surový fetch a mirror znova nespúšťa). Mapovanie zrkadlí
+// hárky v gas/Code.gs; deň sa berie z payload.date (sk-SK), fallback dnešok.
+function sbMirror(type, payload) {
+  try {
+    if (!SB_URL || !SB_ANON || !payload) return;
+    const branch = localStorage.getItem('foxford-branch') || BRANCHES[0].name;
+    const day = skDateToIso(payload.date) || localDayKey(new Date());
+    const num = v => { const n = parseFloat((v ?? '').toString().replace(',', '.')); return isNaN(n) ? null : n; };
+
+    if (type === 'tasks_summary') {
+      sbInsert('tasks_log', (payload.tasks || []).map(t => ({
+        branch, day, category: payload.category, inspector: payload.inspector || '',
+        task: t.text, done: !!t.done, done_time: t.time || null, done_date: t.date || null,
+        issue: t.issue || null, done_by: t.by || null,
+      })));
+    } else if (type === 'haccp') {
+      sbInsert('haccp_log', (payload.readings || []).map(r => {
+        const val = num(r.value);
+        const maxNum = parseFloat((r.max || '').replace(/[^\d.-]/g, ''));
+        return {
+          branch, day, shift: payload.shift || null, inspector: payload.podpis || '',
+          device: r.label, value_raw: (r.value ?? '').toString(), value: val,
+          max_limit: r.max || null,
+          exceeded: (val == null || isNaN(maxNum)) ? null : val > maxNum,
+        };
+      }));
+    } else if (type === 'inventory') {
+      sbInsert('inventory_log', (payload.items || []).map(it => ({
+        branch, day, month_label: payload.month || null, inspector: payload.inspector || '',
+        item: it.name, qty: num(it.qty) ?? 0, unit: it.unit || null,
+        breakdown: it.breakdown || null, note: it.note || null,
+      })));
+    } else if (type === 'odpis_daily') {
+      sbInsert('odpisy_log', (payload.entries || []).map(e => ({
+        branch, day, author: payload.author || '', item: e.name,
+        qty: num(e.qty) ?? 0, unit: e.unit || null, reason: e.reason || 'Spotreba',
+        day_note: payload.note || '',
+      })));
+    } else if (type === 'alkohol_daily') {
+      sbInsert('alkohol_log', (payload.entries || []).map(e => ({
+        branch, day, licencia: payload.licencia || null, author: payload.author || null,
+        name: e.name, type: e.type || null, ean: (e.ean ?? '').toString() || null,
+        open_count: parseInt(e.open, 10) || 0,
+      })));
+    } else if (type === 'uzavierka_daily') {
+      sbInsert('uzavierky_log', [{
+        branch, day, kasa: payload.kasa || null, meno: payload.author || null, data: payload,
+      }]);
+    } else if (type === 'bug_report') {
+      const pb = BRANCHES.some(b => b.name === payload.branch) ? payload.branch : branch;
+      sbInsert('bug_reports', [{
+        branch: pb, day, author: payload.author || null,
+        description: payload.description || '', user_agent: payload.userAgent || null,
+      }]);
+    }
+  } catch (e) { console.warn('sbMirror zlyhal:', e); }
 }
 
 // ── DAILY CLOSE — odošle denné úlohy + odpisy končiaceho dňa do GS a vyresetuje stav ──
@@ -1286,6 +1403,8 @@ export default function App() {
   };
 
   const sendToSheets = (type, payload) => {
+    // Supabase dual-write (pilot) — mirror beží nezávisle od stavu GAS URL
+    sbMirror(type, payload);
     // Neplatná/placeholder URL — nemá zmysel posielať ani queue-ovať (inak by položka navždy visela vo fronte)
     if (!scriptUrl || /^URL_POBOCKA/.test(scriptUrl) || !/^https?:\/\//.test(scriptUrl)) {
       console.warn('sendToSheets: skipped — placeholder/invalid URL', scriptUrl);

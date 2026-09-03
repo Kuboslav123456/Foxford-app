@@ -1,7 +1,16 @@
 # SESSION HANDOFF — August 2026
 
 ## Aktuálna verzia
-**v64 — nasadené** (2026-09-02, overené live cez `version.json`). Tablety na v54+ ju aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳ v ozubenom koliesku.
+**v65 — nasadené** (2026-09-03, overené live cez `version.json`). Tablety na v54+ ju aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳ v ozubenom koliesku.
+
+### v65: Supabase dual-write + manažérske Prehľady (#prehlady)
+Veľký krok — appka odteraz popri Google Sheets zapisuje aj do Supabase (Postgres, EÚ) a pribudol **manažérsky režim**. Prevádzková appka na tabletoch je NEDOTKNUTÁ.
+- **Dual-write**: `sbMirror(type, payload)` v App.js zavesené na `sendToSheets`/`sendOrQueue` — mapuje 7 typov eventov na Supabase tabuľky, beží nezávisle od GAS. Bez env kľúčov = no-op. Offline fronta `foxford-sb-queue`.
+- **Prehľady** (`src/Prehlady.js`, lazy chunk): otvárajú sa cez hash `#prehlady` — `index.js` gate renderuje App (tablety, nezmenené, chunk Prehľadov si ani nestiahnu) alebo Prehľady. Prihlásenie Supabase Auth, prístup per pobočka cez tabuľku `manager_pobocky` + RLS. Tržbová časť prenesená z appky OBRATOVÁ TABUĽKA (filter Deň/Týždeň/Mesiac/Rok, podiely platieb, stav kasy + upozornenia, História). Ukážka bez prihlásenia: `#prehlady-demo`.
+- **História Obchodnej 2023–2026** (1277 dní) naimportovaná do `uzavierky_log` (meno='import OBRATY').
+- Schéma/prístup v repe: `supabase/schema.sql`, `manager-access.sql`, `reporting-user.sql`, `import-obraty.mjs`, `PLAN.md`.
+- Bundle: hlavný chunk +1.3 kB (len index.js gate), Prehľady v samostatnom lazy chunku 366 (~124 kB, tablet nesťahuje). Anon (publishable) kľúč je v bundli zámerne — insert-only cez RLS; service_role kľúč v bundli NIE JE (overené).
+- **Správa manažérov** = klikanie v Supabase: Authentication → Add user (odporúčam Auto Confirm) + riadok v `manager_pobocky`. Admin Jakub ('*') už vložený.
 
 ### v64: doGet vyžaduje token — zálohy a uzávierky už nie sú čitateľné bez neho
 Bezpečnostná diera: `doGet` (`?backup=latest` = celá záloha appky vrátane súm v uzávierkach; holé URL = JSON Uzávierok pre OBRATY) nekontroloval token — stačila znalosť URL, ktorá je vytiahnuteľná z verejného bundle. Zápis (`doPost`) token kontroloval vždy.
