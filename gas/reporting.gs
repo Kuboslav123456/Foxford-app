@@ -132,75 +132,122 @@ function agregujPobocky(data, trzbyPrev) {
 }
 
 // ── HTML e-mail ──────────────────────────────────────────────────────────────
+// Table-based layout (e-mail-safe), inline štýly, šírka 720 px. Testované v Gmaile.
 function generujHtml(P, od, doD, nadpis) {
-  var G = '#b87020', TX = '#1e1608', SUB = '#6b5d4f', OK = '#2a9a55', ERR = '#d03030', BORDER = '#e5ddcb';
-  var pobky = Object.keys(P).sort();
-  var celkTrzby = 0; pobky.forEach(function (b) { celkTrzby += P[b].trzby; });
+  var G = '#b87020', GD = '#8a5015', TX = '#241a0b', SUB = '#7a6c5a', MUT = '#a99a86',
+      OK = '#2a9a55', ERR = '#d03030', CARD = '#ffffff', BG = '#ece4d5', LINE = '#ece2cd', SOFT = '#faf6ec';
+  var pobky = Object.keys(P).sort(function (a, b) { return P[b].trzby - P[a].trzby; });   // najvyššie tržby hore
+  var celkTrzby = 0, celkPrekr = 0, sumPct = 0, poctSplnPobociek = 0, celkUpoz = 0;
+  pobky.forEach(function (b) {
+    var p = P[b]; celkTrzby += p.trzby; celkPrekr += p.prekrocenia.length;
+    if (p.splnenost !== null) { sumPct += p.splnenost; poctSplnPobociek++; }
+    celkUpoz += (p.kasa !== null && (p.kasa > 1000 || p.kasa < 0) ? 1 : 0) + p.opakProblemy.length + p.opakHaccp.length;
+  });
+  var priemSpln = poctSplnPobociek ? Math.round(sumPct / poctSplnPobociek) : null;
+
+  function stat(label, value, farba, sub) {
+    return '<td width="25%" valign="top" style="padding:6px">' +
+      '<table width="100%" cellpadding="0" cellspacing="0" style="background:' + SOFT + ';border:1px solid ' + LINE + ';border-radius:12px"><tr><td style="padding:12px 14px">' +
+      '<div style="font-size:10.5px;font-weight:700;color:' + SUB + ';text-transform:uppercase;letter-spacing:.5px">' + label + '</div>' +
+      '<div style="font-size:22px;font-weight:800;color:' + (farba || G) + ';margin-top:4px;line-height:1.15;white-space:nowrap">' + value + '</div>' +
+      (sub ? '<div style="font-size:10.5px;color:' + SUB + ';margin-top:3px">' + sub + '</div>' : '') +
+      '</td></tr></table></td>';
+  }
+  function sekcia(t) { return '<div style="font-size:11px;font-weight:700;color:' + SUB + ';text-transform:uppercase;letter-spacing:.5px;margin:16px 0 6px">' + t + '</div>'; }
 
   var h = '';
-  h += '<div style="font-family:-apple-system,Segoe UI,Arial,sans-serif;max-width:680px;margin:0 auto;background:#f4efe3;padding:0 0 24px">';
-  h += '<div style="background:' + G + ';color:#fff;padding:22px 24px;border-radius:0 0 4px 4px">';
-  h += '<div style="font-size:20px;font-weight:800">Foxford — ' + nadpis + '</div>';
-  h += '<div style="opacity:.85;font-size:13px;margin-top:3px">' + skDate(od) + ' – ' + skDate(doD) + ' · celkové tržby ' + eur0(celkTrzby) + '</div></div>';
+  h += '<div style="background:' + BG + ';padding:24px 10px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif">';
+  h += '<table align="center" width="720" cellpadding="0" cellspacing="0" style="width:720px;max-width:100%;margin:0 auto">';
 
+  // HLAVIČKA
+  h += '<tr><td style="background:' + GD + ';background-image:linear-gradient(135deg,' + G + ',' + GD + ');border-radius:16px 16px 0 0;padding:26px 30px">' +
+    '<div style="color:#f4e6d0;font-size:12px;font-weight:700;letter-spacing:4px">F O X F O R D</div>' +
+    '<div style="color:#fff;font-size:23px;font-weight:800;margin-top:5px">' + nadpis.charAt(0).toUpperCase() + nadpis.slice(1) + '</div>' +
+    '<div style="color:rgba(255,255,255,.82);font-size:13px;margin-top:6px">' + skDate(od) + ' &ndash; ' + skDate(doD) + '</div></td></tr>';
+
+  // SÚHRNNÁ LIŠTA
+  h += '<tr><td style="background:' + CARD + ';padding:14px 18px 6px">' +
+    '<table width="100%" cellpadding="0" cellspacing="0"><tr>' +
+    stat('Celkové tržby', eur0(celkTrzby), G, pobky.length + ' pobočiek') +
+    stat('Ø splnenosť úloh', priemSpln === null ? '&mdash;' : priemSpln + ' %', priemSpln === null ? SUB : priemSpln >= 90 ? OK : priemSpln >= 70 ? G : ERR, '') +
+    stat('HACCP prekročenia', String(celkPrekr), celkPrekr ? ERR : OK, celkPrekr ? 'skontrolovať' : 'v poriadku') +
+    stat('Upozornenia', String(celkUpoz), celkUpoz ? ERR : OK, celkUpoz ? 'vyžadujú pozornosť' : 'žiadne') +
+    '</tr></table></td></tr>';
+
+  // POBOČKY
   pobky.forEach(function (b) {
     var p = P[b];
-    var zmena = p.zmenaPct === null ? '' :
-      '<span style="color:' + (p.zmenaPct >= 0 ? OK : ERR) + ';font-weight:700">' + (p.zmenaPct >= 0 ? '▲ +' : '▼ ') + p.zmenaPct + ' %</span> oproti minulému obdobiu';
-    h += '<div style="background:#fff;border:1px solid ' + BORDER + ';border-radius:12px;margin:16px 24px 0;padding:16px 18px">';
-    h += '<div style="font-size:16px;font-weight:800;color:' + G + ';margin-bottom:10px">' + esc(b) + '</div>';
+    var pctFarba = p.splnenost === null ? SUB : p.splnenost >= 90 ? OK : p.splnenost >= 70 ? G : ERR;
+    var zmenaBadge = p.zmenaPct === null ? '' :
+      '<span style="display:inline-block;font-size:12px;font-weight:800;color:' + (p.zmenaPct >= 0 ? OK : ERR) + ';background:' + (p.zmenaPct >= 0 ? 'rgba(42,154,85,.10)' : 'rgba(208,48,48,.10)') + ';border-radius:20px;padding:3px 10px">' +
+      (p.zmenaPct >= 0 ? '&#9650; +' : '&#9660; ') + p.zmenaPct + '&#8201;%</span>';
 
-    // čísla
-    h += '<table style="width:100%;border-collapse:collapse;font-size:13px;color:' + TX + '"><tr>';
-    h += tile('Tržby', eur0(p.trzby), zmena);
-    h += tile('Splnenosť úloh', p.splnenost === null ? '—' : p.splnenost + ' %', p.splnenost !== null && p.splnenost < 90 ? '<span style="color:' + ERR + '">pod cieľom</span>' : '');
-    h += tile('HACCP prekročenia', String(p.prekrocenia.length), p.prekrocenia.length ? '<span style="color:' + ERR + '">skontrolovať</span>' : 'v poriadku');
-    h += tile('Karty / Qerko', eur0(p.karty) + ' / ' + eur0(p.qerko), '');
-    h += '</tr></table>';
+    h += '<tr><td style="background:' + CARD + ';padding:8px 18px">' +
+      '<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ' + LINE + ';border-radius:14px"><tr><td style="padding:18px 20px">';
+
+    // hlavička pobočky: názov + veľké tržby + zmena
+    h += '<table width="100%" cellpadding="0" cellspacing="0"><tr>' +
+      '<td valign="middle"><div style="font-size:17px;font-weight:800;color:' + TX + '">' + esc(b) + '</div>' +
+      '<div style="font-size:11px;color:' + MUT + ';margin-top:2px">tržby za obdobie</div></td>' +
+      '<td valign="middle" align="right"><div style="font-size:24px;font-weight:800;color:' + G + '">' + eur0(p.trzby) + '</div>' +
+      (zmenaBadge ? '<div style="margin-top:4px">' + zmenaBadge + '</div>' : '') + '</td></tr></table>';
+
+    // dlaždice pobočky
+    h += '<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px"><tr>' +
+      stat('Splnenosť úloh', p.splnenost === null ? '&mdash;' : p.splnenost + ' %', pctFarba, p.ulohTotal ? (p.ulohDone + ' z ' + p.ulohTotal) : 'žiadne úlohy') +
+      stat('HACCP prekročenia', String(p.prekrocenia.length), p.prekrocenia.length ? ERR : OK, p.prekrocenia.length ? 'skontrolovať' : 'v poriadku') +
+      stat('Karty / Qerko', eur0(p.karty) + ' / ' + eur0(p.qerko), TX, '') +
+      stat('Stav kasy', p.kasa === null ? '&mdash;' : eur0(p.kasa), p.kasa !== null && p.kasa < 0 ? ERR : TX, 'večer') +
+      '</tr></table>';
 
     // upozornenia
     var up = [];
-    if (p.kasa !== null && p.kasa > 1000) up.push('Vysoký stav hotovosti v kase (' + eur(p.kasa) + ') — odporúča sa odvod.');
-    if (p.kasa !== null && p.kasa < 0) up.push('Záporný stav kasy (' + eur(p.kasa) + ') — skontrolujte uzávierky!');
-    p.opakProblemy.forEach(function (x) { up.push('Opakovaný problém: „' + x.task + '" ' + x.count + '× — vyžaduje pozornosť.'); });
-    p.opakHaccp.forEach(function (x) { up.push(x.device + ': prekročený limit ' + x.n + '× — skontrolujte chladenie.'); });
+    if (p.kasa !== null && p.kasa > 1000) up.push('Vysoký stav hotovosti v kase (' + eur(p.kasa) + ') &mdash; odporúča sa odvod.');
+    if (p.kasa !== null && p.kasa < 0) up.push('Záporný stav kasy (' + eur(p.kasa) + ') &mdash; skontrolujte uzávierky!');
+    p.opakProblemy.forEach(function (x) { up.push('Opakovaný problém: &bdquo;' + esc(x.task) + '&ldquo; ' + x.count + '&times; &mdash; vyžaduje pozornosť.'); });
+    p.opakHaccp.forEach(function (x) { up.push(esc(x.device) + ': prekročený limit ' + x.n + '&times; &mdash; skontrolujte chladenie.'); });
     if (up.length) {
-      h += '<div style="margin-top:12px;background:#fdf4e6;border:1px solid #ecd9b5;border-radius:8px;padding:10px 12px">';
-      h += '<div style="font-weight:700;color:' + G + ';font-size:12px;margin-bottom:4px">⚠️ UPOZORNENIA</div>';
-      up.forEach(function (t) { h += '<div style="font-size:12.5px;color:' + TX + ';margin:3px 0">• ' + esc(t) + '</div>'; });
+      h += '<div style="margin-top:14px;background:#fdf3e3;border-left:3px solid ' + G + ';border-radius:6px;padding:11px 14px">' +
+        '<div style="font-weight:800;color:' + GD + ';font-size:11px;letter-spacing:.5px;margin-bottom:5px">&#9888;&#65039; UPOZORNENIA</div>';
+      up.forEach(function (t) { h += '<div style="font-size:12.5px;color:' + TX + ';margin:3px 0;line-height:1.45">&bull; ' + t + '</div>'; });
       h += '</div>';
     }
 
-    // problémové úlohy (max 8)
+    // problémové úlohy
     if (p.problemove.length) {
       h += sekcia('Nesplnené a problémové úlohy (' + p.problemove.length + ')');
-      p.problemove.slice(0, 8).forEach(function (t) {
-        var stav = t.issue ? '<span style="color:' + ERR + '">⚠ ' + esc(t.issue) + '</span>' : '<span style="color:' + SUB + '">✗ nesplnené</span>';
-        h += '<div style="font-size:12.5px;margin:2px 0;color:' + TX + '">' + skDate(t.day) + ' · ' + esc(t.category || '') + ' · ' + esc(t.task || '') + ' — ' + stav + '</div>';
+      h += '<table width="100%" cellpadding="0" cellspacing="0" style="font-size:12.5px">';
+      p.problemove.slice(0, 8).forEach(function (t, i) {
+        var stav = t.issue ? '<span style="color:' + ERR + ';font-weight:700">&#9888; ' + esc(t.issue) + '</span>' : '<span style="color:' + MUT + '">&#10007; nesplnené</span>';
+        h += '<tr style="background:' + (i % 2 ? SOFT : CARD) + '">' +
+          '<td style="padding:5px 8px;white-space:nowrap;color:' + SUB + '">' + skDate(t.day) + '</td>' +
+          '<td style="padding:5px 8px;color:' + TX + '">' + esc(t.task || '') + '</td>' +
+          '<td style="padding:5px 8px;text-align:right">' + stav + '</td></tr>';
       });
-      if (p.problemove.length > 8) h += '<div style="font-size:12px;color:' + SUB + '">… a ďalších ' + (p.problemove.length - 8) + '</div>';
+      h += '</table>';
+      if (p.problemove.length > 8) h += '<div style="font-size:12px;color:' + MUT + ';margin-top:4px">&hellip; a ďalších ' + (p.problemove.length - 8) + '</div>';
     }
 
     // top odpisy
     if (p.topOdpisy.length) {
       h += sekcia('Najviac odpisované');
-      p.topOdpisy.forEach(function (o) {
-        h += '<div style="font-size:12.5px;margin:2px 0;color:' + TX + '">' + esc(o.item) + ' — <b>' + (Math.round(o.qty * 10) / 10) + ' ' + esc(o.unit) + '</b></div>';
+      h += '<table width="100%" cellpadding="0" cellspacing="0" style="font-size:12.5px">';
+      p.topOdpisy.forEach(function (o, i) {
+        h += '<tr style="background:' + (i % 2 ? SOFT : CARD) + '">' +
+          '<td style="padding:5px 8px;color:' + TX + '">' + esc(o.item) + '</td>' +
+          '<td style="padding:5px 8px;text-align:right;font-weight:800;color:' + G + ';white-space:nowrap">' + (Math.round(o.qty * 10) / 10) + ' ' + esc(o.unit) + '</td></tr>';
       });
+      h += '</table>';
     }
-    h += '</div>';
+
+    h += '</td></tr></table></td></tr>';
   });
 
-  h += '<div style="text-align:center;color:' + SUB + ';font-size:11px;margin-top:20px">Automatický report z Foxford databázy · ' + skDate(isoDay(new Date())) + '</div></div>';
+  // PÄTA
+  h += '<tr><td style="background:' + CARD + ';border-radius:0 0 16px 16px;padding:16px 20px 22px;text-align:center">' +
+    '<div style="font-size:11px;color:' + MUT + '">Automatický report z Foxford databázy &middot; vygenerované ' + skDate(isoDay(new Date())) + '</div></td></tr>';
+  h += '</table></div>';
   return h;
-
-  function tile(l, v, note) {
-    return '<td style="width:25%;vertical-align:top;padding:4px 6px">' +
-      '<div style="font-size:10.5px;color:' + SUB + ';text-transform:uppercase;letter-spacing:.4px">' + l + '</div>' +
-      '<div style="font-size:18px;font-weight:800;color:' + G + ';margin:2px 0">' + v + '</div>' +
-      (note ? '<div style="font-size:10.5px;color:' + SUB + '">' + note + '</div>' : '') + '</td>';
-  }
-  function sekcia(t) { return '<div style="font-size:11px;font-weight:700;color:' + SUB + ';text-transform:uppercase;letter-spacing:.4px;margin:12px 0 4px">' + t + '</div>'; }
 }
 
 function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
