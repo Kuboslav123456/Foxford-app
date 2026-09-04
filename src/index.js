@@ -60,7 +60,7 @@ if (new URLSearchParams(window.location.search).get('reset') === '1') {
 // ── Automatická detekcia novej verzie ────────────────────────────────────────
 // APP_VERSION musí zodpovedať "v" v public/version.json.
 // Keď deployuješ novú verziu: zvýš číslo TU aj v public/version.json.
-const APP_VERSION = 66;
+const APP_VERSION = 67;
 
 // Aktualizácia sa NEaplikuje hocikedy — reload uprostred zmeny by obsluhe zhodil
 // rozpísanú inventúru či odpis. Appka novú verziu iba zaznamená a nainštaluje ju

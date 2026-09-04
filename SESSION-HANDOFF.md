@@ -1,7 +1,29 @@
 # SESSION HANDOFF — August 2026
 
 ## Aktuálna verzia
-**v66 — nasadené** (2026-09-03, overené live cez `version.json`). Tablety na v54+ ju aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳ v ozubenom koliesku.
+**LIVE = v66** (2026-09-03, overené cez `version.json`). Tablety na v54+ ju aplikujú ráno o 5:00 (ranné okno), alebo hneď cez ⟳.
+**v67 — COMMITNUTÉ na git `main`, ale NENASADENÉ** (2026-09-04): redizajn Prehľadov (nižšie). Bump verzie je v gite, ale `npm run deploy` (gh-pages) ešte NEBEŽAL → tablety aj live site stále bežia na v66, **nič sa ich nedotklo**. Keď Jakub povie „nasadím", spustí sa build + gh-pages deploy a v67 pôjde live (tablet len reload do IDENTICKÉHO App.js — Prehľady sú lazy chunk, prevádzka nezmenená).
+
+### ✅ Redizajn Prehľadov — COMMITNUTÉ (v67), NENASADENÉ (2026-09-04)
+- **`src/Prehlady.js`** má **high-fidelity redizajn** podľa design handoffu („Prehlady Redesign.dc.html" zo zipu, Jakub dodal). **Commitnuté na `main` ako v67, ale `npm run deploy` ešte NEBEŽAL** — live pre manažérov je stále stará verzia, kým sa nenasadí. Dark sidebar (gradient `#261b0c→#1c1307`, krémový text, logo v krémovej karte, zlatý gradient pill na aktívnej sekcii), font **Space Grotesk** (@import), **count-up čísla** (rAF tween, gate na `prefers-reduced-motion`), **kreslené SVG grafy** (line draw + area, donut so sweep + stred „spolu" + vlastná legenda, denný režim = stĺpce po pobočkách), **CSS bary** (úlohy podľa zmeny, odpisy horizontálne), segmentový prepínač období, ambient pozadie (2 plávajúce radiálne škvrny). **Chart.js úplne vypadol** — všetko je SVG/CSS. Dátová logika (Supabase auth/RLS, `normUzav`, `agg`, filtre, stránkovanie histórie, klik-filter zmien) NEZMENENÁ. Kompiluje čisto, overené v `#prehlady-demo` naprieč všetkými 5 sekciami + mobil + interakcie. **Nenasadené** — čaká na Jakubov pokyn. `git status` ukáže modified Prehlady.js — je to TENTO redizajn. Ak sa nasadzuje: bump v67, build, commit, deploy, push, over version.json.
+- Zdroj dizajnu (referencia, needituje sa): `design_handoff_prehlady/` v Downloads zipe „Website redesign with animations.zip".
+- `.env.local` obsahuje Supabase kľúče (gitignored) — bez nich Prehľady = no-op. Netreba commitovať.
+
+### 🎯 SMEROVANIE (2026-09-04): Supabase = hlavný zdroj pravdy, Sheets = dočasná poistka
+Jakub rozhodol: **postupne opustiť Google Sheets, ale zatiaľ ju NECHAŤ ako záložnú poistku** (aby sa pri prechode nestratili dáta — veľmi dôležité), a **Supabase postaviť ako hlavný zdroj pravdy do budúcna**. Čiže: dual-write ostáva (píše sa do OBOCH), GAS/Sheets sa NEVYPÍNA, len sa ťažisko presúva na Supabase (Prehľady už čítajú zo Supabase).
+
+**Nález pri diagnostike „za 3.9. nevidím tržby" (2026-09-04):** úlohy/odpisy za 3.9. v Supabase SÚ, ale **uzávierka (tržby) NIE**. Príčina: `performDailyClose` doposiela spätne len `tasks_summary`/`odpis_daily`/`alkohol_daily` — **uzávierku kasy NEDOPOSIELA** (posiela sa iba raz, ručne, tlačidlom, `App.js:3989` cez `sendToSheets('uzavierka_daily')`). Uzávierka za 3.9. sa odoslala večer na v64 (bez dual-write) → išla len do Sheets; catch-up ju nedobehol. Dáta NIE sú stratené (Sheets ich má). Je to prechodová medzera pre uzávierky odoslané pred prechodom tabletu na v65+.
+
+**TODO z tohto smerovania:**
+- [ ] **Poistka do budúcna (App.js, dotýka sa tabletu — vlastný test+deploy):** aby sa uzávierka vedela dozrkadliť aj spätne (napr. `performDailyClose` alebo štartový sweep pošle aj `uzavierka_daily` končiaceho dňa, ak nebola zmirrorovaná; alebo drž posledné uzávierky v localStorage a re-mirror z fronty). Bez toho každá pobočka pri prechode na v65+ stratí do Supabase uzávierky odoslané tesne pred updatom.
+- [ ] **Backfill 3.9. (a príp. ďalších prechodových dní) zo Sheets do `uzavierky_log`:** cez [supabase/import-obraty.mjs](supabase/import-obraty.mjs) (anon INSERT, RLS to povolí; riadky `meno='import OBRATY'`). Cielene len dni > 2.9., nech nevzniknú duplicity. **ČAKÁ na potvrdenie pobočky + rozsahu od Jakuba** (pýtal som sa: Obchodná? len 3.9.?).
+- [ ] Ostatné pobočky na v65+ (rovnaká prechodová medzera ich čaká) + retencia.
+
+### Dnešný míľnik (2026-09-03): Supabase migrácia — detail v pamäti [[foxford-supabase]]
+- **v65 dual-write + Prehľady**, **v66 detail úloh + upozornenia** (nižšie).
+- **História Obchodnej naimportovaná KOMPLETNE**: tržby 2023-01-01→2026-09-02 (uzavierky_log), úlohy (1996), teploty/HACCP (1181), odpisy (544) — 22.6.→2.9.2026. Zdroj: Google Sheet Obchodnej „Dáta z aplikácie" cez gviz CSV (Chrome, Jakub prihlásený do Google). Ostatné pobočky históriu NEMAJÚ (Nivy potvrdene bez dát) — naplnia sa dual-writeom po aktualizácii tabletov na v65+.
+- **E-mailový reporting FUNGUJE**: `gas/reporting.gs` — samostatný GAS projekt (nie viazaný na tabuľku), týždenný (pondelok 7:00) + mesačný (1. mesiaca) HTML report zo Supabase. Číta LEGACY service_role JWT (`eyJ…`, nie `sb_secret_` — ten GAS blokuje ako browser). Config Script Properties: SUPABASE_URL, SUPABASE_SERVICE_KEY, PRIJEMCOVIA (spoločný) alebo REPORTY (per-manažér: `email=Prešov; email2=*`). Triggery nastavené. Prepracovaný HTML dizajn (720px, súhrnná lišta, farebné stavy).
+- **TODO/pending**: tablety Obchodnej (a ostatných) aktualizovať na v65+ aby začal dual-write (over cez ⟳/verziu); testovacie duplikáty v DB vyčistené; manažérske účty zakladá Jakub sám (Authentication + manager_pobocky).
 
 ### v66: Prehľady — detail úloh + inteligentné upozornenia
 Len manažérske Prehľady (`src/Prehlady.js`), tabletová appka nezmenená.

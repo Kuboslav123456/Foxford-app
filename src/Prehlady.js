@@ -14,27 +14,32 @@
 // vzorca hotovosti a reťazeného stavu kasy. Uzávierky čítame v dvoch
 // dialektoch: appka posiela polia A..M, importovaná história OBRATOV má
 // pomenované polia (obrat, karta, …) — viď normUzav().
+//
+// VIZUÁL: redizajn podľa design handoffu „Prehlady Redesign" (dark sidebar,
+// Space Grotesk, count-up čísla, kreslené SVG grafy + donut, CSS bary,
+// ambient pozadie). Grafy sú vlastné SVG/CSS — Chart.js sa tu už nepoužíva.
 // ═══════════════════════════════════════════════════════════════════════════
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import {
-  Chart, LineController, LineElement, PointElement, BarController, BarElement,
-  DoughnutController, ArcElement, CategoryScale, LinearScale,
-  Tooltip, Legend, Filler,
-} from 'chart.js';
 
-Chart.register(LineController, LineElement, PointElement, BarController, BarElement,
-  DoughnutController, ArcElement, CategoryScale, LinearScale, Tooltip, Legend, Filler);
+// Font redizajnu (Space Grotesk sa doťahuje cez @import v PrStyle)
+const FONT = "'Space Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif";
+// Rešpekt k „prefers-reduced-motion" — vypne JS count-up (CSS animácie tlmí @media)
+const REDUCE = typeof window !== 'undefined' && window.matchMedia
+  && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-// Farby zámerne kopírujú paletu C z App.js (bez importu — nech manažérsky modul
-// nespúšťa modulový kód prevádzkovej appky)
+// Paleta redizajnu (tokeny z handoffu). Ponechané aj staršie kľúče, ktoré
+// používajú login/modal, aby sa nič nerozbilo.
 const C = {
-  bg: '#e8e0d0', panel: 'rgba(255,255,255,0.80)', panelFull: '#ffffff',
-  border: 'rgba(150,120,80,0.18)', borderM: 'rgba(150,120,80,0.35)',
-  gold: '#b87020', goldDim: 'rgba(184,112,32,0.12)', goldLine: 'rgba(184,112,32,0.45)',
-  text: '#1e1608', sub: '#6b5d4f', muted: '#a09080',
-  ok: '#2a9a55', okDim: 'rgba(42,154,85,0.10)', err: '#d03030', errDim: 'rgba(208,48,48,0.10)',
+  bg: '#ece5d3', panel: 'rgba(255,255,255,0.82)', panelFull: '#ffffff',
+  border: 'rgba(150,120,80,0.16)', borderM: 'rgba(150,120,80,0.30)',
+  gold: '#b87020', goldLight: '#d9a03f', goldDim: 'rgba(184,112,32,0.12)', goldLine: 'rgba(184,112,32,0.35)',
+  text: '#221809', sub: '#6b5d4f', muted: '#a09080',
+  ok: '#2a9a55', okLight: '#48b370', okDim: 'rgba(42,154,85,0.10)',
+  err: '#d03030', errLight: '#e06a50', errDim: 'rgba(208,48,48,0.09)',
   fialova: '#7c5cc4', jantar: '#d9a03f',
+  dark1: '#261b0c', dark2: '#1c1307', cream: '#ece5d3',
+  creamText: 'rgba(236,229,211,0.7)', creamMuted: 'rgba(236,229,211,0.45)', creamLine: 'rgba(236,229,211,0.09)',
 };
 
 const SB_URL  = (process.env.REACT_APP_SUPABASE_URL || '').replace(/\/$/, '');
@@ -121,39 +126,241 @@ function demoRows() {
   return _demoCache;
 }
 
-// ── Spoločné UI kúsky ────────────────────────────────────────────────────────
-function Karta({ title, children, style }) {
+// ═══ Prezentačné mikro-komponenty (redizajn) ═════════════════════════════════
+
+// Globálny štýl: font, keyframes, hover triedy, layout mriežka. Mountuje sa raz
+// v Prehlady() aby platil pre login aj dashboard.
+function PrStyle() {
   return (
-    <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 18,
-                  padding: '16px 18px', boxShadow: '0 2px 14px rgba(90,70,45,0.07)',
-                  backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', ...style }}>
-      {title && <div style={{ fontSize: 12, fontWeight: 800, color: C.sub, letterSpacing: .8,
-                              textTransform: 'uppercase', marginBottom: 12 }}>{title}</div>}
+    <style>{`
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@keyframes fxUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@keyframes fxIn{from{opacity:0}to{opacity:1}}
+@keyframes fxDraw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+@keyframes fxArea{from{opacity:0}to{opacity:.9}}
+@keyframes fxSweep{from{transform:rotate(-70deg) scale(.85);opacity:0}to{transform:rotate(0deg) scale(1);opacity:1}}
+@keyframes fxGrow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes fxWide{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes fxFloat{0%,100%{transform:translate(0,0)}50%{transform:translate(40px,-30px)}}
+@keyframes fxDot{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.5)}}
+.fx-kpi{transition:transform .3s,box-shadow .3s}
+.fx-kpi:hover{transform:translateY(-4px);box-shadow:0 14px 34px rgba(90,70,45,.14)}
+.fx-chip{transition:all .3s}
+.fx-chip:hover{transform:translateY(-2px)}
+.fx-chip:active{transform:scale(.95)}
+.fx-mbtn{transition:background .35s,color .35s,transform .15s}
+.fx-mbtn:hover{transform:translateX(3px)}
+.fx-mbtn:active{transform:scale(.97)}
+.fx-hrow{transition:background .25s}
+.fx-hrow:hover{background:rgba(184,112,32,.06)}
+.fx-ghost{transition:background .25s}
+.fx-ghost:hover{background:rgba(236,229,211,.08)!important}
+.fx-nav{transition:transform .2s}
+.fx-nav:hover{transform:scale(1.18)}
+.fx-katrow{transition:background .2s}
+.fx-katrow:hover{background:rgba(184,112,32,.06)}
+.pr-layout{display:flex;min-height:100vh;align-items:stretch;position:relative}
+.pr-side{width:232px;flex-shrink:0;background:linear-gradient(180deg,${C.dark1},${C.dark2});color:${C.cream};display:flex;flex-direction:column;position:sticky;top:0;height:100vh;z-index:20;box-shadow:8px 0 40px rgba(40,25,5,.18)}
+.pr-menu{padding:12px 10px;display:flex;flex-direction:column;gap:4px;flex:1;overflow-y:auto}
+.pr-main{flex:1;min-width:0;display:flex;flex-direction:column;position:relative;z-index:1}
+.pr-top{position:sticky;top:0;z-index:15;background:rgba(236,229,211,.88);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid rgba(150,120,80,.18);padding:14px 26px;display:flex;flex-direction:column;gap:10px}
+.pr-cont{padding:24px 26px 48px;max-width:1180px;width:100%;box-sizing:border-box}
+.pr-charts{display:grid;gap:14px;grid-template-columns:1.6fr 1fr;margin-bottom:16px}
+@media(max-width:860px){
+ .pr-layout{flex-direction:column}
+ .pr-side{width:auto;height:auto;position:static;flex-direction:column}
+ .pr-menu{flex-direction:row;overflow-x:auto;padding:10px}
+ .pr-menu .fx-mbtn{white-space:nowrap;flex-shrink:0;width:auto!important}
+ .pr-cont{padding:18px 16px 40px}
+ .pr-top{padding:12px 16px}
+ .pr-charts{grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-delay:0ms!important;transition-duration:.001ms!important}}
+`}</style>
+  );
+}
+
+// Count-up čísla: tween z aktuálne zobrazenej hodnoty na cieľ (rAF, easing 1-(1-p)^3)
+function Num({ value, format, animate = true }) {
+  const [disp, setDisp] = useState(animate ? 0 : value);
+  const dispRef = useRef(disp);
+  dispRef.current = disp;
+  useEffect(() => {
+    if (!animate) { setDisp(value); return; }
+    const from = dispRef.current, t0 = performance.now(), dur = 950;
+    let raf;
+    const step = (now) => {
+      const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+      setDisp(p >= 1 ? value : from + (value - from) * e);
+      if (p < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    // poistka: keby rAF slučka zlyhala, o 1,2 s nastav cieľ natvrdo
+    const fb = setTimeout(() => setDisp(value), 1200);
+    return () => { cancelAnimationFrame(raf); clearTimeout(fb); };
+  }, [value, animate]);
+  return <>{format(disp)}</>;
+}
+
+// KPI karta s count-up hodnotou a hover zdvihom
+function KPI({ label, value, note, color, size = 30, delay = 0, children }) {
+  return (
+    <div className="fx-kpi" style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 20,
+      padding: '18px 20px', boxShadow: '0 2px 16px rgba(90,70,45,.06)', backdropFilter: 'blur(6px)',
+      WebkitBackdropFilter: 'blur(6px)', animation: `fxUp .5s ${delay}s backwards` }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: C.sub, letterSpacing: 1, textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ fontSize: size, fontWeight: 700, color: color || C.gold, marginTop: 8, lineHeight: 1.05,
+        fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{value}</div>
+      {note ? <div style={{ fontSize: 11.5, color: C.muted, marginTop: 6 }}>{note}</div> : null}
       {children}
     </div>
   );
 }
 
-function Cislo({ label, value, note, tone }) {
-  const col = tone === 'ok' ? C.ok : tone === 'err' ? C.err : C.gold;
+// Univerzálna panelová karta
+function Panel({ title, children, style, delay = 0, dur = '.5s' }) {
   return (
-    <Karta>
-      <div style={{ fontSize: 11, fontWeight: 700, color: C.sub, letterSpacing: .6, textTransform: 'uppercase' }}>{label}</div>
-      <div style={{ fontSize: 27, fontWeight: 900, color: col, marginTop: 6, lineHeight: 1.1, whiteSpace: 'nowrap' }}>{value}</div>
-      {note && <div style={{ fontSize: 11.5, color: C.muted, marginTop: 5 }}>{note}</div>}
-    </Karta>
+    <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 20, padding: '18px 20px',
+      boxShadow: '0 2px 16px rgba(90,70,45,.06)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+      animation: `fxUp ${dur} ${delay}s backwards`, ...style }}>
+      {title && <div style={{ fontSize: 11, fontWeight: 700, color: C.sub, letterSpacing: 1,
+        textTransform: 'uppercase', marginBottom: 12 }}>{title}</div>}
+      {children}
+    </div>
   );
 }
 
-function Graf({ config, height = 220 }) {
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!ref.current || !config) return;
-    const chart = new Chart(ref.current, config);
-    return () => chart.destroy();
-  }, [config]);
-  return <div style={{ position: 'relative', height }}><canvas ref={ref} /></div>;
+function ProgressBar({ pct, color, delay = '.5s', h = 6, animate }) {
+  return (
+    <div style={{ height: h, background: 'rgba(150,120,80,.14)', borderRadius: 6, marginTop: 10, overflow: 'hidden' }}>
+      <div style={{ height: '100%', borderRadius: 6, background: color, width: pct + '%', transformOrigin: 'left',
+        animation: animate ? `fxWide 1s ${delay} cubic-bezier(.2,.8,.2,1) both` : 'none', transition: 'width .8s' }} />
+    </div>
+  );
 }
+
+// Graf tržieb — kreslená SVG čiara (deň = stĺpce podľa pobočky)
+function TrzbyChart({ agg, mode, vybrana, pobocky, animate }) {
+  if (mode === 'den') {
+    const brs = vybrana === '*' ? (pobocky || []) : [vybrana];
+    const map = {};
+    agg.uzRows.forEach(u => { map[u.branch] = (map[u.branch] || 0) + u.obrat; });
+    const vals = brs.map(b => ({ label: b, v: map[b] || 0 })).filter(x => x.v > 0);
+    if (vals.length === 0) return <div style={{ color: C.muted, fontSize: 13, padding: '30px 0' }}>V tomto dni nie sú tržby.</div>;
+    const max = Math.max(...vals.map(x => x.v), 1);
+    return (
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, height: 260, paddingTop: 10 }}>
+        {vals.map((x, i) => (
+          <div key={x.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+            gap: 6, height: '100%', justifyContent: 'flex-end', minWidth: 0 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: C.sub, fontVariantNumeric: 'tabular-nums' }}>{fmtNum(Math.round(x.v))} €</div>
+            <div style={{ width: '100%', maxWidth: 44, borderRadius: '8px 8px 3px 3px',
+              background: 'linear-gradient(180deg,#d9a03f,#b87020)', height: (x.v / max * 100).toFixed(1) + '%',
+              transformOrigin: 'bottom', animation: animate ? `fxGrow .8s ${(i * 0.06).toFixed(2)}s cubic-bezier(.2,.8,.2,1) both` : 'none',
+              transition: 'height .7s cubic-bezier(.2,.8,.2,1)' }} />
+            <div style={{ fontSize: 10, color: C.muted, whiteSpace: 'nowrap', overflow: 'hidden',
+              textOverflow: 'ellipsis', maxWidth: '100%' }}>{x.label}</div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  let pts;
+  if (mode === 'rok') {
+    const mes = {};
+    Object.entries(agg.poDni).forEach(([d, v]) => { const m = d.slice(0, 7); mes[m] = (mes[m] || 0) + v; });
+    const keys = Object.keys(mes).sort();
+    pts = keys.map(m => ({ t: MESIACE[+m.slice(5) - 1].slice(0, 3), v: mes[m] }));
+  } else {
+    const keys = Object.keys(agg.poDni).sort();
+    pts = keys.map(d => ({ t: dayLabel(d), v: agg.poDni[d] }));
+  }
+  if (pts.length === 0) return <div style={{ color: C.muted, fontSize: 13, padding: '30px 0' }}>V tomto období nie sú žiadne uzávierky.</div>;
+  if (pts.length === 1) pts = [pts[0], pts[0]];
+  const max = Math.max(...pts.map(p => p.v), 1);
+  const W = 640, H = 240, pT = 16, pB = 28;
+  const px = (i) => pts.length > 1 ? i / (pts.length - 1) * W : W / 2;
+  const py = (v) => pT + (1 - v / max) * (H - pT - pB);
+  const linePath = pts.map((p, i) => (i ? 'L' : 'M') + px(i).toFixed(1) + ',' + py(p.v).toFixed(1)).join(' ');
+  const areaPath = linePath + ` L${W},${H - pB} L0,${H - pB} Z`;
+  const step = Math.max(1, Math.ceil(pts.length / 7));
+  const xLabels = pts.filter((_, i) => i % step === 0).map((p) => {
+    const idx = pts.indexOf(p);
+    return { x: Math.min(Math.max(px(idx), 18), W - 18).toFixed(0), t: p.t };
+  });
+  const gridY = [0, 0.5, 1].map(f => ({ y: py(max * f).toFixed(1), ty: (py(max * f) - 5).toFixed(1),
+    t: f === 0 ? '' : fmtNum(Math.round(max * f / 100) * 100) + ' €' }));
+  return (
+    <svg viewBox="0 0 640 240" style={{ width: '100%', height: 'auto', display: 'block', overflow: 'visible' }}>
+      <defs>
+        <linearGradient id="fxg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#b87020" stopOpacity=".28" />
+          <stop offset="1" stopColor="#b87020" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {gridY.map((g, i) => (
+        <g key={i}>
+          <line x1="0" x2="640" y1={g.y} y2={g.y} stroke="rgba(150,120,80,.15)" strokeDasharray="3 5" />
+          <text x="0" y={g.ty} fontSize="10" fill={C.muted}>{g.t}</text>
+        </g>
+      ))}
+      <path d={areaPath} fill="url(#fxg)" style={{ animation: animate ? 'fxArea 1.4s .5s both' : 'none', opacity: animate ? undefined : 0.9 }} />
+      <path d={linePath} fill="none" stroke="#b87020" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"
+        pathLength="1" strokeDasharray="1" style={{ animation: animate ? 'fxDraw 1.6s .2s cubic-bezier(.4,0,.2,1) both' : 'none' }} />
+      {xLabels.map((x, i) => (
+        <text key={i} x={x.x} y="236" fontSize="10" fill={C.muted} textAnchor="middle">{x.t}</text>
+      ))}
+    </svg>
+  );
+}
+
+// Donut podielov platieb + legenda
+function DonutPodiely({ agg, animate }) {
+  const hot = Math.max(agg.hotovost, 0);
+  const seg = [['Terminál', C.gold, agg.karty], ['Hotovosť', C.ok, hot], ['Qerko', C.fialova, agg.qerko], ['Gastro lístky', C.jantar, agg.gastro]];
+  const tot = seg.reduce((s, x) => s + x[2], 0) || 1;
+  let acc = 0;
+  const circles = seg.map(([, color, v]) => {
+    const pct = v / tot * 100;
+    const vis = Math.max(pct - 0.6, 0);
+    const c = { color, dash: `${vis.toFixed(2)} ${(100 - vis).toFixed(2)}`, off: (-acc).toFixed(2) };
+    acc += pct; return c;
+  });
+  const legend = seg.map(([label, color, v]) => ({ label, color, pct: Math.round(v / tot * 100) }));
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+      <div style={{ position: 'relative', width: 170, height: 170 }}>
+        <svg viewBox="0 0 220 220" style={{ width: '100%', height: '100%', transformOrigin: 'center',
+          animation: animate ? 'fxSweep 1s .35s cubic-bezier(.2,.8,.2,1) both' : 'none' }}>
+          {circles.map((c, i) => (
+            <circle key={i} cx="110" cy="110" r="84" fill="none" stroke={c.color} strokeWidth="30"
+              pathLength="100" strokeDasharray={c.dash} strokeDashoffset={c.off} transform="rotate(-90 110 110)"
+              style={{ transition: 'stroke-dasharray .8s, stroke-dashoffset .8s' }} />
+          ))}
+        </svg>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', animation: animate ? 'fxIn .8s .8s both' : 'none' }}>
+          <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: 1 }}>spolu</div>
+          <div style={{ fontSize: 19, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{fmtEur(Math.round(agg.trzby))}</div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7, width: '100%' }}>
+        {legend.map((l, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5 }}>
+            <span style={{ width: 10, height: 10, borderRadius: 3, flexShrink: 0, background: l.color }} />
+            <span style={{ color: C.sub, flex: 1 }}>{l.label}</span>
+            <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{l.pct} %</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Chip (pobočky, stránkovanie histórie)
+const chipStyle = (on) => ({ padding: '7px 15px', borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+  whiteSpace: 'nowrap', fontFamily: 'inherit', border: `1px solid ${on ? C.gold : 'rgba(150,120,80,.22)'}`,
+  background: on ? C.gold : 'rgba(255,255,255,.7)', color: on ? '#fff' : C.sub });
 
 // ── Hlavný komponent ─────────────────────────────────────────────────────────
 export default function Prehlady() {
@@ -167,16 +374,22 @@ export default function Prehlady() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  if (DEMO) return <Dashboard session={{ user: { email: 'ukážka@foxford.sk' } }} demo />;
-  if (!sb) return <Sprava text="Prehľady nie sú nakonfigurované (chýbajú kľúče databázy v builde)." />;
-  if (!bootDone) return <Sprava text="Načítavam…" />;
-  return session ? <Dashboard session={session} /> : <Login />;
+  let obsah;
+  if (DEMO) obsah = <Dashboard session={{ user: { email: 'ukážka@foxford.sk' } }} demo />;
+  else if (!sb) obsah = <Sprava text="Prehľady nie sú nakonfigurované (chýbajú kľúče databázy v builde)." />;
+  else if (!bootDone) obsah = <Sprava text="Načítavam…" />;
+  else obsah = session ? <Dashboard session={session} /> : <Login />;
+
+  return (<>
+    <PrStyle />
+    {obsah}
+  </>);
 }
 
 function Sprava({ text }) {
   return (
     <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', fontFamily: '-apple-system,Segoe UI,sans-serif', color: C.sub }}>
+                  justifyContent: 'center', fontFamily: FONT, color: C.sub }}>
       {text}
     </div>
   );
@@ -203,15 +416,15 @@ function Login() {
                 outline: 'none', fontFamily: 'inherit' };
 
   return (
-    <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', padding: 24, fontFamily: '-apple-system,Segoe UI,sans-serif' }}>
+    <div style={{ minHeight: '100vh', background: `linear-gradient(160deg,${C.cream},#e4dac2)`, display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', padding: 24, fontFamily: FONT }}>
       <form onSubmit={submit} style={{ width: '100%', maxWidth: 380, background: C.panelFull,
              border: `1px solid ${C.borderM}`, borderRadius: 24, padding: '34px 28px',
              boxShadow: '0 8px 40px rgba(90,70,45,0.15)' }}>
         <div style={{ textAlign: 'center', marginBottom: 6 }}>
           <img src={`${process.env.PUBLIC_URL}/foxford-logo.png.png`} alt="Foxford" style={{ height: 44 }} />
         </div>
-        <div style={{ textAlign: 'center', fontSize: 19, fontWeight: 900, color: C.text, marginBottom: 2 }}>Prehľady</div>
+        <div style={{ textAlign: 'center', fontSize: 19, fontWeight: 700, color: C.text, marginBottom: 2 }}>Prehľady</div>
         <div style={{ textAlign: 'center', fontSize: 12, color: C.muted, marginBottom: 24 }}>manažérsky prístup</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <input style={inp} type="email" placeholder="E-mail" value={email} autoFocus
@@ -222,7 +435,7 @@ function Login() {
         {err && <div style={{ marginTop: 12, fontSize: 13, color: C.err, textAlign: 'center' }}>{err}</div>}
         <button type="submit" disabled={busy}
           style={{ width: '100%', marginTop: 18, padding: 14, borderRadius: 14, border: 'none',
-                   background: C.gold, color: '#fff', fontWeight: 800, fontSize: 15, cursor: 'pointer',
+                   background: `linear-gradient(135deg,${C.goldLight},${C.gold})`, color: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer',
                    fontFamily: 'inherit', opacity: busy ? .6 : 1, boxShadow: '0 4px 18px rgba(184,112,32,0.35)' }}>
           {busy ? 'Prihlasujem…' : 'Prihlásiť sa'}
         </button>
@@ -268,6 +481,13 @@ function rozsahLabel(mode, date) {
 
 // ── Dashboard ────────────────────────────────────────────────────────────────
 const MODY = [{ id: 'den', label: 'Deň' }, { id: 'tyzden', label: 'Týždeň' }, { id: 'mesiac', label: 'Mesiac' }, { id: 'rok', label: 'Rok' }];
+const SEKCIE = [
+  { id: 'prehlad', ikona: '🏠', label: 'Prehľad' },
+  { id: 'uzavierky', ikona: '💰', label: 'Uzávierky' },
+  { id: 'ulohy', ikona: '✅', label: 'Úlohy' },
+  { id: 'odpisy', ikona: '📉', label: 'Odpisy' },
+  { id: 'teploty', ikona: '🌡️', label: 'Teploty' },
+];
 
 function Dashboard({ session, demo }) {
   const email = session.user?.email || '';
@@ -280,12 +500,14 @@ function Dashboard({ session, demo }) {
   const [nacitava, setNacitava] = useState(true);
   const [zmenaHesla, setZmenaHesla] = useState(false);
   const [histStrana, setHistStrana] = useState(1);
-  const [filterKat, setFilterKat] = useState(null);   // klik na graf úloh → filter detailu podľa kategórie
+  const [filterKat, setFilterKat] = useState(null);   // klik na zmenu → filter detailu podľa kategórie
+  const [sekcia, setSekcia] = useState('prehlad');    // ľavé menu: prehlad | uzavierky | ulohy | odpisy | teploty
 
   const [od, doD] = rozsah(mode, refDate);
   // Ročný pohľad všetkých pobočiek = priveľa surových riadkov úloh/odpisov —
   // vtedy zobrazujeme len tržbovú časť (rovnako to robila OBRATOVÁ TABUĽKA)
   const lenTrzby = mode === 'rok' && vybrana === '*';
+  const animate = !REDUCE;
 
   // 1) Ktoré pobočky mi patria?
   useEffect(() => {
@@ -426,68 +648,12 @@ function Dashboard({ session, demo }) {
              problemove, opakProblemy, opakHaccp };
   }, [data]);
 
-  // ── Grafy ──────────────────────────────────────────────────────────────────
-  const gTrzby = useMemo(() => {
-    if (!agg) return null;
-    let labels, hodnoty;
-    if (mode === 'rok') {
-      const mes = {};
-      Object.entries(agg.poDni).forEach(([d, v]) => { const m = d.slice(0, 7); mes[m] = (mes[m] || 0) + v; });
-      const keys = Object.keys(mes).sort();
-      labels = keys.map(m => MESIACE[+m.slice(5) - 1]);
-      hodnoty = keys.map(m => mes[m]);
-    } else {
-      const keys = Object.keys(agg.poDni).sort().filter(d => agg.poDni[d] > 0);
-      labels = keys.map(dayLabel);
-      hodnoty = keys.map(d => agg.poDni[d]);
-    }
-    return {
-      type: mode === 'den' ? 'bar' : 'line',
-      data: { labels, datasets: [{ label: 'Tržby (€)', data: hodnoty,
-        borderColor: C.gold, backgroundColor: mode === 'den' ? 'rgba(184,112,32,0.55)' : 'rgba(184,112,32,0.14)',
-        fill: true, tension: .35, pointRadius: labels.length > 40 ? 0 : 2.5, borderWidth: 2.5, borderRadius: 6 }] },
-      options: { maintainAspectRatio: false, plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true, ticks: { callback: v => fmtNum(v) + ' €' } } } },
-    };
-  }, [agg, mode]);
-
-  const gPodiely = useMemo(() => agg && ({
-    type: 'doughnut',
-    data: { labels: ['Terminál', 'Qerko', 'Hotovosť', 'Gastro lístky'],
-      datasets: [{ data: [agg.karty, agg.qerko, Math.max(agg.hotovost, 0), agg.gastro],
-        backgroundColor: [C.gold, C.fialova, C.ok, C.jantar], borderColor: '#fff', borderWidth: 2 }] },
-    options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
-  }), [agg]);
-
-  const gUlohy = useMemo(() => agg && Object.keys(agg.katMap).length > 0 && ({
-    type: 'bar',
-    data: { labels: Object.keys(agg.katMap),
-      datasets: [
-        { label: 'Splnené', data: Object.values(agg.katMap).map(k => k.done),
-          backgroundColor: 'rgba(42,154,85,0.6)', borderColor: C.ok, borderWidth: 1.5, borderRadius: 6 },
-        { label: 'Nesplnené', data: Object.values(agg.katMap).map(k => k.total - k.done),
-          backgroundColor: 'rgba(160,144,128,0.45)', borderColor: C.muted, borderWidth: 1.5, borderRadius: 6 },
-      ] },
-    options: { maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } },
-      onClick: (_e, els) => { if (els && els.length) { const kat = Object.keys(agg.katMap)[els[0].index]; setFilterKat(prev => prev === kat ? null : kat); } } },
-  }), [agg]);
-
-  const gOdpisy = useMemo(() => agg && agg.topOdpisy.length > 0 && ({
-    type: 'bar',
-    data: { labels: agg.topOdpisy.map(o => `${o.item} (${o.unit})`),
-      datasets: [{ label: 'Množstvo', data: agg.topOdpisy.map(o => +o.qty.toFixed(1)),
-        backgroundColor: 'rgba(208,48,48,0.55)', borderColor: C.err, borderWidth: 1.5, borderRadius: 6 }] },
-    options: { indexAxis: 'y', maintainAspectRatio: false, plugins: { legend: { display: false } },
-      scales: { x: { beginAtZero: true } } },
-  }), [agg]);
-
-  const chip = (on) => ({ padding: '8px 14px', borderRadius: 20, fontSize: 12.5, fontWeight: 800,
-    cursor: 'pointer', border: `1px solid ${on ? C.gold : C.border}`, whiteSpace: 'nowrap',
-    background: on ? C.gold : 'rgba(255,255,255,0.7)', color: on ? '#fff' : C.sub, fontFamily: 'inherit' });
-
   const viacPobociek = (pobocky || []).length > 1;
   const kartyPct = agg && agg.trzby > 0 ? Math.round(agg.karty / agg.trzby * 100) : 0;
   const qerkoPct = agg && agg.trzby > 0 ? Math.round(agg.qerko / agg.trzby * 100) : 0;
+  const hasErr = !!agg && agg.upozornenia.some(u => u.typ === 'err');
+  const hasKasa = !!agg && (agg.kasaSpolu !== 0 || Object.keys(agg.kasaPos).length > 0);
+  const pctCol = (!agg || agg.pct == null) ? C.gold : agg.pct >= 90 ? C.ok : agg.pct >= 70 ? C.gold : C.err;
 
   // História — stránkovanie
   const HIST_NA_STRANU = 15;
@@ -495,269 +661,421 @@ function Dashboard({ session, demo }) {
   const histStran = Math.max(1, Math.ceil(histRows.length / HIST_NA_STRANU));
   const histPage = histRows.slice((histStrana - 1) * HIST_NA_STRANU, histStrana * HIST_NA_STRANU);
 
-  const th = { padding: '7px 10px', whiteSpace: 'nowrap', textAlign: 'right' };
-  const td = { padding: '7px 10px', whiteSpace: 'nowrap', textAlign: 'right' };
+  const del = (i) => (0.05 + i * 0.045).toFixed(2) + 's';
+  const gridKPI = { display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', marginBottom: 16 };
+  const thC = { padding: '10px', fontWeight: 700, fontSize: 10.5, textTransform: 'uppercase', letterSpacing: .8, color: C.muted, whiteSpace: 'nowrap' };
+  const tdC = { padding: '9px 10px', whiteSpace: 'nowrap' };
+
+  // ── znovupoužiteľné bloky (volajú sa iba keď agg existuje) ────────────────
+  const upoz = () => agg.upozornenia.length ? (
+    <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8, animation: animate ? 'fxUp .5s .15s backwards' : 'none' }}>
+      {agg.upozornenia.map((u, i) => {
+        const err = u.typ === 'err';
+        return (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 14,
+            fontSize: 13.5, fontWeight: 500, background: err ? 'rgba(208,48,48,.09)' : 'rgba(184,112,32,.1)',
+            border: `1px solid ${err ? 'rgba(208,48,48,.3)' : 'rgba(184,112,32,.35)'}`, color: err ? '#a02020' : '#7a4a12' }}>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', flexShrink: 0, background: err ? C.err : C.goldLight,
+              animation: animate ? 'fxDot 2s infinite' : 'none' }} />{u.text}
+          </div>
+        );
+      })}
+    </div>
+  ) : null;
+
+  const grafTrzieb = (delay = 0.18) => (
+    <Panel delay={delay} dur=".55s" title={mode === 'rok' ? `Mesačné tržby — ${rozsahLabel(mode, refDate)}` : `Vývoj tržieb — ${rozsahLabel(mode, refDate)}`} style={{ minWidth: 0 }}>
+      {Object.keys(agg.poDni).length === 0
+        ? <div style={{ color: C.muted, fontSize: 13, padding: '30px 0' }}>V tomto období nie sú žiadne uzávierky.</div>
+        : <TrzbyChart agg={agg} mode={mode} vybrana={vybrana} pobocky={pobocky} animate={animate} />}
+    </Panel>
+  );
+
+  const donutKarta = (delay = 0.25) => (
+    <Panel delay={delay} dur=".55s" title="Podiely platieb" style={{ minWidth: 0 }}>
+      {agg.trzby > 0 ? <DonutPodiely agg={agg} animate={animate} /> : <div style={{ color: C.muted, fontSize: 13 }}>Bez tržieb v období.</div>}
+    </Panel>
+  );
+
+  const ulohyBary = () => (
+    <Panel title="Úlohy podľa zmeny" delay={0.18} style={{ marginBottom: 16 }}>
+      {Object.keys(agg.katMap).length === 0
+        ? <div style={{ color: C.muted, fontSize: 13 }}>Žiadne úlohy v období.</div>
+        : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {Object.entries(agg.katMap).map(([kat, v], i) => {
+              const w = v.total ? Math.round(v.done / v.total * 100) : 0;
+              const on = filterKat === kat;
+              return (
+                <div key={kat} className="fx-katrow" onClick={() => setFilterKat(on ? null : kat)}
+                  style={{ cursor: 'pointer', padding: '5px 7px', margin: '-5px -7px', borderRadius: 10,
+                    background: on ? 'rgba(184,112,32,.07)' : 'transparent' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 6 }}>
+                    <span style={{ fontWeight: 600, color: C.sub, textTransform: 'capitalize' }}>{kat}{on ? '  ·  filter ✕' : ''}</span>
+                    <span style={{ color: C.muted, fontVariantNumeric: 'tabular-nums' }}>{fmtNum(v.done)} / {fmtNum(v.total)} splnených</span>
+                  </div>
+                  <div style={{ height: 10, background: 'rgba(150,120,80,.14)', borderRadius: 6, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', borderRadius: 6, background: 'linear-gradient(90deg,#2a9a55,#48b370)',
+                      width: w + '%', transformOrigin: 'left', animation: animate ? `fxWide 1s ${(0.2 + i * 0.15).toFixed(2)}s cubic-bezier(.2,.8,.2,1) both` : 'none', transition: 'width .8s' }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      <div style={{ fontSize: 11, color: C.muted, marginTop: 12 }}>💡 klikni na zmenu pre filter detailu nižšie</div>
+    </Panel>
+  );
+
+  const detailUloh = () => {
+    const list = agg.problemove.filter(p => !filterKat || p.category === filterKat);
+    return (
+      <Panel delay={0.26}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: C.sub, letterSpacing: 1, textTransform: 'uppercase' }}>Nesplnené a problémové úlohy</span>
+          {filterKat && (
+            <span onClick={() => setFilterKat(null)} style={{ cursor: 'pointer', fontSize: 11.5, fontWeight: 700, color: C.gold,
+              background: C.goldDim, border: `1px solid ${C.goldLine}`, borderRadius: 20, padding: '3px 10px' }}>filter: {filterKat} ✕</span>
+          )}
+          <span style={{ flex: 1 }} />
+          <span style={{ fontSize: 11, color: C.muted }}>{fmtNum(list.length)} položiek</span>
+        </div>
+        {list.length === 0 ? (
+          <div style={{ color: C.ok, fontSize: 14, fontWeight: 700 }}>✓ Všetky úlohy v období boli splnené bez nahláseného problému.</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead><tr>
+                <th style={{ ...thC, textAlign: 'left' }}>Deň</th>
+                {vybrana === '*' && <th style={{ ...thC, textAlign: 'left' }}>Pobočka</th>}
+                <th style={{ ...thC, textAlign: 'left' }}>Zmena</th>
+                <th style={{ ...thC, textAlign: 'left' }}>Úloha</th>
+                <th style={{ ...thC, textAlign: 'left' }}>Kto</th>
+                <th style={{ ...thC, textAlign: 'left' }}>Stav / problém</th>
+              </tr></thead>
+              <tbody>
+                {list.slice(0, 60).map((p, i) => (
+                  <tr key={i} className="fx-hrow" style={{ borderTop: '1px solid rgba(150,120,80,.12)', animation: animate ? `fxUp .4s ${del(i)} backwards` : 'none' }}>
+                    <td style={{ ...tdC, fontVariantNumeric: 'tabular-nums' }}>{dayLabel(p.day)}</td>
+                    {vybrana === '*' && <td style={{ ...tdC, color: C.sub }}>{p.branch}</td>}
+                    <td style={{ ...tdC, color: C.muted, textTransform: 'capitalize' }}>{p.category}</td>
+                    <td style={{ padding: '9px 10px', fontWeight: 600 }}>{p.task}</td>
+                    <td style={{ ...tdC, color: C.sub }}>{p.by || '—'}</td>
+                    <td style={{ padding: '9px 10px', fontWeight: 600, color: p.issue ? C.err : C.muted }}>{p.issue ? `⚠ ${p.issue}` : '✗ nesplnené'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {list.length > 60 && <div style={{ fontSize: 12, color: C.muted, marginTop: 8, textAlign: 'right' }}>… a ďalších {fmtNum(list.length - 60)} — zúž obdobie alebo pobočku</div>}
+          </div>
+        )}
+      </Panel>
+    );
+  };
+
+  const historiaKarta = () => (
+    <Panel title={`História uzávierok — ${rozsahLabel(mode, refDate)}`}>
+      {histRows.length === 0 ? (
+        <div style={{ color: C.muted, fontSize: 13 }}>Žiadne uzávierky v období.</div>
+      ) : (
+        <>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, fontVariantNumeric: 'tabular-nums' }}>
+              <thead><tr>
+                <th style={{ ...thC, textAlign: 'left' }}>Dátum</th>
+                <th style={{ ...thC, textAlign: 'left' }}>Deň</th>
+                {vybrana === '*' && <th style={{ ...thC, textAlign: 'left' }}>Pobočka</th>}
+                <th style={{ ...thC, textAlign: 'right' }}>Obrat</th>
+                <th style={{ ...thC, textAlign: 'right' }}>Karty</th>
+                <th style={{ ...thC, textAlign: 'right' }}>Qerko</th>
+                <th style={{ ...thC, textAlign: 'right' }}>Tringelt</th>
+                <th style={{ ...thC, textAlign: 'right' }}>Gastro l.</th>
+                <th style={{ ...thC, textAlign: 'right' }}>Odvod</th>
+                <th style={{ ...thC, textAlign: 'right' }}>Zaokr.</th>
+                <th style={{ ...thC, textAlign: 'right' }}>Kasa večer</th>
+              </tr></thead>
+              <tbody>
+                {histPage.map((u, i) => {
+                  const kasaBad = u.kasa !== null && (u.kasa < 0 || u.kasa > 1000);
+                  return (
+                    <tr key={u.branch + u.day + i} className="fx-hrow" style={{ borderTop: '1px solid rgba(150,120,80,.12)', animation: animate ? `fxUp .4s ${del(i)} backwards` : 'none' }}>
+                      <td style={{ ...tdC, fontWeight: 700 }}>{dayLabel(u.day)} <span style={{ color: C.muted, fontWeight: 400 }}>{u.day.slice(0, 4)}</span></td>
+                      <td style={{ ...tdC, color: C.sub }}>{dayName(u.day)}</td>
+                      {vybrana === '*' && <td style={{ ...tdC, color: C.sub }}>{u.branch}</td>}
+                      <td style={{ ...tdC, textAlign: 'right', fontWeight: 700, color: C.gold }}>{fmtEur(u.obrat, 2)}</td>
+                      <td style={{ ...tdC, textAlign: 'right' }}>{fmtEur(u.karta, 2)}</td>
+                      <td style={{ ...tdC, textAlign: 'right' }}>{fmtEur(u.qerko, 2)}</td>
+                      <td style={{ ...tdC, textAlign: 'right' }}>{fmtEur(u.qerkoTr, 2)}</td>
+                      <td style={{ ...tdC, textAlign: 'right' }}>{fmtEur(u.gastro, 2)}</td>
+                      <td style={{ ...tdC, textAlign: 'right' }}>{fmtEur(u.odvod, 2)}</td>
+                      <td style={{ ...tdC, textAlign: 'right' }}>{fmtEur(u.zaokruhly, 2)}</td>
+                      <td style={{ ...tdC, textAlign: 'right', fontWeight: 700, color: kasaBad ? C.err : C.text }}>{u.kasa === null ? '—' : fmtEur(u.kasa, 2)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {histStran > 1 ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginTop: 12, fontSize: 12.5, color: C.sub }}>
+              <span>strana {histStrana} / {histStran} · {fmtNum(histRows.length)} dní</span>
+              <button className="fx-chip" onClick={() => setHistStrana(s => Math.max(1, s - 1))} style={chipStyle(false)}>‹</button>
+              <button className="fx-chip" onClick={() => setHistStrana(s => Math.min(histStran, s + 1))} style={chipStyle(false)}>›</button>
+            </div>
+          ) : (
+            <div style={{ fontSize: 11.5, color: C.muted, marginTop: 12, textAlign: 'right' }}>posledných {fmtNum(histRows.length)} uzávierok v období</div>
+          )}
+        </>
+      )}
+    </Panel>
+  );
+
+  const odpisyKarta = () => {
+    const maxOdp = Math.max(...agg.topOdpisy.map(o => o.qty), 1);
+    return (
+      <Panel title={`Najodpisovanejšie položky — ${rozsahLabel(mode, refDate)}`}>
+        {agg.topOdpisy.length === 0 ? (
+          <div style={{ color: C.muted, fontSize: 13 }}>Žiadne odpisy v období.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
+            {agg.topOdpisy.map((o, i) => {
+              const w = Math.round(o.qty / maxOdp * 100);
+              return (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(120px,190px) 1fr 78px', alignItems: 'center', gap: 14 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.item}</div>
+                  <div style={{ height: 14, background: 'rgba(150,120,80,.12)', borderRadius: 8, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', borderRadius: 8, background: 'linear-gradient(90deg,#d03030,#e06a50)',
+                      width: w + '%', transformOrigin: 'left', animation: animate ? `fxWide .9s ${del(i)} cubic-bezier(.2,.8,.2,1) both` : 'none', transition: 'width .8s' }} />
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.err, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{(Math.round(o.qty * 10) / 10).toLocaleString('sk-SK')} {o.unit}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div style={{ fontSize: 11.5, color: C.muted, marginTop: 16 }}>{fmtNum(agg.odpisovSpolu)} záznamov odpisov v období</div>
+      </Panel>
+    );
+  };
+
+  const haccpKarta = () => (
+    <Panel title="HACCP prekročenia" delay={0.12}>
+      {agg.prekrocenia.length === 0 ? (
+        <div style={{ color: C.ok, fontSize: 14, fontWeight: 700, padding: '8px 0' }}>✓ Žiadne prekročenia teplotných limitov v období.</div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead><tr>
+              <th style={{ ...thC, textAlign: 'left' }}>Deň</th>
+              {vybrana === '*' && <th style={{ ...thC, textAlign: 'left' }}>Pobočka</th>}
+              <th style={{ ...thC, textAlign: 'left' }}>Zariadenie</th>
+              <th style={{ ...thC, textAlign: 'left' }}>Hodnota</th>
+              <th style={{ ...thC, textAlign: 'left' }}>Limit</th>
+            </tr></thead>
+            <tbody>
+              {agg.prekrocenia.slice(-40).reverse().map((h, i) => (
+                <tr key={i} className="fx-hrow" style={{ borderTop: '1px solid rgba(150,120,80,.12)', animation: animate ? `fxUp .4s ${del(i)} backwards` : 'none' }}>
+                  <td style={{ ...tdC, fontVariantNumeric: 'tabular-nums' }}>{dayLabel(h.day)}</td>
+                  {vybrana === '*' && <td style={{ ...tdC, color: C.sub }}>{h.branch}</td>}
+                  <td style={{ padding: '9px 10px', fontWeight: 600 }}>{h.device}</td>
+                  <td style={{ ...tdC, color: C.err, fontWeight: 700 }}>{h.value} °C</td>
+                  <td style={{ ...tdC, color: C.muted }}>{h.max_limit}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
+  );
+
+  const infoLenTrzby = () => (
+    <Panel><div style={{ fontSize: 13, color: C.muted }}>
+      ℹ️ Ročný pohľad všetkých pobočiek zobrazuje len tržby. Pre túto sekciu vyber konkrétnu pobočku alebo kratšie obdobie (mesiac/týždeň).
+    </div></Panel>
+  );
+
+  const PUBLIC = process.env.PUBLIC_URL;
 
   return (
-    <div style={{ minHeight: '100vh', background: C.bg, fontFamily: '-apple-system,Segoe UI,sans-serif', paddingBottom: 40 }}>
-      {/* Hlavička */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(232,224,208,0.92)',
-                    backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', borderBottom: `1px solid ${C.border}` }}>
-        <div style={{ maxWidth: 1240, margin: '0 auto', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-          <img src={`${process.env.PUBLIC_URL}/foxford-logo.png.png`} alt="" style={{ height: 30 }} />
-          <div style={{ fontWeight: 900, fontSize: 17, color: C.text }}>Prehľady</div>
-          {demo && <div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: 1, color: C.gold, background: C.goldDim,
-                                 border: `1px solid ${C.goldLine}`, borderRadius: 8, padding: '3px 8px' }}>UKÁŽKA — vymyslené dáta</div>}
-          <div style={{ flex: 1 }} />
-          <div style={{ fontSize: 12, color: C.muted }}>{email}</div>
-          <button onClick={() => setZmenaHesla(true)} style={{ ...chip(false), padding: '7px 12px' }}>Zmeniť heslo</button>
-          <button onClick={odhlasit} style={{ ...chip(false), padding: '7px 12px', color: C.err, borderColor: `${C.err}55` }}>Odhlásiť</button>
-        </div>
-      </div>
-
-      <div style={{ maxWidth: 1240, margin: '0 auto', padding: '18px 20px' }}>
-        {/* Pobočky */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
-          {viacPobociek && (
-            <>
-              <button style={chip(vybrana === '*')} onClick={() => setVybrana('*')}>Všetky pobočky</button>
-              {(pobocky || []).map(p => (
-                <button key={p} style={chip(vybrana === p)} onClick={() => setVybrana(p)}>{p}</button>
-              ))}
-            </>
-          )}
-          {!viacPobociek && pobocky && pobocky[0] && (
-            <div style={{ fontSize: 14, fontWeight: 800, color: C.gold }}>📍 {pobocky[0]}</div>
-          )}
+    <div style={{ minHeight: '100vh', background: C.bg, fontFamily: FONT, color: C.text }}>
+      <div className="pr-layout">
+        {/* ── Ambient pozadie (klipované do viewportu, mimo toku) ── */}
+        <div aria-hidden style={{ position: 'fixed', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
+          <div style={{ position: 'absolute', top: -180, right: -120, width: 560, height: 560, borderRadius: '50%',
+            background: 'radial-gradient(circle,rgba(184,112,32,.14),transparent 65%)', animation: animate ? 'fxFloat 14s ease-in-out infinite' : 'none' }} />
+          <div style={{ position: 'absolute', bottom: -220, left: 200, width: 640, height: 640, borderRadius: '50%',
+            background: 'radial-gradient(circle,rgba(124,92,196,.08),transparent 65%)', animation: animate ? 'fxFloat 19s ease-in-out infinite reverse' : 'none' }} />
         </div>
 
-        {/* Obdobie: režim + šípky (prenesené z OBRATOVEJ TABUĽKY) */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 18 }}>
-          {MODY.map(m => (
-            <button key={m.id} style={chip(mode === m.id)} onClick={() => { setMode(m.id); setRefDate(new Date()); }}>{m.label}</button>
-          ))}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 8,
-                        background: 'rgba(255,255,255,0.7)', border: `1px solid ${C.border}`, borderRadius: 20, padding: '2px 6px' }}>
-            <button onClick={() => posun(-1)} style={{ border: 'none', background: 'none', fontSize: 18, cursor: 'pointer', color: C.gold, padding: '2px 8px', fontFamily: 'inherit' }}>‹</button>
-            <div style={{ fontSize: 13, fontWeight: 800, color: C.text, minWidth: 130, textAlign: 'center' }}>{rozsahLabel(mode, refDate)}</div>
-            <button onClick={() => posun(1)} style={{ border: 'none', background: 'none', fontSize: 18, cursor: 'pointer', color: C.gold, padding: '2px 8px', fontFamily: 'inherit' }}>›</button>
+        {/* ── SIDEBAR ── */}
+        <aside className="pr-side">
+          <div style={{ padding: '20px 16px 16px', borderBottom: `1px solid ${C.creamLine}` }}>
+            <div style={{ background: C.cream, borderRadius: 12, padding: '12px 14px', display: 'flex', justifyContent: 'center' }}>
+              <img src={`${PUBLIC}/foxford-logo.png.png`} alt="Foxford" style={{ width: '100%', maxWidth: 150, display: 'block' }} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, padding: '0 4px' }}>
+              <div style={{ fontWeight: 700, fontSize: 17, letterSpacing: .2 }}>Prehľady</div>
+              {demo && <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.2, color: C.dark2, background: C.goldLight, borderRadius: 20, padding: '3px 8px' }}>UKÁŽKA</div>}
+            </div>
+            <div style={{ fontSize: 11, color: C.creamMuted, padding: '2px 4px 0' }}>manažérsky prístup</div>
           </div>
-        </div>
+          <nav className="pr-menu">
+            {SEKCIE.map(s => {
+              const on = sekcia === s.id;
+              return (
+                <button key={s.id} className="fx-mbtn" onClick={() => setSekcia(s.id)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', border: 'none', borderRadius: 12,
+                    fontSize: 14, fontWeight: 600, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', width: '100%',
+                    background: on ? 'linear-gradient(135deg,#d9a03f,#b87020)' : 'transparent', color: on ? C.dark2 : C.creamText,
+                    boxShadow: on ? '0 6px 18px rgba(184,112,32,.35)' : 'none' }}>
+                  <span style={{ fontSize: 16, width: 20, textAlign: 'center' }}>{s.ikona}</span>{s.label}
+                </button>
+              );
+            })}
+          </nav>
+          <div style={{ padding: 14, borderTop: `1px solid ${C.creamLine}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontSize: 11, color: C.creamMuted, padding: '0 4px', wordBreak: 'break-all' }}>{email}</div>
+            <button className="fx-ghost" onClick={() => setZmenaHesla(true)}
+              style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(236,229,211,.18)', background: 'transparent',
+                color: 'rgba(236,229,211,.75)', fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>Zmeniť heslo</button>
+            <button className="fx-ghost" onClick={odhlasit}
+              style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(240,110,90,.35)', background: 'transparent',
+                color: '#f0876e', fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>Odhlásiť</button>
+          </div>
+        </aside>
 
-        {pobocky && pobocky.length === 0 && (
-          <Karta><div style={{ color: C.sub, fontSize: 14 }}>
-            Tvoj účet zatiaľ nemá priradenú žiadnu pobočku — ozvi sa administrátorovi.
-          </div></Karta>
-        )}
-        {chyba && <Karta style={{ marginBottom: 14 }}><div style={{ color: C.err, fontSize: 14 }}>{chyba}</div></Karta>}
-        {nacitava && pobocky && pobocky.length > 0 && (
-          <div style={{ color: C.muted, fontSize: 14, padding: '30px 0', textAlign: 'center' }}>Načítavam dáta…</div>
-        )}
-
-        {!nacitava && agg && (
-          <>
-            {/* Tržbové čísla */}
-            <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit, minmax(215px, 1fr))', marginBottom: 14 }}>
-              <Cislo label="Tržby" value={fmtEur(agg.trzby)} note={rozsahLabel(mode, refDate)} />
-              <Cislo label="Platobné karty" value={fmtEur(agg.karty)} note={`${kartyPct} % z tržieb na termináli`} />
-              <Cislo label="Qerko" value={fmtEur(agg.qerko)} note={`${qerkoPct} % z celkového obratu`} />
-              <Cislo label="Hotovosť v kase" value={agg.kasaSpolu !== 0 || Object.keys(agg.kasaPos).length ? fmtEur(agg.kasaSpolu, 2) : '—'}
-                     note={vybrana === '*' ? 'súčet posledných zostatkov pobočiek' : 'posledný zostatok (M) v období'}
-                     tone={agg.upozornenia.some(u => u.typ === 'err') ? 'err' : agg.upozornenia.length ? undefined : 'ok'} />
-            </div>
-
-            {/* Upozornenia (stav kasy + opakované problémy + opakované HACCP) */}
-            {agg.upozornenia.length > 0 && (
-              <Karta title="⚠️ Upozornenia" style={{ marginBottom: 14 }}>
-                {agg.upozornenia.map((u, i) => (
-                  <div key={i} style={{ padding: '8px 12px', borderRadius: 10, marginBottom: 6, fontSize: 13.5,
-                                        background: u.typ === 'err' ? C.errDim : C.goldDim,
-                                        border: `1px solid ${u.typ === 'err' ? C.err + '44' : C.goldLine}`,
-                                        color: u.typ === 'err' ? C.err : C.text }}>
-                    {u.typ === 'err' ? '⛔' : '⚠️'} {u.text}
-                  </div>
-                ))}
-              </Karta>
-            )}
-
-            {/* Tržbové grafy */}
-            <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', marginBottom: 14 }}>
-              <Karta title={mode === 'rok' ? `Mesačné tržby — ${rozsahLabel(mode, refDate)}` : `Vývoj tržieb — ${rozsahLabel(mode, refDate)}`}
-                     style={{ gridColumn: '1 / -1' }}>
-                {Object.keys(agg.poDni).length === 0
-                  ? <div style={{ color: C.muted, fontSize: 13, padding: '20px 0' }}>V tomto období nie sú žiadne uzávierky.</div>
-                  : <Graf config={gTrzby} height={270} />}
-              </Karta>
-              <Karta title="Podiely platieb">
-                {agg.trzby > 0 ? <Graf config={gPodiely} height={240} /> :
-                  <div style={{ color: C.muted, fontSize: 13 }}>Bez tržieb v období.</div>}
-              </Karta>
-              {!lenTrzby && (
-                <Karta title="Úlohy podľa kategórie">
-                  {gUlohy ? <Graf config={gUlohy} height={240} /> :
-                    <div style={{ color: C.muted, fontSize: 13 }}>Žiadne úlohy v období.</div>}
-                </Karta>
-              )}
-              {!lenTrzby && (
-                <Karta title="Najodpisovanejšie položky">
-                  {gOdpisy ? <Graf config={gOdpisy} height={240} /> :
-                    <div style={{ color: C.muted, fontSize: 13 }}>Žiadne odpisy v období.</div>}
-                </Karta>
-              )}
-            </div>
-
-            {/* Prevádzkové čísla */}
-            {!lenTrzby && (
-              <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit, minmax(215px, 1fr))', marginBottom: 14 }}>
-                <Cislo label="Splnenosť úloh" value={agg.pct === null ? '—' : agg.pct + ' %'}
-                       tone={agg.pct === null ? undefined : agg.pct >= 90 ? 'ok' : agg.pct >= 70 ? undefined : 'err'} />
-                <Cislo label="Odpisov" value={fmtNum(agg.odpisovSpolu)} />
-                <Cislo label="HACCP prekročenia" value={fmtNum(agg.prekrocenia.length)} tone={agg.prekrocenia.length ? 'err' : 'ok'} />
-              </div>
-            )}
-            {lenTrzby && (
-              <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>
-                ℹ️ Ročný pohľad všetkých pobočiek zobrazuje len tržby — pre úlohy, odpisy a HACCP vyber pobočku alebo kratšie obdobie.
-              </div>
-            )}
-
-            {/* Detail: nesplnené a problémové úlohy (klik na graf úloh filtruje podľa kategórie) */}
-            {!lenTrzby && (
-              <Karta style={{ marginBottom: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 12, fontWeight: 800, color: C.sub, letterSpacing: .8, textTransform: 'uppercase' }}>
-                    Nesplnené a problémové úlohy
-                  </span>
-                  {filterKat && (
-                    <span onClick={() => setFilterKat(null)} style={{ cursor: 'pointer', fontSize: 11.5, fontWeight: 700, color: C.gold,
-                          background: C.goldDim, border: `1px solid ${C.goldLine}`, borderRadius: 20, padding: '3px 10px' }}>
-                      filter: {filterKat} ✕
-                    </span>
-                  )}
-                  <span style={{ flex: 1 }} />
-                  <span style={{ fontSize: 11, color: C.muted }}>💡 klikni na stĺpec grafu „Úlohy podľa kategórie" pre filter</span>
-                </div>
-                {(() => {
-                  const list = agg.problemove.filter(p => !filterKat || p.category === filterKat);
-                  if (list.length === 0) return (
-                    <div style={{ color: C.ok, fontSize: 14, fontWeight: 700 }}>✓ Všetky úlohy v období boli splnené bez nahláseného problému.</div>
-                  );
-                  return (
-                    <div style={{ overflowX: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                        <thead><tr style={{ color: C.sub, textAlign: 'left' }}>
-                          <th style={{ padding: '6px 10px' }}>Deň</th>
-                          {vybrana === '*' && <th style={{ padding: '6px 10px' }}>Pobočka</th>}
-                          <th style={{ padding: '6px 10px' }}>Zmena</th>
-                          <th style={{ padding: '6px 10px' }}>Úloha</th>
-                          <th style={{ padding: '6px 10px' }}>Kto</th>
-                          <th style={{ padding: '6px 10px' }}>Stav / problém</th>
-                        </tr></thead>
-                        <tbody>
-                          {list.slice(0, 40).map((p, i) => (
-                            <tr key={i} style={{ borderTop: `1px solid ${C.border}`, background: p.issue ? C.errDim : (i % 2 ? 'rgba(150,120,80,0.05)' : 'transparent') }}>
-                              <td style={{ padding: '7px 10px', whiteSpace: 'nowrap' }}>{dayLabel(p.day)}</td>
-                              {vybrana === '*' && <td style={{ padding: '7px 10px' }}>{p.branch}</td>}
-                              <td style={{ padding: '7px 10px', color: C.sub }}>{p.category}</td>
-                              <td style={{ padding: '7px 10px' }}>{p.task}</td>
-                              <td style={{ padding: '7px 10px', color: C.sub }}>{p.by || '—'}</td>
-                              <td style={{ padding: '7px 10px', fontWeight: 700, color: p.issue ? C.err : C.muted }}>
-                                {p.issue ? `⚠ ${p.issue}` : '✗ nesplnené'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      {list.length > 40 && (
-                        <div style={{ fontSize: 12, color: C.muted, marginTop: 8, textAlign: 'right' }}>… a ďalších {fmtNum(list.length - 40)} — zúž obdobie alebo pobočku</div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </Karta>
-            )}
-
-            {/* HACCP prekročenia */}
-            {!lenTrzby && agg.prekrocenia.length > 0 && (
-              <Karta title="Posledné HACCP prekročenia" style={{ marginBottom: 14 }}>
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                    <thead><tr style={{ color: C.sub, textAlign: 'left' }}>
-                      <th style={{ padding: '6px 10px' }}>Deň</th>
-                      {vybrana === '*' && <th style={{ padding: '6px 10px' }}>Pobočka</th>}
-                      <th style={{ padding: '6px 10px' }}>Zariadenie</th>
-                      <th style={{ padding: '6px 10px' }}>Hodnota</th>
-                      <th style={{ padding: '6px 10px' }}>Limit</th>
-                    </tr></thead>
-                    <tbody>
-                      {agg.prekrocenia.slice(-14).reverse().map((h, i) => (
-                        <tr key={i} style={{ borderTop: `1px solid ${C.border}`, background: i % 2 ? 'transparent' : C.errDim }}>
-                          <td style={{ padding: '7px 10px', whiteSpace: 'nowrap' }}>{dayLabel(h.day)}</td>
-                          {vybrana === '*' && <td style={{ padding: '7px 10px' }}>{h.branch}</td>}
-                          <td style={{ padding: '7px 10px' }}>{h.device}</td>
-                          <td style={{ padding: '7px 10px', color: C.err, fontWeight: 800 }}>{h.value} °C</td>
-                          <td style={{ padding: '7px 10px', color: C.sub }}>{h.max_limit}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Karta>
-            )}
-
-            {/* História uzávierok (prenesené z OBRATOVEJ TABUĽKY, len na čítanie) */}
-            <Karta title="História uzávierok">
-              {histRows.length === 0 ? (
-                <div style={{ color: C.muted, fontSize: 13 }}>Žiadne uzávierky v období.</div>
-              ) : (
+        {/* ── MAIN ── */}
+        <main className="pr-main">
+          {/* Top bar: pobočka + obdobie */}
+          <div className="pr-top">
+            <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', alignItems: 'center' }}>
+              {viacPobociek ? (
                 <>
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-                      <thead><tr style={{ color: C.sub }}>
-                        <th style={{ ...th, textAlign: 'left' }}>Dátum</th>
-                        <th style={{ ...th, textAlign: 'left' }}>Deň</th>
-                        {vybrana === '*' && <th style={{ ...th, textAlign: 'left' }}>Pobočka</th>}
-                        <th style={th}>Obrat</th>
-                        <th style={th}>Karty</th>
-                        <th style={th}>Qerko</th>
-                        <th style={th}>Tringelt</th>
-                        <th style={th}>Gastro l.</th>
-                        <th style={th}>Odvod</th>
-                        <th style={th}>Zaokr.</th>
-                        <th style={th}>Kasa večer</th>
-                      </tr></thead>
-                      <tbody>
-                        {histPage.map((u, i) => (
-                          <tr key={u.branch + u.day + i} style={{ borderTop: `1px solid ${C.border}`, background: i % 2 ? 'rgba(150,120,80,0.05)' : 'transparent' }}>
-                            <td style={{ ...td, textAlign: 'left', fontWeight: 700 }}>{dayLabel(u.day)} {u.day.slice(0, 4)}</td>
-                            <td style={{ ...td, textAlign: 'left', color: C.sub }}>{dayName(u.day)}</td>
-                            {vybrana === '*' && <td style={{ ...td, textAlign: 'left' }}>{u.branch}</td>}
-                            <td style={{ ...td, fontWeight: 800, color: C.gold }}>{fmtEur(u.obrat, 2)}</td>
-                            <td style={td}>{fmtEur(u.karta, 2)}</td>
-                            <td style={td}>{fmtEur(u.qerko, 2)}</td>
-                            <td style={td}>{fmtEur(u.qerkoTr, 2)}</td>
-                            <td style={td}>{fmtEur(u.gastro, 2)}</td>
-                            <td style={td}>{fmtEur(u.odvod, 2)}</td>
-                            <td style={td}>{fmtEur(u.zaokruhly, 2)}</td>
-                            <td style={{ ...td, fontWeight: 700, color: u.kasa !== null && u.kasa < 0 ? C.err : C.text }}>
-                              {u.kasa === null ? '—' : fmtEur(u.kasa, 2)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  {histStran > 1 && (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginTop: 10, fontSize: 12.5, color: C.sub }}>
-                      <span>strana {histStrana} / {histStran} · {fmtNum(histRows.length)} dní</span>
-                      <button onClick={() => setHistStrana(s => Math.max(1, s - 1))} style={chip(false)}>‹</button>
-                      <button onClick={() => setHistStrana(s => Math.min(histStran, s + 1))} style={chip(false)}>›</button>
-                    </div>
-                  )}
+                  <button className="fx-chip" style={chipStyle(vybrana === '*')} onClick={() => setVybrana('*')}>Všetky</button>
+                  {(pobocky || []).map(p => (
+                    <button key={p} className="fx-chip" style={chipStyle(vybrana === p)} onClick={() => setVybrana(p)}>{p}</button>
+                  ))}
                 </>
-              )}
-            </Karta>
-          </>
-        )}
+              ) : (pobocky && pobocky[0] && (
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.gold, padding: '4px 2px' }}>📍 {pobocky[0]}</div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ display: 'flex', background: 'rgba(255,255,255,.7)', border: '1px solid rgba(150,120,80,.2)', borderRadius: 22, padding: 3, gap: 2 }}>
+                {MODY.map(m => {
+                  const on = mode === m.id;
+                  return (
+                    <button key={m.id} className="fx-chip" onClick={() => { setMode(m.id); setRefDate(new Date()); }}
+                      style={{ padding: '7px 16px', borderRadius: 18, fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                        border: 'none', fontFamily: 'inherit', background: on ? C.text : 'transparent', color: on ? C.cream : C.sub }}>{m.label}</button>
+                  );
+                })}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'rgba(255,255,255,.7)', border: '1px solid rgba(150,120,80,.2)', borderRadius: 22, padding: '3px 8px' }}>
+                <button className="fx-nav" onClick={() => posun(-1)} style={{ border: 'none', background: 'none', fontSize: 18, cursor: 'pointer', color: C.gold, padding: '2px 10px', fontFamily: 'inherit' }}>‹</button>
+                <div style={{ fontSize: 13, fontWeight: 700, minWidth: 150, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{rozsahLabel(mode, refDate)}</div>
+                <button className="fx-nav" onClick={() => posun(1)} style={{ border: 'none', background: 'none', fontSize: 18, cursor: 'pointer', color: C.gold, padding: '2px 10px', fontFamily: 'inherit' }}>›</button>
+              </div>
+            </div>
+          </div>
+
+          <div className="pr-cont">
+            {pobocky && pobocky.length === 0 && (
+              <Panel><div style={{ color: C.sub, fontSize: 14 }}>Tvoj účet zatiaľ nemá priradenú žiadnu pobočku — ozvi sa administrátorovi.</div></Panel>
+            )}
+            {chyba && <Panel style={{ marginBottom: 14 }}><div style={{ color: C.err, fontSize: 14 }}>{chyba}</div></Panel>}
+            {nacitava && pobocky && pobocky.length > 0 && (
+              <div style={{ color: C.muted, fontSize: 14, padding: '50px 0', textAlign: 'center' }}>Načítavam dáta…</div>
+            )}
+
+            {!nacitava && agg && (
+              <>
+                {/* ═══ PREHĽAD (overview) ═══ */}
+                {sekcia === 'prehlad' && (
+                  <>
+                    <div style={gridKPI}>
+                      <KPI label="Tržby" color={C.gold} delay={0} note={rozsahLabel(mode, refDate)}
+                        value={<Num value={agg.trzby} animate={animate} format={n => fmtEur(Math.round(n))} />} />
+                      <KPI label="Platobné karty" color={C.gold} delay={0.07} note={`${kartyPct} % z tržieb`}
+                        value={<Num value={agg.karty} animate={animate} format={n => fmtEur(Math.round(n))} />} />
+                      <KPI label="Qerko" color={C.fialova} delay={0.14} note={`${qerkoPct} % z obratu`}
+                        value={<Num value={agg.qerko} animate={animate} format={n => fmtEur(Math.round(n))} />} />
+                      <KPI label="Hotovosť v kase" color={hasErr ? C.err : C.text} delay={0.21} note={vybrana === '*' ? 'súčet pobočiek' : 'zostatok večer'}
+                        value={hasKasa ? <Num value={agg.kasaSpolu} animate={animate} format={n => fmtEur(n, 2)} /> : '—'} />
+                    </div>
+                    {upoz()}
+                    <div className="pr-charts">
+                      {grafTrzieb()}
+                      {donutKarta()}
+                    </div>
+                    {!lenTrzby ? (
+                      <div style={gridKPI}>
+                        <KPI size={27} label="Splnenosť úloh" color={pctCol} delay={0.30}
+                          value={agg.pct === null ? '—' : <Num value={agg.pct} animate={animate} format={n => Math.round(n) + ' %'} />}>
+                          {agg.pct !== null && <ProgressBar pct={agg.pct} color={pctCol} delay=".5s" animate={animate} />}
+                        </KPI>
+                        <KPI size={27} label="Odpisov" color={C.gold} delay={0.37} note="záznamov v období"
+                          value={<Num value={agg.odpisovSpolu} animate={animate} format={n => fmtNum(Math.round(n))} />} />
+                        <KPI size={27} label="HACCP prekročenia" color={agg.prekrocenia.length ? C.err : C.ok} delay={0.44} note="teplotných limitov"
+                          value={<Num value={agg.prekrocenia.length} animate={animate} format={n => fmtNum(Math.round(n))} />} />
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 12, color: C.muted }}>ℹ️ Ročný pohľad všetkých pobočiek zobrazuje len tržby — pre úlohy/odpisy/teploty vyber pobočku alebo kratšie obdobie.</div>
+                    )}
+                  </>
+                )}
+
+                {/* ═══ UZÁVIERKY ═══ */}
+                {sekcia === 'uzavierky' && historiaKarta()}
+
+                {/* ═══ ÚLOHY ═══ */}
+                {sekcia === 'ulohy' && (lenTrzby ? infoLenTrzby() : (
+                  <>
+                    <div style={gridKPI}>
+                      <KPI label="Splnenosť úloh" color={pctCol} delay={0} note={agg.total ? `${agg.done} z ${agg.total}` : ''}
+                        value={agg.pct === null ? '—' : <Num value={agg.pct} animate={animate} format={n => Math.round(n) + ' %'} />} />
+                      <KPI label="Úloh spolu" color={C.gold} delay={0.07}
+                        value={<Num value={agg.total} animate={animate} format={n => fmtNum(Math.round(n))} />} />
+                      <KPI label="Problémových" color={agg.problemove.length ? C.err : C.ok} delay={0.14}
+                        value={<Num value={agg.problemove.length} animate={animate} format={n => fmtNum(Math.round(n))} />} />
+                    </div>
+                    {upoz()}
+                    {ulohyBary()}
+                    {detailUloh()}
+                  </>
+                ))}
+
+                {/* ═══ ODPISY ═══ */}
+                {sekcia === 'odpisy' && (lenTrzby ? infoLenTrzby() : (
+                  <>
+                    <div style={gridKPI}>
+                      <KPI label="Odpisov spolu" color={C.gold} delay={0} note={rozsahLabel(mode, refDate)}
+                        value={<Num value={agg.odpisovSpolu} animate={animate} format={n => fmtNum(Math.round(n))} />} />
+                      <KPI label="Rôznych položiek" color={C.gold} delay={0.07}
+                        value={<Num value={new Set(data.odpisy.map(o => o.item)).size} animate={animate} format={n => fmtNum(Math.round(n))} />} />
+                    </div>
+                    {odpisyKarta()}
+                  </>
+                ))}
+
+                {/* ═══ TEPLOTY (HACCP) ═══ */}
+                {sekcia === 'teploty' && (lenTrzby ? infoLenTrzby() : (
+                  <>
+                    <div style={gridKPI}>
+                      <KPI label="Prekročení limitu" color={agg.prekrocenia.length ? C.err : C.ok} delay={0} note={rozsahLabel(mode, refDate)}
+                        value={<Num value={agg.prekrocenia.length} animate={animate} format={n => fmtNum(Math.round(n))} />} />
+                      <KPI label="Meraní spolu" color={C.gold} delay={0.07}
+                        value={<Num value={data.haccp.length} animate={animate} format={n => fmtNum(Math.round(n))} />} />
+                    </div>
+                    {upoz()}
+                    {haccpKarta()}
+                  </>
+                ))}
+              </>
+            )}
+          </div>
+        </main>
       </div>
 
       {zmenaHesla && <ZmenaHesla onClose={() => setZmenaHesla(false)} />}
@@ -786,11 +1104,11 @@ function ZmenaHesla({ onClose }) {
   const inp = { width: '100%', boxSizing: 'border-box', padding: '12px 13px', borderRadius: 12,
                 border: `1px solid ${C.borderM}`, fontSize: 14, outline: 'none', fontFamily: 'inherit' };
   return (
-    <div onMouseDown={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(30,22,8,.55)',
+    <div onMouseDown={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(30,22,8,.55)', fontFamily: FONT,
          backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
       <div onMouseDown={e => e.stopPropagation()} style={{ background: '#fff', border: `1px solid ${C.borderM}`,
            width: '100%', maxWidth: 360, borderRadius: 22, padding: '26px 22px' }}>
-        <div style={{ fontSize: 16, fontWeight: 900, color: C.text, marginBottom: 16, textAlign: 'center' }}>Zmena hesla</div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16, textAlign: 'center' }}>Zmena hesla</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <input style={inp} type="password" placeholder="Nové heslo (min. 8 znakov)" value={h1} onChange={e => setH1(e.target.value)} autoComplete="new-password" />
           <input style={inp} type="password" placeholder="Nové heslo znova" value={h2} onChange={e => setH2(e.target.value)} autoComplete="new-password" />
@@ -799,9 +1117,9 @@ function ZmenaHesla({ onClose }) {
                                color: stav === 'OK' ? C.ok : C.err }}>{stav === 'OK' ? '✓ Heslo zmenené' : stav}</div>}
         <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
           <button onClick={onClose} style={{ flex: 1, padding: 12, borderRadius: 13, border: `1px solid ${C.border}`,
-                   background: 'transparent', color: C.sub, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Zrušiť</button>
+                   background: 'transparent', color: C.sub, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Zrušiť</button>
           <button onClick={uloz} disabled={busy} style={{ flex: 1, padding: 12, borderRadius: 13, border: 'none',
-                   background: C.gold, color: '#fff', fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit', opacity: busy ? .6 : 1 }}>Uložiť</button>
+                   background: C.gold, color: '#fff', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: busy ? .6 : 1 }}>Uložiť</button>
         </div>
       </div>
     </div>
