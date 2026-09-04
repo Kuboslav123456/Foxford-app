@@ -56,21 +56,44 @@ const dayName = (i) => DNI_SK[new Date(i + 'T12:00:00').getDay()];
 const fmtEur = (n, dec = 0) => (n ?? 0).toLocaleString('sk-SK', { minimumFractionDigits: dec, maximumFractionDigits: dec }) + ' €';
 const fmtNum = (n) => (n ?? 0).toLocaleString('sk-SK');
 
+// ── CSV export (Sheet-ekvivalent, otvoriteľné v Exceli) ──────────────────────
+// BOM + oddeľovač ';' + desatinná čiarka (sk) = správne stĺpce aj diakritika v sk Exceli.
+const csvCell = (v) => { const t = String(v ?? ''); return /[";\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+const csvNum = (v) => (v == null || v === '') ? '' : String(v).replace('.', ',');   // bez tisícových oddeľovačov
+const csvDate = (isoDay) => { const [y, m, d] = isoDay.split('-'); return `${+d}.${+m}.${y}`; };
+function downloadCSV(filename, rows) {
+  const BOM = String.fromCharCode(0xFEFF);   // Excel rozpozná UTF-8 (diakritika)
+  const csv = BOM + rows.map(r => r.map(csvCell).join(';')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
 // ── Normalizácia uzávierky — zjednotenie dialektu appky (A..M) a OBRATOV ─────
 function normUzav(d) {
   if (!d) return null;
   const n = (v) => { const x = parseFloat(String(v ?? '').replace(',', '.')); return isNaN(x) ? 0 : x; };
   const ma = (v) => v !== undefined && v !== null && v !== '';
+  const nn = (v) => ma(v) ? n(v) : null;   // null keď pole chýba → v tabuľke „—"
   if (ma(d.obrat) || d.zdroj === 'obraty-import') {
-    // dialekt OBRATOVEJ TABUĽKY (importovaná história) + demo dáta
+    // dialekt OBRATOVEJ TABUĽKY (importovaná história) + demo dáta.
+    // App-natívne polia (A/H/I/J, audit prerátania, gNote) tu neexistujú → null.
     return { obrat: n(d.obrat), karta: n(d.karta), qerko: n(d.qerko), qerkoTr: n(d.qerko_tringelty),
              gastro: n(d.gastro_listky), zaokruhly: n(d.zaokruhly), odvod: n(d.odvod),
-             nakupy: n(d.nakupy), kasa: ma(d.excel_drawer) ? n(d.excel_drawer) : (ma(d.kasaStav) ? n(d.kasaStav) : null) };
+             nakupy: n(d.nakupy), kasa: ma(d.excel_drawer) ? n(d.excel_drawer) : (ma(d.kasaStav) ? n(d.kasaStav) : null),
+             a: null, hMam: null, iReal: null, jManko: null, stravna: null, gNote: '',
+             maloByt: null, rozdielA: null, firstA: null, firstRozdiel: null, nesedelo: null, dialekt: 'obraty' };
   }
-  // dialekt appky: B Tržba · C Karta · D Qerko · E Tringelt · F Gastro lístky ·
-  // G Nákup · K Odvod · L Zaokrúhlenie · M Nový zostatok (kasa večer)
+  // dialekt appky: A Zostatok predch. · B Tržba · C Karta · D Qerko · E Tringelt ·
+  // F Gastro lístky · G Nákup · H Mám mať · I Reálne v kase · J Tringelt/Manko ·
+  // K Odvod · L Zaokrúhlenie · M Nový zostatok (kasa večer) + audit prvého prerátania
   return { obrat: n(d.B), karta: n(d.C), qerko: n(d.D), qerkoTr: n(d.E), gastro: n(d.F),
-           zaokruhly: n(d.L), odvod: n(d.K), nakupy: n(d.G), kasa: ma(d.M) ? n(d.M) : null };
+           zaokruhly: n(d.L), odvod: n(d.K), nakupy: n(d.G), kasa: ma(d.M) ? n(d.M) : null,
+           a: nn(d.A), hMam: nn(d.H), iReal: nn(d.I), jManko: nn(d.J), stravna: nn(d.stravnaKarta),
+           gNote: d.gNote || '', maloByt: nn(d.maloByt), rozdielA: nn(d.rozdielA),
+           firstA: nn(d.firstA), firstRozdiel: nn(d.firstRozdiel), nesedelo: d.nesedeloPrvotne || null, dialekt: 'app' };
 }
 // Hotovosť z tržby — rovnaký vzorec ako v OBRATOVEJ TABUĽKE
 const hotovostZ = (u) => u.obrat - u.karta - u.gastro + u.zaokruhly - u.qerko - u.qerkoTr;
@@ -111,12 +134,12 @@ function demoRows() {
           // "Doplnenie pások" schválne často problémová → demo opakovaného problému
           const done = idx === 2 ? Math.random() < 0.55 : Math.random() < 0.93;
           const issue = !done && Math.random() < 0.6 ? (idx === 2 ? 'Chýba materiál na sklade' : ['Nestihnuté', 'Pokazené zariadenie', 'Nedostatok času'][Math.floor(Math.random() * 3)]) : null;
-          tasks.push({ day, branch: b, category: cat, task, done, issue, done_by: kdo });
+          tasks.push({ day, branch: b, category: cat, task, done, issue, done_by: kdo, inspector: kdo, done_time: done ? (cat === 'ranné' ? '08:15' : '21:40') : '' });
         }));
-        items.forEach(([item, unit]) => { if (Math.random() < 0.5) odpisy.push({ day, branch: b, item, qty: +(0.2 + Math.random() * 2.8).toFixed(1), unit, reason: 'Spotreba' }); });
+        items.forEach(([item, unit]) => { if (Math.random() < 0.5) odpisy.push({ day, branch: b, item, qty: +(0.2 + Math.random() * 2.8).toFixed(1), unit, reason: 'Spotreba', author: kdo, day_note: '' }); });
         zar.forEach(([dev, maxn, base]) => {
           const val = +(base + Math.random() * 3.4 - 0.8).toFixed(1);
-          haccp.push({ day, branch: b, device: dev, value: val, max_limit: `≤ ${maxn} °C`, exceeded: val > maxn });
+          haccp.push({ day, branch: b, device: dev, value: val, max_limit: `≤ ${maxn} °C`, exceeded: val > maxn, shift: Math.random() < 0.5 ? 'ranná' : 'večerná', inspector: kdo });
         });
       }
     });
@@ -549,9 +572,9 @@ function Dashboard({ session, demo }) {
         };
         const [uz, od_, ta, ha] = await Promise.all([
           fetchAll(q('uzavierky_log', 'day, branch, kasa, meno, created_at, data')),
-          lenTrzby ? [] : fetchAll(q('odpisy_log', 'day, branch, item, qty, unit, reason')),
-          lenTrzby ? [] : fetchAll(q('tasks_log', 'day, branch, category, done, task, issue, done_by')),
-          lenTrzby ? [] : fetchAll(q('haccp_log', 'day, branch, device, value, max_limit, exceeded')),
+          lenTrzby ? [] : fetchAll(q('odpisy_log', 'day, branch, item, qty, unit, reason, author, day_note')),
+          lenTrzby ? [] : fetchAll(q('tasks_log', 'day, branch, category, done, task, issue, done_by, inspector, done_time')),
+          lenTrzby ? [] : fetchAll(q('haccp_log', 'day, branch, device, value, max_limit, exceeded, inspector, shift')),
         ]);
         if (!zij) return;
         setData({ uzavierky: uz, odpisy: od_, tasks: ta, haccp: ha });
@@ -584,7 +607,7 @@ function Dashboard({ session, demo }) {
       if (!uzMap[k] || String(u.created_at || '') >= String(uzMap[k].created_at || '')) uzMap[k] = u;
     });
     const uzRows = Object.values(uzMap)
-      .map(u => ({ day: u.day, branch: u.branch, ...normUzav(u.data) }))
+      .map(u => ({ day: u.day, branch: u.branch, author: u.data?.author || u.meno || '', kasaTyp: u.kasa || u.data?.kasa || '', ...normUzav(u.data) }))
       .sort((a, b) => a.day < b.day ? -1 : 1);
 
     let trzby = 0, karty = 0, qerko = 0, gastro = 0, hotovost = 0;
@@ -666,6 +689,53 @@ function Dashboard({ session, demo }) {
   const thC = { padding: '10px', fontWeight: 700, fontSize: 10.5, textTransform: 'uppercase', letterSpacing: .8, color: C.muted, whiteSpace: 'nowrap' };
   const tdC = { padding: '9px 10px', whiteSpace: 'nowrap' };
 
+  // ── CSV exporty (Sheet-ekvivalent tabuľky — pre hygienu a pod.) ────────────
+  // Exportuje VŠETKY riadky za zvolené obdobie/pobočku (nie len stránku).
+  const csvName = (typ) => {
+    const b = vybrana === '*' ? 'vsetky' : vybrana.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_');
+    return `${typ}_${b}_${od}_${doD}.csv`;
+  };
+  const exportUzavierky = () => {
+    const H = ['Dátum', 'Pobočka', 'Kasa', 'Vykonal',
+      'A · Zostatok predch.', 'Malo zostať', 'Rozdiel A', 'Prvotné prerátanie A', 'Prvotný rozdiel', 'Nesedelo prvotne?',
+      'B · Tržba', 'C · Karty', 'D · Qerko', 'E · Qerko tringelt', 'Stravná karta', 'F · Gastro lístky', 'G · Nákup', 'Nákup – obsah',
+      'H · Mám mať v kase', 'I · Reálne v kase', 'J · Tringelt/Manko', 'K · Odvod', 'L · Zaokrúhlenie', 'M · Kasa večer'];
+    const rows = agg.uzRows.map(u => [
+      csvDate(u.day), u.branch, u.kasaTyp || '', u.author || '',
+      csvNum(u.a), csvNum(u.maloByt), csvNum(u.rozdielA), csvNum(u.firstA), csvNum(u.firstRozdiel), u.nesedelo || '',
+      csvNum(u.obrat), csvNum(u.karta), csvNum(u.qerko), csvNum(u.qerkoTr), csvNum(u.stravna), csvNum(u.gastro), csvNum(u.nakupy), u.gNote || '',
+      csvNum(u.hMam), csvNum(u.iReal), csvNum(u.jManko), csvNum(u.odvod), csvNum(u.zaokruhly), csvNum(u.kasa),
+    ]);
+    downloadCSV(csvName('uzavierky'), [H, ...rows]);
+  };
+  const exportTeploty = () => {
+    const H = ['Dátum', 'Pobočka', 'Kontrolór', 'Zmena', 'Zariadenie', 'Hodnota (°C)', 'Max limit', 'Status'];
+    const rows = [...data.haccp].sort((a, b) => a.day < b.day ? -1 : 1).map(h => [
+      csvDate(h.day), h.branch, h.inspector || '', h.shift || '', h.device || '',
+      csvNum(h.value), h.max_limit || '', h.exceeded ? 'PREKROČENÉ' : 'OK',
+    ]);
+    downloadCSV(csvName('teploty_haccp'), [H, ...rows]);
+  };
+  const exportOdpisy = () => {
+    const H = ['Dátum', 'Pobočka', 'Zodpovedný', 'Produkt', 'Množstvo', 'Jednotka', 'Dôvod', 'Odkaz kolegovi'];
+    const rows = [...data.odpisy].sort((a, b) => a.day < b.day ? -1 : 1).map(o => [
+      csvDate(o.day), o.branch, o.author || '', o.item || '', csvNum(o.qty), o.unit || '', o.reason || '', o.day_note || '',
+    ]);
+    downloadCSV(csvName('odpisy'), [H, ...rows]);
+  };
+  const exportUlohy = () => {
+    const H = ['Dátum', 'Pobočka', 'Kategória', 'Kontrolór', 'Úloha', 'Splnená', 'Čas', 'Problém'];
+    const rows = [...data.tasks].sort((a, b) => a.day < b.day ? -1 : 1).map(t => [
+      csvDate(t.day), t.branch, t.category || '', t.inspector || '', t.task || '',
+      t.done ? 'ÁNO' : 'NIE', t.done_time || '', t.issue || '',
+    ]);
+    downloadCSV(csvName('ulohy'), [H, ...rows]);
+  };
+  const csvBtn = (onClick, label = 'CSV') => (
+    <button className="fx-chip" onClick={onClick}
+      style={{ ...chipStyle(false), display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700 }}>⬇ {label}</button>
+  );
+
   // ── znovupoužiteľné bloky (volajú sa iba keď agg existuje) ────────────────
   const upoz = () => agg.upozornenia.length ? (
     <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8, animation: animate ? 'fxUp .5s .15s backwards' : 'none' }}>
@@ -698,7 +768,12 @@ function Dashboard({ session, demo }) {
   );
 
   const ulohyBary = () => (
-    <Panel title="Úlohy podľa zmeny" delay={0.18} style={{ marginBottom: 16 }}>
+    <Panel delay={0.18} style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: C.sub, letterSpacing: 1, textTransform: 'uppercase' }}>Úlohy podľa zmeny</span>
+        <span style={{ flex: 1 }} />
+        {data.tasks.length > 0 && csvBtn(exportUlohy, 'CSV (všetky úlohy)')}
+      </div>
       {Object.keys(agg.katMap).length === 0
         ? <div style={{ color: C.muted, fontSize: 13 }}>Žiadne úlohy v období.</div>
         : (
@@ -773,40 +848,58 @@ function Dashboard({ session, demo }) {
     );
   };
 
-  const historiaKarta = () => (
-    <Panel title={`História uzávierok — ${rozsahLabel(mode, refDate)}`}>
+  const historiaKarta = () => {
+    const eur = (v) => v == null ? '—' : fmtEur(v, 2);
+    return (
+    <Panel>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: C.sub, letterSpacing: 1, textTransform: 'uppercase' }}>História uzávierok — {rozsahLabel(mode, refDate)}</span>
+        <span style={{ flex: 1 }} />
+        {histRows.length > 0 && csvBtn(exportUzavierky)}
+      </div>
       {histRows.length === 0 ? (
         <div style={{ color: C.muted, fontSize: 13 }}>Žiadne uzávierky v období.</div>
       ) : (
         <>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, fontVariantNumeric: 'tabular-nums' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
               <thead><tr>
                 <th style={{ ...thC, textAlign: 'left' }}>Dátum</th>
                 <th style={{ ...thC, textAlign: 'left' }}>Deň</th>
                 {vybrana === '*' && <th style={{ ...thC, textAlign: 'left' }}>Pobočka</th>}
-                <th style={{ ...thC, textAlign: 'right' }}>Obrat</th>
-                <th style={{ ...thC, textAlign: 'right' }}>Karty</th>
-                <th style={{ ...thC, textAlign: 'right' }}>Qerko</th>
-                <th style={{ ...thC, textAlign: 'right' }}>Tringelt</th>
-                <th style={{ ...thC, textAlign: 'right' }}>Gastro l.</th>
-                <th style={{ ...thC, textAlign: 'right' }}>Odvod</th>
-                <th style={{ ...thC, textAlign: 'right' }}>Zaokr.</th>
-                <th style={{ ...thC, textAlign: 'right' }}>Kasa večer</th>
+                <th style={{ ...thC, textAlign: 'right' }}>A · Zost.</th>
+                <th style={{ ...thC, textAlign: 'right' }}>B · Tržba</th>
+                <th style={{ ...thC, textAlign: 'right' }}>C · Karty</th>
+                <th style={{ ...thC, textAlign: 'right' }}>D · Qerko</th>
+                <th style={{ ...thC, textAlign: 'right' }}>E · Tringelt</th>
+                <th style={{ ...thC, textAlign: 'right' }}>F · Gastro</th>
+                <th style={{ ...thC, textAlign: 'right' }}>G · Nákup</th>
+                <th style={{ ...thC, textAlign: 'right' }}>H · Mám mať</th>
+                <th style={{ ...thC, textAlign: 'right' }}>I · Reálne</th>
+                <th style={{ ...thC, textAlign: 'right' }}>J · Tr./Manko</th>
+                <th style={{ ...thC, textAlign: 'right' }}>K · Odvod</th>
+                <th style={{ ...thC, textAlign: 'right' }}>L · Zaokr.</th>
+                <th style={{ ...thC, textAlign: 'right' }}>M · Kasa večer</th>
               </tr></thead>
               <tbody>
                 {histPage.map((u, i) => {
                   const kasaBad = u.kasa !== null && (u.kasa < 0 || u.kasa > 1000);
+                  const jCol = u.jManko == null ? C.text : u.jManko < 0 ? C.err : C.ok;
                   return (
                     <tr key={u.branch + u.day + i} className="fx-hrow" style={{ borderTop: '1px solid rgba(150,120,80,.12)', animation: animate ? `fxUp .4s ${del(i)} backwards` : 'none' }}>
                       <td style={{ ...tdC, fontWeight: 700 }}>{dayLabel(u.day)} <span style={{ color: C.muted, fontWeight: 400 }}>{u.day.slice(0, 4)}</span></td>
                       <td style={{ ...tdC, color: C.sub }}>{dayName(u.day)}</td>
                       {vybrana === '*' && <td style={{ ...tdC, color: C.sub }}>{u.branch}</td>}
+                      <td style={{ ...tdC, textAlign: 'right', color: C.muted }}>{eur(u.a)}</td>
                       <td style={{ ...tdC, textAlign: 'right', fontWeight: 700, color: C.gold }}>{fmtEur(u.obrat, 2)}</td>
                       <td style={{ ...tdC, textAlign: 'right' }}>{fmtEur(u.karta, 2)}</td>
                       <td style={{ ...tdC, textAlign: 'right' }}>{fmtEur(u.qerko, 2)}</td>
                       <td style={{ ...tdC, textAlign: 'right' }}>{fmtEur(u.qerkoTr, 2)}</td>
                       <td style={{ ...tdC, textAlign: 'right' }}>{fmtEur(u.gastro, 2)}</td>
+                      <td style={{ ...tdC, textAlign: 'right', color: C.sub }}>{fmtEur(u.nakupy, 2)}</td>
+                      <td style={{ ...tdC, textAlign: 'right', color: C.muted }}>{eur(u.hMam)}</td>
+                      <td style={{ ...tdC, textAlign: 'right', color: C.muted }}>{eur(u.iReal)}</td>
+                      <td style={{ ...tdC, textAlign: 'right', fontWeight: 700, color: jCol }}>{eur(u.jManko)}</td>
                       <td style={{ ...tdC, textAlign: 'right' }}>{fmtEur(u.odvod, 2)}</td>
                       <td style={{ ...tdC, textAlign: 'right' }}>{fmtEur(u.zaokruhly, 2)}</td>
                       <td style={{ ...tdC, textAlign: 'right', fontWeight: 700, color: kasaBad ? C.err : C.text }}>{u.kasa === null ? '—' : fmtEur(u.kasa, 2)}</td>
@@ -816,24 +909,33 @@ function Dashboard({ session, demo }) {
               </tbody>
             </table>
           </div>
-          {histStran > 1 ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginTop: 12, fontSize: 12.5, color: C.sub }}>
-              <span>strana {histStrana} / {histStran} · {fmtNum(histRows.length)} dní</span>
-              <button className="fx-chip" onClick={() => setHistStrana(s => Math.max(1, s - 1))} style={chipStyle(false)}>‹</button>
-              <button className="fx-chip" onClick={() => setHistStrana(s => Math.min(histStran, s + 1))} style={chipStyle(false)}>›</button>
-            </div>
-          ) : (
-            <div style={{ fontSize: 11.5, color: C.muted, marginTop: 12, textAlign: 'right' }}>posledných {fmtNum(histRows.length)} uzávierok v období</div>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, color: C.muted, maxWidth: 620 }}>A · H · I · J sú detail z appky (živé dni od prechodu na Supabase); staršie dni z importu ich nemajú („—"). CSV export obsahuje všetkých 23 stĺpcov ako hárok.</span>
+            {histStran > 1 ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, color: C.sub }}>
+                <span>strana {histStrana} / {histStran} · {fmtNum(histRows.length)} dní</span>
+                <button className="fx-chip" onClick={() => setHistStrana(s => Math.max(1, s - 1))} style={chipStyle(false)}>‹</button>
+                <button className="fx-chip" onClick={() => setHistStrana(s => Math.min(histStran, s + 1))} style={chipStyle(false)}>›</button>
+              </div>
+            ) : (
+              <span style={{ fontSize: 11.5, color: C.muted }}>{fmtNum(histRows.length)} uzávierok v období</span>
+            )}
+          </div>
         </>
       )}
     </Panel>
-  );
+    );
+  };
 
   const odpisyKarta = () => {
     const maxOdp = Math.max(...agg.topOdpisy.map(o => o.qty), 1);
     return (
-      <Panel title={`Najodpisovanejšie položky — ${rozsahLabel(mode, refDate)}`}>
+      <Panel>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: C.sub, letterSpacing: 1, textTransform: 'uppercase' }}>Najodpisovanejšie položky — {rozsahLabel(mode, refDate)}</span>
+          <span style={{ flex: 1 }} />
+          {data.odpisy.length > 0 && csvBtn(exportOdpisy)}
+        </div>
         {agg.topOdpisy.length === 0 ? (
           <div style={{ color: C.muted, fontSize: 13 }}>Žiadne odpisy v období.</div>
         ) : (
@@ -859,7 +961,13 @@ function Dashboard({ session, demo }) {
   };
 
   const haccpKarta = () => (
-    <Panel title="HACCP prekročenia" delay={0.12}>
+    <Panel delay={0.12}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: C.sub, letterSpacing: 1, textTransform: 'uppercase' }}>HACCP teploty</span>
+        {data.haccp.length > 0 && <span style={{ fontSize: 11, color: C.muted }}>{fmtNum(data.haccp.length)} meraní · {fmtNum(agg.prekrocenia.length)} prekročení</span>}
+        <span style={{ flex: 1 }} />
+        {data.haccp.length > 0 && csvBtn(exportTeploty, 'CSV (všetky merania)')}
+      </div>
       {agg.prekrocenia.length === 0 ? (
         <div style={{ color: C.ok, fontSize: 14, fontWeight: 700, padding: '8px 0' }}>✓ Žiadne prekročenia teplotných limitov v období.</div>
       ) : (

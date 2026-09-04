@@ -10,13 +10,20 @@
 - `.env.local` obsahuje Supabase kľúče (gitignored) — bez nich Prehľady = no-op. Netreba commitovať.
 
 ### 🎯 SMEROVANIE (2026-09-04): Supabase = hlavný zdroj pravdy, Sheets = dočasná poistka
-Jakub rozhodol: **postupne opustiť Google Sheets, ale zatiaľ ju NECHAŤ ako záložnú poistku** (aby sa pri prechode nestratili dáta — veľmi dôležité), a **Supabase postaviť ako hlavný zdroj pravdy do budúcna**. Čiže: dual-write ostáva (píše sa do OBOCH), GAS/Sheets sa NEVYPÍNA, len sa ťažisko presúva na Supabase (Prehľady už čítajú zo Supabase).
+Jakub rozhodol: **postupne opustiť Google Sheets, ale zatiaľ ju NECHAŤ ako záložnú poistku** (aby sa pri prechode nestratili dáta — veľmi dôležité), a **Supabase postaviť ako hlavný zdroj pravdy do budúcna**. Čiže: dual-write ostáva (píše sa do OBOCH), GAS/Sheets sa NEVYPÍNA, len sa ťažisko presúva na Supabase (Prehľady už čítajú zo Supabase). Cieľová vízia (Jakubove slová): *„appka posiela dáta do databázy a my z prehľadu urobíme tabuľku"* — tj. Sheet-ekvivalent sa generuje z DB na požiadanie (napr. pre hygienu).
+
+**CSV export z Prehľadov (2026-09-04, HOTOVÉ v `Prehlady.js`, súčasť necommitnutého v67):** každá sekcia má tlačidlo **⬇ CSV** čo stiahne Sheet-ekvivalent tabuľku za zvolené obdobie/pobočku (BOM + `;` + sk desatinná čiarka → otvorí sa v Exceli):
+- **Uzávierky**: 24 stĺpcov (Dátum, Pobočka, Kasa, Vykonal, A, Malo zostať, Rozdiel A, Prvotné, Prvotný rozdiel, Nesedelo, B, C, D, E, Stravná karta, F, G, Nákup-obsah, H, I, J, K, L, M) — tabuľka v UI tiež rozšírená na A–M (horizontálny scroll). `normUzav` rozšírený o app-natívne polia (A/H/I/J/audit/gNote); import (obraty-import) ich nemá → „—".
+- **Teploty/HACCP**: VŠETKY merania (nie len prekročenia) — Dátum, Pobočka, Kontrolór, Zmena, Zariadenie, Hodnota °C, Max limit, Status. **Pre hygienu.**
+- **Odpisy**: Dátum, Pobočka, Zodpovedný, Produkt, Množstvo, Jednotka, Dôvod, Odkaz kolegovi.
+- **Úlohy**: Dátum, Pobočka, Kategória, Kontrolór, Úloha, Splnená, Čas, Problém.
+- Fetch rozšírený o `inspector, shift, done_time, author, day_note`. Overené v `#prehlady-demo` (BOM=EF BB BF ✓, počty riadkov sedia, žiadne chyby). Pozn.: Inventúra/Alkohol Prehľady zatiaľ nefetchujú → bez exportu (doplniť ak treba).
 
 **Nález pri diagnostike „za 3.9. nevidím tržby" (2026-09-04):** úlohy/odpisy za 3.9. v Supabase SÚ, ale **uzávierka (tržby) NIE**. Príčina: `performDailyClose` doposiela spätne len `tasks_summary`/`odpis_daily`/`alkohol_daily` — **uzávierku kasy NEDOPOSIELA** (posiela sa iba raz, ručne, tlačidlom, `App.js:3989` cez `sendToSheets('uzavierka_daily')`). Uzávierka za 3.9. sa odoslala večer na v64 (bez dual-write) → išla len do Sheets; catch-up ju nedobehol. Dáta NIE sú stratené (Sheets ich má). Je to prechodová medzera pre uzávierky odoslané pred prechodom tabletu na v65+.
 
 **TODO z tohto smerovania:**
 - [ ] **Poistka do budúcna (App.js, dotýka sa tabletu — vlastný test+deploy):** aby sa uzávierka vedela dozrkadliť aj spätne (napr. `performDailyClose` alebo štartový sweep pošle aj `uzavierka_daily` končiaceho dňa, ak nebola zmirrorovaná; alebo drž posledné uzávierky v localStorage a re-mirror z fronty). Bez toho každá pobočka pri prechode na v65+ stratí do Supabase uzávierky odoslané tesne pred updatom.
-- [ ] **Backfill 3.9. (a príp. ďalších prechodových dní) zo Sheets do `uzavierky_log`:** cez [supabase/import-obraty.mjs](supabase/import-obraty.mjs) (anon INSERT, RLS to povolí; riadky `meno='import OBRATY'`). Cielene len dni > 2.9., nech nevzniknú duplicity. **ČAKÁ na potvrdenie pobočky + rozsahu od Jakuba** (pýtal som sa: Obchodná? len 3.9.?).
+- [x] **Backfill 3.9. Obchodná** — HOTOVÉ (2026-09-04): 1 riadok do `uzavierky_log` (obrat **1690 €**, karta 1171.16, qerko 301.19 +16.79 tringelt, kasa večer 435.28; `meno='import OBRATY'`, `data.zdroj='obraty-import'`) zo živého Sheetu Obchodnej cez anon INSERT. **RLS gotcha:** anon INSERT musí ísť s `Prefer: return=minimal` — `return=representation` si číta riadok späť (SELECT), ktorý anon podľa RLS nemá → 42501. Skript: scratchpad `backfill-obchodna-3-9.mjs` (kópia mechanizmu z import-obraty.mjs).
 - [ ] Ostatné pobočky na v65+ (rovnaká prechodová medzera ich čaká) + retencia.
 
 ### Dnešný míľnik (2026-09-03): Supabase migrácia — detail v pamäti [[foxford-supabase]]
