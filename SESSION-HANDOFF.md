@@ -1,7 +1,17 @@
 # SESSION HANDOFF — August 2026
 
 ## Aktuálna verzia
-**v68 — nasadené 2026-09-07** (reliability fix dual-write, nižšie). v67 = redizajn Prehľadov + rozšírené Uzávierky (A–M) + CSV export 4 typov (Sheet-ekvivalent). Tablety na v54+ aplikujú ráno o 5:00 (ranné okno) alebo cez ⟳. v67 sa tabletu nedotklo (Prehľady = lazy chunk); **v68 mení App.js** (len pridá periodický flush SB fronty na pozadí — appka nabieha čisto, overené).
+**LIVE = v68** (nasadené 2026-09-07, reliability fix dual-write). **v69 — COMMITNUTÉ na git, NENASADENÉ**: vylepšenia Prehľadov (nižšie), len `Prehlady.js` = lazy chunk → tabletu sa nedotkne, nasadenie na Jakubov pokyn. v67 = redizajn + rozšírené Uzávierky (A–M) + CSV export 4 typov. v68 = periodický flush SB fronty (App.js).
+
+### v69: Vylepšenia Prehľadov (len `Prehlady.js`, manažérske) — NENASADENÉ
+Jakub si vybral z návrhov (odpisy % vynechané — chýba € hodnota). Postavené + overené v `#prehlady-demo`, žiadne chyby:
+- **Porovnanie s predošlým obdobím** — ▲▼ % pri KPI (Tržby, Priemer, Splnenosť, HACCP merania). `prevRozsah` porovnáva **rovnako dlhé okno** (napr. 1.–7. sept vs 1.–7. aug), nie neúplné vs celý mesiac → férové. Fetchuje sa aj predošlé obdobie (`prevData` → `prevAgg`).
+- **Priemerná denná tržba** (tržby / dni s tržbou) + **najlepší/najhorší deň**.
+- **Stav dát (úplnosť)** — manažér 1 pobočky: mriežka deň × typ (uzávierka/úlohy/teploty povinné, odpisy voliteľné) + „X/Y kompletných dní"; admin (Všetky): per-pobočka súhrn (koľko dní má daný typ → kde treba backfill). Klik na deň → **detail dňa** (modal: uzávierka, úlohy, teploty, odpisy, problémy).
+- **HACCP mriežka** (sekcia Teploty) — zariadenie × deň (✓ v norme · ! prekročené · – chýba meranie) = kompletnosť pre hygienu.
+- **Health-score** 0–100 = úlohy 45 % + HACCP 35 % (prekročenia + chýbajúce merania) + kasa 20 % (manko/záporná/vysoký zostatok). Transparentný rozpad (3 pásiky). Pásma: ≥85 zelená, 70–84 zlatá, <70 červená.
+- **UX**: prepínač **Vlastné** (od–do date picker), **zapamätanie filtra** (mode/sekcia/custom rozsah v localStorage `foxford-prehlady-filter`; nie pobočka — tú riadia oprávnenia; nie refDate — chceme aktuálne).
+- **Refaktor**: agregácie sú teraz čistá modulová `computeAgg(data)` (použitá pre aktuálne aj predošlé obdobie). `normUzav` má `jManko` (J) pre manko. Manažér vidí len svoju pobočku (RLS) — cross-branch veci sú pre admina.
 
 ### v68: Reliability dual-write do Supabase (2026-09-07)
 Aby bol Supabase spoľahlivý zdroj (anon kľúč NEVIE čítať → appka nemôže reconcilovať, musí spoľahlivo doručiť). `sbFlushQueue` sa predtým spúšťal len pri evente `online` + raz po štarte → na nonstop tablete s „falošne online" wifi mohla položka visieť vo fronte donekonečna. Teraz: **periodický flush každých 5 min** + **flush pri visibilitychange (prebudenie)** + štart; cap fronty **200 → 500**. Send/mirror logika nezmenená. `sbInsert` používa reálny fetch (pozná `res.ok`) → 5xx/sieť → fronta, 4xx → len log. Front je v localStorage (prežije reštart).

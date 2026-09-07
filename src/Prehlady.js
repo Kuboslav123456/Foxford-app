@@ -98,6 +98,123 @@ function normUzav(d) {
 // Hotovosť z tržby — rovnaký vzorec ako v OBRATOVEJ TABUĽKE
 const hotovostZ = (u) => u.obrat - u.karta - u.gastro + u.zaokruhly - u.qerko - u.qerkoTr;
 
+// ── Agregácie (čistá funkcia — používa sa pre aktuálne aj predošlé obdobie) ───
+function computeAgg(data) {
+  if (!data) return null;
+  // Uzávierky: posledný záznam pre (branch, day, kasa) vyhráva (opravné odoslania)
+  const uzMap = {};
+  data.uzavierky.forEach(u => {
+    const k = `${u.branch}|${u.day}|${u.kasa || u.data?.kasa || ''}`;
+    if (!uzMap[k] || String(u.created_at || '') >= String(uzMap[k].created_at || '')) uzMap[k] = u;
+  });
+  const uzRows = Object.values(uzMap)
+    .map(u => ({ day: u.day, branch: u.branch, author: u.data?.author || u.meno || '', kasaTyp: u.kasa || u.data?.kasa || '', ...normUzav(u.data) }))
+    .sort((a, b) => a.day < b.day ? -1 : 1);
+
+  let trzby = 0, karty = 0, qerko = 0, gastro = 0, hotovost = 0;
+  const poDni = {};
+  uzRows.forEach(u => {
+    trzby += u.obrat; karty += u.karta; qerko += u.qerko + u.qerkoTr; gastro += u.gastro;
+    hotovost += hotovostZ(u);
+    poDni[u.day] = (poDni[u.day] || 0) + u.obrat;
+  });
+  // Priemerná denná tržba + najlepší/najhorší deň (z dní s tržbou)
+  const dniStrzbou = Object.keys(poDni).filter(d => poDni[d] > 0);
+  const priemerDenna = dniStrzbou.length ? trzby / dniStrzbou.length : 0;
+  let bestDay = null, worstDay = null;
+  dniStrzbou.forEach(d => {
+    if (!bestDay || poDni[d] > poDni[bestDay]) bestDay = d;
+    if (!worstDay || poDni[d] < poDni[worstDay]) worstDay = d;
+  });
+
+  // Stav kasy = posledný známy zostatok každej pobočky v období
+  const kasaPos = {};
+  uzRows.forEach(u => { if (u.kasa !== null) kasaPos[u.branch] = { den: u.day, kasa: u.kasa }; });
+  const kasaSpolu = Object.values(kasaPos).reduce((s, x) => s + x.kasa, 0);
+  // Manko v kase (J < 0) — len app-dialekt (import ho nemá)
+  const mankoDni = uzRows.filter(u => u.jManko != null && u.jManko < 0);
+  const mankoSpolu = mankoDni.reduce((s, u) => s + u.jManko, 0);
+
+  const upozornenia = [];
+  Object.entries(kasaPos).forEach(([b, x]) => {
+    if (x.kasa > 1000) upozornenia.push({ typ: 'warn', text: `${b}: vysoký stav hotovosti v kase (${fmtEur(x.kasa, 2)}) — odporúča sa odvod.` });
+    else if (x.kasa < 0) upozornenia.push({ typ: 'err', text: `${b}: záporný stav kasy (${fmtEur(x.kasa, 2)}) — skontrolujte uzávierky!` });
+  });
+
+  // Úlohy / odpisy / HACCP
+  const total = data.tasks.length;
+  const done = data.tasks.filter(t => t.done).length;
+  const pct = total ? Math.round(done / total * 100) : null;
+  const katMap = {};
+  data.tasks.forEach(t => {
+    katMap[t.category] = katMap[t.category] || { done: 0, total: 0 };
+    katMap[t.category].total++; if (t.done) katMap[t.category].done++;
+  });
+  const odpMap = {};
+  data.odpisy.forEach(o => {
+    const k = `${o.item}|${o.unit || ''}`;
+    odpMap[k] = odpMap[k] || { item: o.item, unit: o.unit || '', qty: 0 };
+    odpMap[k].qty += parseFloat(o.qty) || 0;
+  });
+  const topOdpisy = Object.values(odpMap).sort((a, b) => b.qty - a.qty).slice(0, 7);
+  const prekrocenia = data.haccp.filter(h => h.exceeded);
+  const meraniaSpolu = data.haccp.length;
+  const haccpDni = new Set(data.haccp.map(h => h.day));   // dni s aspoň jedným meraním
+
+  // Detail: konkrétne nesplnené / problémové úlohy (najnovšie hore)
+  const problemove = data.tasks.filter(t => !t.done || t.issue)
+    .map(t => ({ day: t.day, branch: t.branch, category: t.category, task: t.task || '(bez názvu)', issue: t.issue || null, by: t.done_by || null }))
+    .sort((a, b) => a.day < b.day ? 1 : -1);
+  const issMap = {};
+  data.tasks.filter(t => t.issue).forEach(t => {
+    const k = t.task || '(bez názvu)';
+    issMap[k] = issMap[k] || { task: k, count: 0, dni: [] };
+    issMap[k].count++; issMap[k].dni.push(t.day);
+  });
+  const opakProblemy = Object.values(issMap).filter(x => x.count >= 3).sort((a, b) => b.count - a.count);
+  const devMap = {};
+  prekrocenia.forEach(h => { const k = h.device || '(zariadenie)'; devMap[k] = (devMap[k] || 0) + 1; });
+  const opakHaccp = Object.entries(devMap).filter(([, n]) => n >= 3).map(([device, n]) => ({ device, n })).sort((a, b) => b.n - a.n);
+  opakProblemy.slice(0, 5).forEach(p => upozornenia.push({ typ: 'warn', text: `Opakovaný problém: „${p.task}" nahlásené ${p.count}× v období — vyžaduje pozornosť.` }));
+  opakHaccp.slice(0, 5).forEach(h => upozornenia.push({ typ: 'err', text: `${h.device}: prekročený teplotný limit ${h.n}× — skontrolujte chladenie/zariadenie.` }));
+
+  return { uzRows, trzby, karty, qerko, gastro, hotovost, poDni, dniStrzbou: dniStrzbou.length, priemerDenna, bestDay, worstDay,
+           kasaPos, kasaSpolu, mankoDni, mankoSpolu, upozornenia,
+           total, done, pct, katMap, topOdpisy, odpisovSpolu: data.odpisy.length, prekrocenia, meraniaSpolu, haccpDni,
+           problemove, opakProblemy, opakHaccp };
+}
+
+// Zoznam ISO dní v rozsahu (po dnešok — budúce dni nemá zmysel čakať)
+function dniVRozsahu(od, doD) {
+  const out = [], today = iso(new Date());
+  const d = new Date(od + 'T12:00:00');
+  while (iso(d) <= doD && iso(d) <= today && out.length < 400) { out.push(iso(d)); d.setDate(d.getDate() + 1); }
+  return out;
+}
+// Rozsah predošlého obdobia — ROVNAKO DLHÉ okno od začiatku predošlého obdobia,
+// aby porovnanie bolo férové aj pri prebiehajúcom (neúplnom) období
+// (napr. 1.–7. sept vs 1.–7. aug, nie vs celý august).
+function prevRozsah(mode, refDate, od, doD) {
+  const elapsed = dniVRozsahu(od, doD).length;   // koľko dní aktuálneho obdobia reálne prebehlo
+  const span = (startIso) => {
+    const pa = new Date(startIso + 'T12:00:00');
+    const pb = new Date(pa); pb.setDate(pb.getDate() + Math.max(elapsed - 1, 0));
+    return [iso(pa), iso(pb)];
+  };
+  if (mode === 'custom') {
+    const a = new Date(od + 'T12:00:00');
+    const pb = new Date(a); pb.setDate(pb.getDate() - 1);
+    const pa = new Date(pb); pa.setDate(pa.getDate() - Math.max(elapsed - 1, 0));
+    return [iso(pa), iso(pb)];
+  }
+  const d = new Date(refDate);
+  if (mode === 'den') d.setDate(d.getDate() - 1);
+  else if (mode === 'tyzden') d.setDate(d.getDate() - 7);
+  else if (mode === 'mesiac') d.setMonth(d.getMonth() - 1);
+  else d.setFullYear(d.getFullYear() - 1);
+  return span(rozsah(mode, d)[0]);   // od začiatku predošlého obdobia, rovnako veľa dní
+}
+
 // ── UKÁŽKOVÝ REŽIM (#prehlady-demo) — vymyslené dáta, bez prihlásenia ────────
 const DEMO = typeof window !== 'undefined' && window.location.hash === '#prehlady-demo';
 const DEMO_POBOCKY = ['Obchodná', 'Nivy', 'Cubicon', 'Levice', 'Martin', 'Žilina', 'Poprad', 'Prešov', 'Košice'];
@@ -514,21 +631,35 @@ const SEKCIE = [
 
 function Dashboard({ session, demo }) {
   const email = session.user?.email || '';
+  // Zapamätaný filter (mode/sekcia/vlastný rozsah) — načíta sa raz na začiatku
+  const F = useRef(null);
+  if (F.current === null) { try { F.current = JSON.parse(localStorage.getItem('foxford-prehlady-filter') || '{}') || {}; } catch (_) { F.current = {}; } }
   const [pobocky, setPobocky] = useState(null);
   const [vybrana, setVybrana] = useState('*');
-  const [mode, setMode] = useState('mesiac');
+  const [mode, setMode] = useState(F.current.mode || 'mesiac');   // den | tyzden | mesiac | rok | custom
   const [refDate, setRefDate] = useState(() => new Date());
+  const [customOd, setCustomOd] = useState(F.current.customOd || iso(new Date()));
+  const [customDoD, setCustomDoD] = useState(F.current.customDoD || iso(new Date()));
   const [data, setData] = useState(null);
+  const [prevData, setPrevData] = useState(null);       // predošlé obdobie (pre porovnanie)
   const [chyba, setChyba] = useState('');
   const [nacitava, setNacitava] = useState(true);
   const [zmenaHesla, setZmenaHesla] = useState(false);
   const [histStrana, setHistStrana] = useState(1);
-  const [filterKat, setFilterKat] = useState(null);   // klik na zmenu → filter detailu podľa kategórie
-  const [sekcia, setSekcia] = useState('prehlad');    // ľavé menu: prehlad | uzavierky | ulohy | odpisy | teploty
+  const [filterKat, setFilterKat] = useState(null);     // klik na zmenu → filter detailu podľa kategórie
+  const [detailDen, setDetailDen] = useState(null);     // deň otvorený v detaile (modal)
+  const [sekcia, setSekcia] = useState(F.current.sekcia || 'prehlad');   // ľavé menu
 
-  const [od, doD] = rozsah(mode, refDate);
-  // Ročný pohľad všetkých pobočiek = priveľa surových riadkov úloh/odpisov —
-  // vtedy zobrazujeme len tržbovú časť (rovnako to robila OBRATOVÁ TABUĽKA)
+  // Zapamätaj filter (nie vybraná pobočka — tú riadia oprávnenia; nie refDate — chceme aktuálne)
+  useEffect(() => {
+    try { localStorage.setItem('foxford-prehlady-filter', JSON.stringify({ mode, sekcia, customOd, customDoD })); } catch (_) {}
+  }, [mode, sekcia, customOd, customDoD]);
+
+  const [od, doD] = mode === 'custom'
+    ? (customOd <= customDoD ? [customOd, customDoD] : [customDoD, customOd])
+    : rozsah(mode, refDate);
+  const obLabel = mode === 'custom' ? `${dayLabel(od)} – ${dayLabel(doD)} ${doD.slice(0, 4)}` : rozsahLabel(mode, refDate);
+  // Ročný pohľad všetkých pobočiek = priveľa surových riadkov — vtedy len tržby
   const lenTrzby = mode === 'rok' && vybrana === '*';
   const animate = !REDUCE;
 
@@ -549,42 +680,49 @@ function Dashboard({ session, demo }) {
     })();
   }, [demo]);
 
-  // 2) Dáta za zvolené obdobie a pobočku
+  // 2) Dáta za zvolené obdobie a pobočku (+ predošlé obdobie na porovnanie)
   useEffect(() => {
     if (!pobocky) return;
     if (pobocky.length === 0) { setNacitava(false); return; }
+    const [pod, pdoD] = prevRozsah(mode, refDate, od, doD);
     let zij = true;
     (async () => {
-      setNacitava(true); setChyba(''); setHistStrana(1); setFilterKat(null);
+      setNacitava(true); setChyba(''); setHistStrana(1); setFilterKat(null); setDetailDen(null);
       if (demo) {
         const all = demoRows();
-        const f = rows => rows.filter(r => r.day >= od && r.day <= doD && (vybrana === '*' || r.branch === vybrana));
-        setData({ uzavierky: f(all.uzavierky), odpisy: lenTrzby ? [] : f(all.odpisy),
-                  tasks: lenTrzby ? [] : f(all.tasks), haccp: lenTrzby ? [] : f(all.haccp) });
+        const f = (rows, a, b) => rows.filter(r => r.day >= a && r.day <= b && (vybrana === '*' || r.branch === vybrana));
+        setData({ uzavierky: f(all.uzavierky, od, doD), odpisy: lenTrzby ? [] : f(all.odpisy, od, doD),
+                  tasks: lenTrzby ? [] : f(all.tasks, od, doD), haccp: lenTrzby ? [] : f(all.haccp, od, doD) });
+        setPrevData(lenTrzby ? null : { uzavierky: f(all.uzavierky, pod, pdoD), odpisy: [],
+                  tasks: f(all.tasks, pod, pdoD), haccp: f(all.haccp, pod, pdoD) });
         setNacitava(false);
         return;
       }
       try {
-        const q = (tab, sel) => () => {
-          let x = sb.from(tab).select(sel).gte('day', od).lte('day', doD).order('day');
+        const q = (tab, sel, a, b) => () => {
+          let x = sb.from(tab).select(sel).gte('day', a).lte('day', b).order('day');
           if (vybrana !== '*') x = x.eq('branch', vybrana);
           return x;
         };
-        const [uz, od_, ta, ha] = await Promise.all([
-          fetchAll(q('uzavierky_log', 'day, branch, kasa, meno, created_at, data')),
-          lenTrzby ? [] : fetchAll(q('odpisy_log', 'day, branch, item, qty, unit, reason, author, day_note')),
-          lenTrzby ? [] : fetchAll(q('tasks_log', 'day, branch, category, done, task, issue, done_by, inspector, done_time')),
-          lenTrzby ? [] : fetchAll(q('haccp_log', 'day, branch, device, value, max_limit, exceeded, inspector, shift')),
+        const [uz, od_, ta, ha, puz, pta, pha] = await Promise.all([
+          fetchAll(q('uzavierky_log', 'day, branch, kasa, meno, created_at, data', od, doD)),
+          lenTrzby ? [] : fetchAll(q('odpisy_log', 'day, branch, item, qty, unit, reason, author, day_note', od, doD)),
+          lenTrzby ? [] : fetchAll(q('tasks_log', 'day, branch, category, done, task, issue, done_by, inspector, done_time', od, doD)),
+          lenTrzby ? [] : fetchAll(q('haccp_log', 'day, branch, device, value, max_limit, exceeded, inspector, shift', od, doD)),
+          lenTrzby ? [] : fetchAll(q('uzavierky_log', 'day, branch, kasa, meno, created_at, data', pod, pdoD)),
+          lenTrzby ? [] : fetchAll(q('tasks_log', 'day, branch, category, done', pod, pdoD)),
+          lenTrzby ? [] : fetchAll(q('haccp_log', 'day, branch, exceeded', pod, pdoD)),
         ]);
         if (!zij) return;
         setData({ uzavierky: uz, odpisy: od_, tasks: ta, haccp: ha });
+        setPrevData(lenTrzby ? null : { uzavierky: puz, odpisy: [], tasks: pta, haccp: pha });
       } catch (e) {
         if (zij) setChyba('Načítanie dát zlyhalo: ' + (e.message || e));
       }
       if (zij) setNacitava(false);
     })();
     return () => { zij = false; };
-  }, [pobocky, vybrana, mode, refDate, demo]);        // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pobocky, vybrana, mode, refDate, customOd, customDoD, demo]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const posun = (dir) => {
     const d = new Date(refDate);
@@ -597,79 +735,9 @@ function Dashboard({ session, demo }) {
 
   const odhlasit = () => { if (demo) { window.location.hash = '#prehlady'; window.location.reload(); return; } sb.auth.signOut(); };
 
-  // ── Agregácie ──────────────────────────────────────────────────────────────
-  const agg = useMemo(() => {
-    if (!data) return null;
-    // Uzávierky: posledný záznam pre (branch, day, kasa) vyhráva (opravné odoslania)
-    const uzMap = {};
-    data.uzavierky.forEach(u => {
-      const k = `${u.branch}|${u.day}|${u.kasa || u.data?.kasa || ''}`;
-      if (!uzMap[k] || String(u.created_at || '') >= String(uzMap[k].created_at || '')) uzMap[k] = u;
-    });
-    const uzRows = Object.values(uzMap)
-      .map(u => ({ day: u.day, branch: u.branch, author: u.data?.author || u.meno || '', kasaTyp: u.kasa || u.data?.kasa || '', ...normUzav(u.data) }))
-      .sort((a, b) => a.day < b.day ? -1 : 1);
-
-    let trzby = 0, karty = 0, qerko = 0, gastro = 0, hotovost = 0;
-    const poDni = {};
-    uzRows.forEach(u => {
-      trzby += u.obrat; karty += u.karta; qerko += u.qerko + u.qerkoTr; gastro += u.gastro;
-      hotovost += hotovostZ(u);
-      poDni[u.day] = (poDni[u.day] || 0) + u.obrat;
-    });
-    // Stav kasy = posledný známy zostatok každej pobočky v období
-    const kasaPos = {};
-    uzRows.forEach(u => { if (u.kasa !== null) kasaPos[u.branch] = { den: u.day, kasa: u.kasa }; });
-    const kasaSpolu = Object.values(kasaPos).reduce((s, x) => s + x.kasa, 0);
-    // Upozornenia na kasu (prahy prevzaté z OBRATOVEJ TABUĽKY)
-    const upozornenia = [];
-    Object.entries(kasaPos).forEach(([b, x]) => {
-      if (x.kasa > 1000) upozornenia.push({ typ: 'warn', text: `${b}: vysoký stav hotovosti v kase (${fmtEur(x.kasa, 2)}) — odporúča sa odvod.` });
-      else if (x.kasa < 0) upozornenia.push({ typ: 'err', text: `${b}: záporný stav kasy (${fmtEur(x.kasa, 2)}) — skontrolujte uzávierky!` });
-    });
-
-    // Úlohy / odpisy / HACCP
-    const total = data.tasks.length;
-    const done = data.tasks.filter(t => t.done).length;
-    const pct = total ? Math.round(done / total * 100) : null;
-    const katMap = {};
-    data.tasks.forEach(t => {
-      katMap[t.category] = katMap[t.category] || { done: 0, total: 0 };
-      katMap[t.category].total++; if (t.done) katMap[t.category].done++;
-    });
-    const odpMap = {};
-    data.odpisy.forEach(o => {
-      const k = `${o.item}|${o.unit || ''}`;
-      odpMap[k] = odpMap[k] || { item: o.item, unit: o.unit || '', qty: 0 };
-      odpMap[k].qty += parseFloat(o.qty) || 0;
-    });
-    const topOdpisy = Object.values(odpMap).sort((a, b) => b.qty - a.qty).slice(0, 7);
-    const prekrocenia = data.haccp.filter(h => h.exceeded);
-
-    // Detail: konkrétne nesplnené / problémové úlohy (najnovšie hore)
-    const problemove = data.tasks.filter(t => !t.done || t.issue)
-      .map(t => ({ day: t.day, branch: t.branch, category: t.category, task: t.task || '(bez názvu)', issue: t.issue || null, by: t.done_by || null }))
-      .sort((a, b) => a.day < b.day ? 1 : -1);
-    // Opakovaný nahlásený problém: tá istá úloha s problémom viackrát v období
-    const issMap = {};
-    data.tasks.filter(t => t.issue).forEach(t => {
-      const k = t.task || '(bez názvu)';
-      issMap[k] = issMap[k] || { task: k, count: 0, dni: [] };
-      issMap[k].count++; issMap[k].dni.push(t.day);
-    });
-    const opakProblemy = Object.values(issMap).filter(x => x.count >= 3).sort((a, b) => b.count - a.count);
-    // Opakované HACCP prekročenie: to isté zariadenie prekročilo limit viackrát
-    const devMap = {};
-    prekrocenia.forEach(h => { const k = h.device || '(zariadenie)'; devMap[k] = (devMap[k] || 0) + 1; });
-    const opakHaccp = Object.entries(devMap).filter(([, n]) => n >= 3).map(([device, n]) => ({ device, n })).sort((a, b) => b.n - a.n);
-    // Doplň inteligentné upozornenia (nad rámec stavu kasy)
-    opakProblemy.slice(0, 5).forEach(p => upozornenia.push({ typ: 'warn', text: `Opakovaný problém: „${p.task}" nahlásené ${p.count}× v období — vyžaduje pozornosť.` }));
-    opakHaccp.slice(0, 5).forEach(h => upozornenia.push({ typ: 'err', text: `${h.device}: prekročený teplotný limit ${h.n}× — skontrolujte chladenie/zariadenie.` }));
-
-    return { uzRows, trzby, karty, qerko, gastro, hotovost, poDni, kasaPos, kasaSpolu, upozornenia,
-             total, done, pct, katMap, topOdpisy, odpisovSpolu: data.odpisy.length, prekrocenia,
-             problemove, opakProblemy, opakHaccp };
-  }, [data]);
+  // ── Agregácie (aktuálne + predošlé obdobie pre porovnanie) ──────────────────
+  const agg = useMemo(() => data ? computeAgg(data) : null, [data]);
+  const prevAgg = useMemo(() => prevData ? computeAgg(prevData) : null, [prevData]);
 
   const viacPobociek = (pobocky || []).length > 1;
   const kartyPct = agg && agg.trzby > 0 ? Math.round(agg.karty / agg.trzby * 100) : 0;
@@ -677,6 +745,33 @@ function Dashboard({ session, demo }) {
   const hasErr = !!agg && agg.upozornenia.some(u => u.typ === 'err');
   const hasKasa = !!agg && (agg.kasaSpolu !== 0 || Object.keys(agg.kasaPos).length > 0);
   const pctCol = (!agg || agg.pct == null) ? C.gold : agg.pct >= 90 ? C.ok : agg.pct >= 70 ? C.gold : C.err;
+
+  // Porovnanie s predošlým obdobím
+  const deltaPct = (cur, prev) => (prev == null || prev === 0) ? null : Math.round((cur - prev) / Math.abs(prev) * 100);
+  const Delta = ({ cur, prev, invert = false }) => {
+    const d = deltaPct(cur, prev);
+    if (d == null) return null;
+    const flat = d === 0, up = d > 0;
+    const good = flat ? null : (invert ? !up : up);   // invert=true → nárast je zlý (prekročenia, manko)
+    return <span style={{ color: good == null ? C.muted : good ? C.ok : C.err, fontWeight: 700, whiteSpace: 'nowrap' }}>
+      {flat ? '→' : up ? '▲' : '▼'} {Math.abs(d)} %</span>;
+  };
+
+  // Health-score pobočky (úlohy 45 % · HACCP 35 % · kasa 20 %)
+  const health = useMemo(() => {
+    if (!agg) return null;
+    const ulohy = agg.pct == null ? 100 : agg.pct;
+    const chybaHaccp = dniVRozsahu(od, doD).filter(d => !agg.haccpDni.has(d)).length;
+    const exceedRate = agg.meraniaSpolu ? agg.prekrocenia.length / agg.meraniaSpolu : 0;
+    let haccp = Math.max(0, Math.min(100, 100 - exceedRate * 100 - chybaHaccp * 5));
+    let kasa = 100 - agg.mankoDni.length * 10;
+    if (Object.values(agg.kasaPos).some(x => x.kasa < 0)) kasa -= 30;
+    if (Object.values(agg.kasaPos).some(x => x.kasa > 1000)) kasa -= 10;
+    kasa = Math.max(0, Math.min(100, kasa));
+    return { total: Math.round(ulohy * 0.45 + haccp * 0.35 + kasa * 0.20),
+             ulohy: Math.round(ulohy), haccp: Math.round(haccp), kasa: Math.round(kasa), chybaHaccp };
+  }, [agg, od, doD]);
+  const healthCol = (s) => s >= 85 ? C.ok : s >= 70 ? C.gold : C.err;
 
   // História — stránkovanie
   const HIST_NA_STRANU = 15;
@@ -754,7 +849,7 @@ function Dashboard({ session, demo }) {
   ) : null;
 
   const grafTrzieb = (delay = 0.18) => (
-    <Panel delay={delay} dur=".55s" title={mode === 'rok' ? `Mesačné tržby — ${rozsahLabel(mode, refDate)}` : `Vývoj tržieb — ${rozsahLabel(mode, refDate)}`} style={{ minWidth: 0 }}>
+    <Panel delay={delay} dur=".55s" title={mode === 'rok' ? `Mesačné tržby — ${obLabel}` : `Vývoj tržieb — ${obLabel}`} style={{ minWidth: 0 }}>
       {Object.keys(agg.poDni).length === 0
         ? <div style={{ color: C.muted, fontSize: 13, padding: '30px 0' }}>V tomto období nie sú žiadne uzávierky.</div>
         : <TrzbyChart agg={agg} mode={mode} vybrana={vybrana} pobocky={pobocky} animate={animate} />}
@@ -853,7 +948,7 @@ function Dashboard({ session, demo }) {
     return (
     <Panel>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: C.sub, letterSpacing: 1, textTransform: 'uppercase' }}>História uzávierok — {rozsahLabel(mode, refDate)}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: C.sub, letterSpacing: 1, textTransform: 'uppercase' }}>História uzávierok — {obLabel}</span>
         <span style={{ flex: 1 }} />
         {histRows.length > 0 && csvBtn(exportUzavierky)}
       </div>
@@ -932,7 +1027,7 @@ function Dashboard({ session, demo }) {
     return (
       <Panel>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: C.sub, letterSpacing: 1, textTransform: 'uppercase' }}>Najodpisovanejšie položky — {rozsahLabel(mode, refDate)}</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: C.sub, letterSpacing: 1, textTransform: 'uppercase' }}>Najodpisovanejšie položky — {obLabel}</span>
           <span style={{ flex: 1 }} />
           {data.odpisy.length > 0 && csvBtn(exportOdpisy)}
         </div>
@@ -1003,6 +1098,197 @@ function Dashboard({ session, demo }) {
     </div></Panel>
   );
 
+  // ── Health-score karta ─────────────────────────────────────────────────────
+  const healthKarta = () => {
+    if (!health) return null;
+    const bar = (label, val, delay) => (
+      <div key={label}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, marginBottom: 4 }}>
+          <span style={{ color: C.sub, fontWeight: 600 }}>{label}</span>
+          <span style={{ color: healthCol(val), fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{val}</span>
+        </div>
+        <ProgressBar pct={val} color={healthCol(val)} delay={delay} h={6} animate={animate} />
+      </div>
+    );
+    return (
+      <Panel delay={0.05} style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 22, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ textAlign: 'center', minWidth: 120 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.sub, letterSpacing: 1, textTransform: 'uppercase' }}>Health-score</div>
+            <div style={{ fontSize: 46, fontWeight: 700, color: healthCol(health.total), lineHeight: 1.05, fontVariantNumeric: 'tabular-nums' }}>
+              <Num value={health.total} animate={animate} format={n => Math.round(n)} /></div>
+            <div style={{ fontSize: 11, color: C.muted }}>zo 100</div>
+          </div>
+          <div style={{ flex: 1, minWidth: 220, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {bar('Úlohy (45 %)', health.ulohy, '.5s')}
+            {bar('HACCP (35 %)', health.haccp, '.6s')}
+            {bar('Kasa (20 %)', health.kasa, '.7s')}
+          </div>
+        </div>
+        {health.chybaHaccp > 0 && <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>ℹ️ {fmtNum(health.chybaHaccp)} dní bez merania teploty znižuje HACCP skóre.</div>}
+      </Panel>
+    );
+  };
+
+  // ── Stav dát (úplnosť) ─────────────────────────────────────────────────────
+  const stavDatKarta = () => {
+    const dni = dniVRozsahu(od, doD);
+    if (dni.length === 0) return null;
+    const uzDays = new Set(agg.uzRows.map(u => u.day));
+    const ulDays = new Set(data.tasks.map(t => t.day));
+    const odDays = new Set(data.odpisy.map(o => o.day));
+    const teDays = agg.haccpDni;
+    if (vybrana === '*') {   // admin — súhrn per pobočka
+      const perB = {};
+      (pobocky || []).forEach(b => { perB[b] = { uz: new Set(), ul: new Set(), te: new Set() }; });
+      agg.uzRows.forEach(u => perB[u.branch] && perB[u.branch].uz.add(u.day));
+      data.tasks.forEach(t => perB[t.branch] && perB[t.branch].ul.add(t.day));
+      data.haccp.forEach(h => perB[h.branch] && perB[h.branch].te.add(h.day));
+      const N = dni.length;
+      const cell = (s) => { const n = s.size, col = n >= N ? C.ok : n === 0 ? C.err : C.gold; return <td style={{ ...tdC, textAlign: 'right', color: col, fontWeight: 700 }}>{n}/{N}</td>; };
+      return (
+        <Panel title={`Stav dát — ${obLabel} (${N} dní)`} delay={0.3} style={{ marginBottom: 16 }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, fontVariantNumeric: 'tabular-nums' }}>
+              <thead><tr>
+                <th style={{ ...thC, textAlign: 'left' }}>Pobočka</th>
+                <th style={{ ...thC, textAlign: 'right' }}>Uzávierky</th>
+                <th style={{ ...thC, textAlign: 'right' }}>Úlohy</th>
+                <th style={{ ...thC, textAlign: 'right' }}>Teploty</th>
+              </tr></thead>
+              <tbody>
+                {(pobocky || []).map(b => (
+                  <tr key={b} className="fx-hrow" style={{ borderTop: '1px solid rgba(150,120,80,.12)' }}>
+                    <td style={{ ...tdC, fontWeight: 600 }}>{b}</td>
+                    {cell(perB[b].uz)}{cell(perB[b].ul)}{cell(perB[b].te)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>Koľko dní z obdobia má daný typ dát. Nižšie číslo = chýbajúce dni (kandidát na backfill).</div>
+        </Panel>
+      );
+    }
+    // manažér jednej pobočky — deň × typ
+    const dot = (on, req) => <span style={{ color: on ? C.ok : (req ? C.err : C.muted), fontWeight: 700 }}>{on ? '✓' : (req ? '✗' : '–')}</span>;
+    const kompletných = dni.filter(d => uzDays.has(d) && ulDays.has(d) && teDays.has(d)).length;
+    return (
+      <Panel delay={0.3} style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: C.sub, letterSpacing: 1, textTransform: 'uppercase' }}>Stav dát — {obLabel}</span>
+          <span style={{ flex: 1 }} />
+          <span style={{ fontSize: 11.5, color: kompletných === dni.length ? C.ok : C.gold, fontWeight: 700 }}>{kompletných}/{dni.length} kompletných dní</span>
+        </div>
+        <div style={{ overflowX: 'auto', maxHeight: 340, overflowY: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+            <thead><tr>
+              <th style={{ ...thC, textAlign: 'left' }}>Deň</th>
+              <th style={{ ...thC, textAlign: 'center' }}>Uzávierka</th>
+              <th style={{ ...thC, textAlign: 'center' }}>Úlohy</th>
+              <th style={{ ...thC, textAlign: 'center' }}>Teploty</th>
+              <th style={{ ...thC, textAlign: 'center' }}>Odpisy</th>
+            </tr></thead>
+            <tbody>
+              {[...dni].reverse().map(d => (
+                <tr key={d} className="fx-hrow" onClick={() => setDetailDen(d)} style={{ borderTop: '1px solid rgba(150,120,80,.12)', cursor: 'pointer' }}>
+                  <td style={{ ...tdC, fontWeight: 600 }}>{dayLabel(d)} <span style={{ color: C.muted, fontWeight: 400 }}>{dayName(d).slice(0, 2)}</span></td>
+                  <td style={{ padding: '7px 10px', textAlign: 'center' }}>{dot(uzDays.has(d), true)}</td>
+                  <td style={{ padding: '7px 10px', textAlign: 'center' }}>{dot(ulDays.has(d), true)}</td>
+                  <td style={{ padding: '7px 10px', textAlign: 'center' }}>{dot(teDays.has(d), true)}</td>
+                  <td style={{ padding: '7px 10px', textAlign: 'center' }}>{dot(odDays.has(d), false)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>✓ máme · ✗ chýba (uzávierka/úlohy/teploty povinné denne) · – odpisy nemuseli byť. Klik na deň → detail.</div>
+      </Panel>
+    );
+  };
+
+  // ── HACCP: mriežka zariadenie × deň (kompletnosť meraní) ────────────────────
+  const haccpGridKarta = () => {
+    const dni = dniVRozsahu(od, doD);
+    const devices = [...new Set(data.haccp.map(h => h.device))].filter(Boolean).sort();
+    if (devices.length === 0 || dni.length === 0) return null;
+    const m = {};
+    data.haccp.forEach(h => { const k = h.device + '|' + h.day; if (!m[k] || h.exceeded) m[k] = h; });
+    const chyba = devices.reduce((s, dev) => s + dni.filter(d => !m[dev + '|' + d]).length, 0);
+    return (
+      <Panel title={`Kompletnosť meraní teplôt — ${obLabel}`} delay={0.06} style={{ marginBottom: 16 }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
+            <thead><tr>
+              <th style={{ ...thC, textAlign: 'left', position: 'sticky', left: 0, background: C.panelFull }}>Zariadenie</th>
+              {dni.map(d => <th key={d} style={{ ...thC, textAlign: 'center', padding: '6px 4px' }}>{+d.slice(8)}</th>)}
+            </tr></thead>
+            <tbody>
+              {devices.map(dev => (
+                <tr key={dev} style={{ borderTop: '1px solid rgba(150,120,80,.12)' }}>
+                  <td style={{ ...tdC, fontWeight: 600, position: 'sticky', left: 0, background: C.panelFull }}>{dev}</td>
+                  {dni.map(d => {
+                    const h = m[dev + '|' + d];
+                    if (!h) return <td key={d} title={`${dayLabel(d)}: chýba`} style={{ padding: '5px 4px', textAlign: 'center', color: C.muted }}>–</td>;
+                    return <td key={d} title={`${dayLabel(d)}: ${h.value} °C`} style={{ padding: '5px 4px', textAlign: 'center', color: h.exceeded ? C.err : C.ok, fontWeight: 700 }}>{h.exceeded ? '!' : '✓'}</td>;
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>✓ v norme · <span style={{ color: C.err, fontWeight: 700 }}>!</span> prekročené · – chýba meranie (stĺpce = dni).{chyba > 0 ? ` Chýba ${fmtNum(chyba)} meraní.` : ''}</div>
+      </Panel>
+    );
+  };
+
+  // ── Detail dňa (modal, otvára sa klikom v „Stav dát") ──────────────────────
+  const dayDetailModal = () => {
+    if (!detailDen || !agg) return null;
+    const d = detailDen;
+    const uz = agg.uzRows.find(u => u.day === d);
+    const dtasks = data.tasks.filter(t => t.day === d);
+    const dprob = dtasks.filter(t => !t.done || t.issue);
+    const dhaccp = data.haccp.filter(h => h.day === d);
+    const dhExceed = dhaccp.filter(h => h.exceeded);
+    const dodp = data.odpisy.filter(o => o.day === d);
+    const Row = ({ l, v }) => <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, padding: '3px 0' }}><span style={{ color: C.sub }}>{l}</span><span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{v}</span></div>;
+    const Box = ({ title, col, children }) => <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 14, padding: '10px 14px' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: col || C.gold, letterSpacing: .8, textTransform: 'uppercase', marginBottom: 4 }}>{title}</div>{children}</div>;
+    return (
+      <div onMouseDown={() => setDetailDen(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(30,22,8,.5)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 90, padding: 20 }}>
+        <div onMouseDown={e => e.stopPropagation()} style={{ background: C.panelFull, border: `1px solid ${C.borderM}`, borderRadius: 20, width: '100%', maxWidth: 460, maxHeight: '85vh', overflowY: 'auto', padding: 22 }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 14 }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: C.text }}>{dayLabel(d)} {d.slice(0, 4)} · {dayName(d)}</div>
+            <span style={{ flex: 1 }} />
+            <button onClick={() => setDetailDen(null)} style={{ ...chipStyle(false), padding: '4px 11px' }}>✕</button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <Box title="Uzávierka">
+              {uz ? (<>
+                <Row l="Tržba" v={fmtEur(uz.obrat, 2)} />
+                <Row l="Karty" v={fmtEur(uz.karta, 2)} />
+                <Row l="Qerko (+tringelt)" v={fmtEur(uz.qerko + uz.qerkoTr, 2)} />
+                {uz.jManko != null && <Row l="Tringelt/Manko" v={fmtEur(uz.jManko, 2)} />}
+                <Row l="Kasa večer" v={uz.kasa == null ? '—' : fmtEur(uz.kasa, 2)} />
+              </>) : <div style={{ fontSize: 13, color: C.err, fontWeight: 600 }}>✗ Uzávierka chýba</div>}
+            </Box>
+            <Box title="Úlohy a teploty">
+              {dtasks.length ? <Row l="Splnené úlohy" v={`${dtasks.filter(t => t.done).length} / ${dtasks.length}`} /> : <div style={{ fontSize: 13, color: C.err, fontWeight: 600 }}>✗ Úlohy chýbajú</div>}
+              {dhaccp.length ? <Row l="Merania teplôt" v={`${dhaccp.length}${dhExceed.length ? ` · ${dhExceed.length} prekročení` : ''}`} /> : <div style={{ fontSize: 13, color: C.err, fontWeight: 600 }}>✗ Teploty chýbajú</div>}
+              <Row l="Odpisy" v={dodp.length ? `${dodp.length} záznamov` : '—'} />
+            </Box>
+            {dprob.length > 0 && (
+              <Box title={`Problémové úlohy (${dprob.length})`} col={C.err}>
+                {dprob.slice(0, 10).map((t, i) => <div key={i} style={{ fontSize: 12.5, color: C.text, padding: '2px 0' }}>{t.category} · {t.task || '(bez názvu)'} — <span style={{ color: C.err }}>{t.issue ? `⚠ ${t.issue}` : '✗ nesplnené'}</span></div>)}
+              </Box>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const PUBLIC = process.env.PUBLIC_URL;
 
   return (
@@ -1070,21 +1356,31 @@ function Dashboard({ session, demo }) {
               ))}
             </div>
             <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', alignItems: 'center' }}>
-              <div style={{ display: 'flex', background: 'rgba(255,255,255,.7)', border: '1px solid rgba(150,120,80,.2)', borderRadius: 22, padding: 3, gap: 2 }}>
-                {MODY.map(m => {
+              <div style={{ display: 'flex', background: 'rgba(255,255,255,.7)', border: '1px solid rgba(150,120,80,.2)', borderRadius: 22, padding: 3, gap: 2, flexWrap: 'wrap' }}>
+                {[...MODY, { id: 'custom', label: 'Vlastné' }].map(m => {
                   const on = mode === m.id;
                   return (
-                    <button key={m.id} className="fx-chip" onClick={() => { setMode(m.id); setRefDate(new Date()); }}
+                    <button key={m.id} className="fx-chip" onClick={() => { setMode(m.id); if (m.id !== 'custom') setRefDate(new Date()); }}
                       style={{ padding: '7px 16px', borderRadius: 18, fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
                         border: 'none', fontFamily: 'inherit', background: on ? C.text : 'transparent', color: on ? C.cream : C.sub }}>{m.label}</button>
                   );
                 })}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'rgba(255,255,255,.7)', border: '1px solid rgba(150,120,80,.2)', borderRadius: 22, padding: '3px 8px' }}>
-                <button className="fx-nav" onClick={() => posun(-1)} style={{ border: 'none', background: 'none', fontSize: 18, cursor: 'pointer', color: C.gold, padding: '2px 10px', fontFamily: 'inherit' }}>‹</button>
-                <div style={{ fontSize: 13, fontWeight: 700, minWidth: 150, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{rozsahLabel(mode, refDate)}</div>
-                <button className="fx-nav" onClick={() => posun(1)} style={{ border: 'none', background: 'none', fontSize: 18, cursor: 'pointer', color: C.gold, padding: '2px 10px', fontFamily: 'inherit' }}>›</button>
-              </div>
+              {mode === 'custom' ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,.7)', border: '1px solid rgba(150,120,80,.2)', borderRadius: 22, padding: '4px 10px' }}>
+                  <input type="date" value={customOd} max={customDoD} onChange={e => setCustomOd(e.target.value)}
+                    style={{ border: 'none', background: 'none', fontSize: 12.5, fontFamily: 'inherit', color: C.text, outline: 'none' }} />
+                  <span style={{ color: C.muted }}>–</span>
+                  <input type="date" value={customDoD} min={customOd} onChange={e => setCustomDoD(e.target.value)}
+                    style={{ border: 'none', background: 'none', fontSize: 12.5, fontFamily: 'inherit', color: C.text, outline: 'none' }} />
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'rgba(255,255,255,.7)', border: '1px solid rgba(150,120,80,.2)', borderRadius: 22, padding: '3px 8px' }}>
+                  <button className="fx-nav" onClick={() => posun(-1)} style={{ border: 'none', background: 'none', fontSize: 18, cursor: 'pointer', color: C.gold, padding: '2px 10px', fontFamily: 'inherit' }}>‹</button>
+                  <div style={{ fontSize: 13, fontWeight: 700, minWidth: 150, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{obLabel}</div>
+                  <button className="fx-nav" onClick={() => posun(1)} style={{ border: 'none', background: 'none', fontSize: 18, cursor: 'pointer', color: C.gold, padding: '2px 10px', fontFamily: 'inherit' }}>›</button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1103,8 +1399,9 @@ function Dashboard({ session, demo }) {
                 {sekcia === 'prehlad' && (
                   <>
                     <div style={gridKPI}>
-                      <KPI label="Tržby" color={C.gold} delay={0} note={rozsahLabel(mode, refDate)}
-                        value={<Num value={agg.trzby} animate={animate} format={n => fmtEur(Math.round(n))} />} />
+                      <KPI label="Tržby" color={C.gold} delay={0}
+                        value={<Num value={agg.trzby} animate={animate} format={n => fmtEur(Math.round(n))} />}
+                        note={<>{obLabel}{prevAgg ? <> · <Delta cur={agg.trzby} prev={prevAgg.trzby} /></> : null}</>} />
                       <KPI label="Platobné karty" color={C.gold} delay={0.07} note={`${kartyPct} % z tržieb`}
                         value={<Num value={agg.karty} animate={animate} format={n => fmtEur(Math.round(n))} />} />
                       <KPI label="Qerko" color={C.fialova} delay={0.14} note={`${qerkoPct} % z obratu`}
@@ -1112,24 +1409,35 @@ function Dashboard({ session, demo }) {
                       <KPI label="Hotovosť v kase" color={hasErr ? C.err : C.text} delay={0.21} note={vybrana === '*' ? 'súčet pobočiek' : 'zostatok večer'}
                         value={hasKasa ? <Num value={agg.kasaSpolu} animate={animate} format={n => fmtEur(n, 2)} /> : '—'} />
                     </div>
+                    {!lenTrzby && healthKarta()}
                     {upoz()}
                     <div className="pr-charts">
                       {grafTrzieb()}
                       {donutKarta()}
                     </div>
                     {!lenTrzby ? (
-                      <div style={gridKPI}>
-                        <KPI size={27} label="Splnenosť úloh" color={pctCol} delay={0.30}
-                          value={agg.pct === null ? '—' : <Num value={agg.pct} animate={animate} format={n => Math.round(n) + ' %'} />}>
-                          {agg.pct !== null && <ProgressBar pct={agg.pct} color={pctCol} delay=".5s" animate={animate} />}
-                        </KPI>
-                        <KPI size={27} label="Odpisov" color={C.gold} delay={0.37} note="záznamov v období"
-                          value={<Num value={agg.odpisovSpolu} animate={animate} format={n => fmtNum(Math.round(n))} />} />
-                        <KPI size={27} label="HACCP prekročenia" color={agg.prekrocenia.length ? C.err : C.ok} delay={0.44} note="teplotných limitov"
-                          value={<Num value={agg.prekrocenia.length} animate={animate} format={n => fmtNum(Math.round(n))} />} />
-                      </div>
+                      <>
+                        <div style={gridKPI}>
+                          <KPI size={27} label="Priemerná denná tržba" color={C.gold} delay={0.30}
+                            value={<Num value={agg.priemerDenna} animate={animate} format={n => fmtEur(Math.round(n))} />}
+                            note={prevAgg ? <Delta cur={agg.priemerDenna} prev={prevAgg.priemerDenna} /> : 'za deň s tržbou'} />
+                          <KPI size={27} label="Splnenosť úloh" color={pctCol} delay={0.37}
+                            value={agg.pct === null ? '—' : <Num value={agg.pct} animate={animate} format={n => Math.round(n) + ' %'} />}
+                            note={prevAgg && prevAgg.pct != null && agg.pct != null ? <Delta cur={agg.pct} prev={prevAgg.pct} /> : null}>
+                            {agg.pct !== null && <ProgressBar pct={agg.pct} color={pctCol} delay=".5s" animate={animate} />}
+                          </KPI>
+                          <KPI size={27} label="HACCP prekročenia" color={agg.prekrocenia.length ? C.err : C.ok} delay={0.44} note="teplotných limitov"
+                            value={<Num value={agg.prekrocenia.length} animate={animate} format={n => fmtNum(Math.round(n))} />} />
+                        </div>
+                        {agg.bestDay && vybrana !== '*' && (
+                          <div style={{ fontSize: 12, color: C.muted, marginTop: -6, marginBottom: 16 }}>
+                            Najlepší deň: <b style={{ color: C.text }}>{dayLabel(agg.bestDay)}</b> ({fmtEur(Math.round(agg.poDni[agg.bestDay]))}) · najslabší: <b style={{ color: C.text }}>{dayLabel(agg.worstDay)}</b> ({fmtEur(Math.round(agg.poDni[agg.worstDay]))})
+                          </div>
+                        )}
+                        {stavDatKarta()}
+                      </>
                     ) : (
-                      <div style={{ fontSize: 12, color: C.muted }}>ℹ️ Ročný pohľad všetkých pobočiek zobrazuje len tržby — pre úlohy/odpisy/teploty vyber pobočku alebo kratšie obdobie.</div>
+                      <div style={{ fontSize: 12, color: C.muted }}>ℹ️ Ročný pohľad všetkých pobočiek zobrazuje len tržby — pre úlohy/odpisy/teploty/health vyber pobočku alebo kratšie obdobie.</div>
                     )}
                   </>
                 )}
@@ -1158,7 +1466,7 @@ function Dashboard({ session, demo }) {
                 {sekcia === 'odpisy' && (lenTrzby ? infoLenTrzby() : (
                   <>
                     <div style={gridKPI}>
-                      <KPI label="Odpisov spolu" color={C.gold} delay={0} note={rozsahLabel(mode, refDate)}
+                      <KPI label="Odpisov spolu" color={C.gold} delay={0} note={obLabel}
                         value={<Num value={agg.odpisovSpolu} animate={animate} format={n => fmtNum(Math.round(n))} />} />
                       <KPI label="Rôznych položiek" color={C.gold} delay={0.07}
                         value={<Num value={new Set(data.odpisy.map(o => o.item)).size} animate={animate} format={n => fmtNum(Math.round(n))} />} />
@@ -1171,12 +1479,14 @@ function Dashboard({ session, demo }) {
                 {sekcia === 'teploty' && (lenTrzby ? infoLenTrzby() : (
                   <>
                     <div style={gridKPI}>
-                      <KPI label="Prekročení limitu" color={agg.prekrocenia.length ? C.err : C.ok} delay={0} note={rozsahLabel(mode, refDate)}
+                      <KPI label="Prekročení limitu" color={agg.prekrocenia.length ? C.err : C.ok} delay={0} note={obLabel}
                         value={<Num value={agg.prekrocenia.length} animate={animate} format={n => fmtNum(Math.round(n))} />} />
                       <KPI label="Meraní spolu" color={C.gold} delay={0.07}
-                        value={<Num value={data.haccp.length} animate={animate} format={n => fmtNum(Math.round(n))} />} />
+                        value={<Num value={data.haccp.length} animate={animate} format={n => fmtNum(Math.round(n))} />}
+                        note={prevAgg ? <Delta cur={agg.meraniaSpolu} prev={prevAgg.meraniaSpolu} /> : null} />
                     </div>
                     {upoz()}
+                    {haccpGridKarta()}
                     {haccpKarta()}
                   </>
                 ))}
@@ -1187,6 +1497,7 @@ function Dashboard({ session, demo }) {
       </div>
 
       {zmenaHesla && <ZmenaHesla onClose={() => setZmenaHesla(false)} />}
+      {dayDetailModal()}
     </div>
   );
 }
