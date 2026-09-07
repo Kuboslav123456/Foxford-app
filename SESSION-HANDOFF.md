@@ -1,7 +1,7 @@
 # SESSION HANDOFF — August 2026
 
 ## Aktuálna verzia
-**LIVE = v68** (nasadené 2026-09-07, reliability fix dual-write). **v69 — COMMITNUTÉ na git, NENASADENÉ**: vylepšenia Prehľadov (nižšie), len `Prehlady.js` = lazy chunk → tabletu sa nedotkne, nasadenie na Jakubov pokyn. v67 = redizajn + rozšírené Uzávierky (A–M) + CSV export 4 typov. v68 = periodický flush SB fronty (App.js).
+**LIVE = v70** (nasadené 2026-09-07). História: v67 redizajn Prehľadov + rozšírené Uzávierky (A–M) + CSV export 4 typov; v68 periodický flush SB fronty (App.js, reliability); v69 vylepšenia Prehľadov (porovnanie/priemer/Stav dát/HACCP mriežka/Health-score/custom rozsah, nižšie); **v70 = Prehľady na plnú šírku** (`.pr-cont` bez `max-width:1180px`, adaptívny padding `clamp(16px,2.2vw,44px)` — Jakub chcel využiť prázdny priestor vpravo; responzívne, žiadny horizontálny overflow). v69+v70 sú len `Prehlady.js` (lazy chunk) → tabletu sa nedotkli.
 
 ### v69: Vylepšenia Prehľadov (len `Prehlady.js`, manažérske) — NENASADENÉ
 Jakub si vybral z návrhov (odpisy % vynechané — chýba € hodnota). Postavené + overené v `#prehlady-demo`, žiadne chyby:

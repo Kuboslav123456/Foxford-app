@@ -304,7 +304,7 @@ function PrStyle() {
 .pr-menu{padding:12px 10px;display:flex;flex-direction:column;gap:4px;flex:1;overflow-y:auto}
 .pr-main{flex:1;min-width:0;display:flex;flex-direction:column;position:relative;z-index:1}
 .pr-top{position:sticky;top:0;z-index:15;background:rgba(236,229,211,.88);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid rgba(150,120,80,.18);padding:14px 26px;display:flex;flex-direction:column;gap:10px}
-.pr-cont{padding:24px 26px 48px;max-width:1180px;width:100%;box-sizing:border-box}
+.pr-cont{padding:24px clamp(16px,2.2vw,44px) 48px;width:100%;box-sizing:border-box}
 .pr-charts{display:grid;gap:14px;grid-template-columns:1.6fr 1fr;margin-bottom:16px}
 @media(max-width:860px){
  .pr-layout{flex-direction:column}
