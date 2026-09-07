@@ -526,7 +526,7 @@ function sbQueue(table, rows) {
   try {
     const q = JSON.parse(localStorage.getItem('foxford-sb-queue') || '[]');
     q.push({ table, rows, ts: Date.now() });
-    localStorage.setItem('foxford-sb-queue', JSON.stringify(q.slice(-200)));
+    localStorage.setItem('foxford-sb-queue', JSON.stringify(q.slice(-500)));
   } catch (_) {}
 }
 
@@ -561,7 +561,11 @@ function sbFlushQueue() {
 
 if (typeof window !== 'undefined') {
   window.addEventListener('online', sbFlushQueue);
-  setTimeout(sbFlushQueue, 4000); // po štarte appky skús doposielať nevybavené
+  // Tablet beží nonstop a navigator.onLine býva true aj pri výpadku wifi/uspatí —
+  // preto nestačí len event 'online': skúšaj frontu aj periodicky a pri prebudení.
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sbFlushQueue(); });
+  setTimeout(sbFlushQueue, 4000);            // po štarte appky skús doposielať nevybavené
+  setInterval(sbFlushQueue, 5 * 60 * 1000);  // periodicky každých 5 min (ako GAS front)
 }
 
 // Prevod sk-SK dátumu ("2. 9. 2026" aj "2. 9. 2026, 14:23:45") na ISO YYYY-MM-DD
