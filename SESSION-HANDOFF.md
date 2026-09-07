@@ -30,6 +30,12 @@ Jakub rozhodol: **postupne opustiť Google Sheets, ale zatiaľ ju NECHAŤ ako z�
 - [x] **Backfill 3.9. Obchodná** — HOTOVÉ (2026-09-04): 1 riadok do `uzavierky_log` (obrat **1690 €**, karta 1171.16, qerko 301.19 +16.79 tringelt, kasa večer 435.28; `meno='import OBRATY'`, `data.zdroj='obraty-import'`) zo živého Sheetu Obchodnej cez anon INSERT. **RLS gotcha:** anon INSERT musí ísť s `Prefer: return=minimal` — `return=representation` si číta riadok späť (SELECT), ktorý anon podľa RLS nemá → 42501. Skript: scratchpad `backfill-obchodna-3-9.mjs` (kópia mechanizmu z import-obraty.mjs).
 - [ ] Ostatné pobočky na v65+ (rovnaká prechodová medzera ich čaká) + retencia.
 
+**💡 NÁPAD — správy manažér → tablet (ODLOŽENÉ, neimplementovať bez pokynu, 2026-09-07):**
+Manažér z Prehľadov pošle správu na prevádzku (napr. Poprad) → uloží do novej tabuľky `branch_messages` → tablet ju stiahne zo Supabase a zobrazí (odporúčaný UX: banner/okno čo obsluha ťuknutím potvrdí → „prečítané" sa zapíše späť obyčajným insertom, manažér to vidí). Manažér smie posielať len na svoje pobočky (RLS cez `manager_pobocky`).
+- **Nová architektúra:** tablet by prvýkrát **ČÍTAL** zo Supabase (doteraz len zapisuje). Vyžaduje **SELECT policy pre anon** na `branch_messages` (SQL, púšťa Jakub).
+- ⚠️ **BEZPEČNOSŤ (Jakub žiada MAX bezpečnosť — viď pamäť [[foxford-security-priority]]):** anon kľúč je verejný v bundli → čokoľvek anon-čitateľné je **fakticky verejné**. Preto: buď len low-risk prevádzkové odkazy cez anon-read, alebo (bezpečnejšie) dať tabletu **vlastné prihlásenie** namiesto anon-read. Rozhodnúť pred implementáciou. NEROBIŤ anon-read na finančných tabuľkách.
+- Otvorené rozhodnutia (z chatu): jednosmerne vs. obojsmerne s potvrdením; banner vs. tab Odkazy.
+
 ### Dnešný míľnik (2026-09-03): Supabase migrácia — detail v pamäti [[foxford-supabase]]
 - **v65 dual-write + Prehľady**, **v66 detail úloh + upozornenia** (nižšie).
 - **História Obchodnej naimportovaná KOMPLETNE**: tržby 2023-01-01→2026-09-02 (uzavierky_log), úlohy (1996), teploty/HACCP (1181), odpisy (544) — 22.6.→2.9.2026. Zdroj: Google Sheet Obchodnej „Dáta z aplikácie" cez gviz CSV (Chrome, Jakub prihlásený do Google). Ostatné pobočky históriu NEMAJÚ (Nivy potvrdene bez dát) — naplnia sa dual-writeom po aktualizácii tabletov na v65+.
