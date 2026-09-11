@@ -1,7 +1,13 @@
 # SESSION HANDOFF — August 2026
 
 ## Aktuálna verzia
-**LIVE = v70** (nasadené 2026-09-07). História: v67 redizajn Prehľadov + rozšírené Uzávierky (A–M) + CSV export 4 typov; v68 periodický flush SB fronty (App.js, reliability); v69 vylepšenia Prehľadov (porovnanie/priemer/Stav dát/HACCP mriežka/Health-score/custom rozsah, nižšie); **v70 = Prehľady na plnú šírku** (`.pr-cont` bez `max-width:1180px`, adaptívny padding `clamp(16px,2.2vw,44px)` — Jakub chcel využiť prázdny priestor vpravo; responzívne, žiadny horizontálny overflow). v69+v70 sú len `Prehlady.js` (lazy chunk) → tabletu sa nedotkli.
+**LIVE = v71** (nasadené 2026-09-11, overené naživo: version.json=71, live demo renderuje nový dizajn). História: v67 redizajn Prehľadov + rozšírené Uzávierky (A–M) + CSV export 4 typov; v68 periodický flush SB fronty (App.js, reliability); v69 vylepšenia Prehľadov (porovnanie/priemer/Stav dát/HACCP mriežka/Health-score/custom rozsah, nižšie); v70 = Prehľady na plnú šírku (`.pr-cont` bez `max-width:1180px`, adaptívny padding); **v71 = svetlý vzdušný sidebar + HACCP heatmapa + Novinky (nižšie)**. v69–v71 sú len `Prehlady.js` (lazy chunk) → tabletu sa nedotkli.
+
+### v71: Svetlý sidebar + HACCP heatmapa + Novinky — NASADENÉ (LIVE 2026-09-11)
+Len `Prehlady.js` (+ bump verzie). Tri veci:
+- **Sidebar svetlý/vzdušný**: čierny gradient (`#261b0c→#1c1307`) → **frosted glass** (`linear-gradient(rgba(255,255,255,.66),rgba(252,249,242,.40))` + `backdrop-filter:blur(16px)`), tmavý text (`C.text/C.sub`), hairline border namiesto ťažkého tieňa, logo priamo na skle (bez krémovej karty — logo je tmavé, číta sa), jemný gold hover na neaktívnych (`.fx-mbtn:not(.on):hover`), vzdušnejšie paddingy. Aktívna sekcia = zlatá pilulka ostáva. Mobil: border-right→border-bottom.
+- **HACCP „Kompletnosť meraní"** (`haccpGridKarta`): z malej natlačenej tabuľky (2/3 karty prázdne) na **heatmapu na plnú šírku** — `width:100%`, `border-spacing:4`, farebné dlaždice (✓ `okDim`/! `errDim`/– neutrál) fillujú bunky. Device stĺpec `width:1%` sticky. Škáluje Deň→Mesiac.
+- **Novinky** — nová sekcia (admin→manažéri), detail v [[foxford-novinky]] / memory. Tabuľka `novinky` + RLS (Jakub spustil SQL, overené naživo: anon read `[]`, anon write 401). `ADMIN_EMAILS=['jakub.hrebenar@foxford.sk']` (sedí s RLS). Banner najnovšej v Prehľade, „nové" bodka v menu (localStorage `foxford-novinky-seen`).
 
 ### v69: Vylepšenia Prehľadov (len `Prehlady.js`, manažérske) — NENASADENÉ
 Jakub si vybral z návrhov (odpisy % vynechané — chýba € hodnota). Postavené + overené v `#prehlady-demo`, žiadne chyby:
