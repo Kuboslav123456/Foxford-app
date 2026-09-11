@@ -627,13 +627,113 @@ function rozsahLabel(mode, date) {
 // ── Dashboard ────────────────────────────────────────────────────────────────
 const MODY = [{ id: 'den', label: 'Deň' }, { id: 'tyzden', label: 'Týždeň' }, { id: 'mesiac', label: 'Mesiac' }, { id: 'rok', label: 'Rok' }];
 const SEKCIE = [
-  { id: 'prehlad', ikona: '🏠', label: 'Prehľad' },
-  { id: 'novinky', ikona: '📣', label: 'Novinky' },
-  { id: 'uzavierky', ikona: '💰', label: 'Uzávierky' },
-  { id: 'ulohy', ikona: '✅', label: 'Úlohy' },
-  { id: 'odpisy', ikona: '📉', label: 'Odpisy' },
-  { id: 'teploty', ikona: '🌡️', label: 'Teploty' },
+  { id: 'prehlad', label: 'Prehľad' },
+  { id: 'novinky', label: 'Novinky' },
+  { id: 'uzavierky', label: 'Uzávierky' },
+  { id: 'ulohy', label: 'Úlohy' },
+  { id: 'odpisy', label: 'Odpisy' },
+  { id: 'teploty', label: 'Teploty' },
 ];
+
+// Duotone ikonky sidebaru (24×24 viewBox, currentColor → dedia farbu textu, takže
+// jeden asset stačí pre default/aktívny/hover stav). Dizajn „Icon design proposals"
+// (smer 1c duotone): mäkká výplň ~22–28 % + 1.8px obrys. NOVÉ ikonky rob v tomto štýle.
+const SEK_IKONY = {
+  prehlad: (
+    <>
+      <path d="M4 11 L12 4 L20 11 V20 H4 Z" fill="currentColor" opacity="0.22" />
+      <path d="M4 11 L12 4 L20 11 V20 H4 Z M10 20 V14 H14 V20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  novinky: (
+    <>
+      <path d="M6 16 V10 A6 6 0 0 1 18 10 V16 L20 18 H4 Z" fill="currentColor" opacity="0.22" />
+      <path d="M6 16 V10 A6 6 0 0 1 18 10 V16 L20 18 H4 Z M10.5 21 A2 2 0 0 0 13.5 21" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  uzavierky: (
+    <>
+      <rect x="4" y="5" width="16" height="16" rx="2.5" fill="currentColor" opacity="0.28" />
+      <rect x="4" y="5" width="16" height="16" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M4 10 H20 M8 3 V7 M16 3 V7 M9 14.5 L11.2 16.7 L15.5 12.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  ulohy: (
+    <>
+      <rect x="4" y="4" width="16" height="16" rx="4" fill="currentColor" opacity="0.22" />
+      <rect x="4" y="4" width="16" height="16" rx="4" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8.5 12.5 L11 15 L15.5 9.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  odpisy: (
+    <>
+      <path d="M5 7 L10 12.5 L13.5 9.5 L19 15.5 V20 H5 Z" fill="currentColor" opacity="0.22" />
+      <path d="M4 20 H20 M5 7 L10 12.5 L13.5 9.5 L19 15.5 M19 11.5 V15.5 H15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  teploty: (
+    <>
+      <path d="M10 13.5 V4.5 A2 2 0 0 1 14 4.5 V13.5 A4.5 4.5 0 1 1 10 13.5 Z" fill="currentColor" opacity="0.22" />
+      <path d="M10 13.5 V4.5 A2 2 0 0 1 14 4.5 V13.5 A4.5 4.5 0 1 1 10 13.5 Z M12 15.4 V9" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="12" cy="17" r="1.6" fill="currentColor" />
+    </>
+  ),
+  // ── UI ikonky (rovnaký duotone štýl) — používané v obsahu, nielen v menu ──
+  download: (
+    <>
+      <path d="M5 14 V17.5 A1.5 1.5 0 0 0 6.5 19 H17.5 A1.5 1.5 0 0 0 19 17.5 V14 Z" fill="currentColor" opacity="0.22" />
+      <path d="M12 4 V13.5 M8.5 10 L12 13.5 L15.5 10 M5 14 V17.5 A1.5 1.5 0 0 0 6.5 19 H17.5 A1.5 1.5 0 0 0 19 17.5 V14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  info: (
+    <>
+      <circle cx="12" cy="12" r="8.5" fill="currentColor" opacity="0.22" />
+      <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M12 11 V16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="12" cy="8" r="1.15" fill="currentColor" />
+    </>
+  ),
+  edit: (
+    <>
+      <path d="M16.5 3.5 a2.12 2.12 0 0 1 3 3 L7 19 l-4 1 1-4 Z" fill="currentColor" opacity="0.22" />
+      <path d="M16.5 3.5 a2.12 2.12 0 0 1 3 3 L7 19 l-4 1 1-4 Z M14 6 L17.5 9.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M6 7 H18 L16.8 19.5 A1.5 1.5 0 0 1 15.3 21 H8.7 A1.5 1.5 0 0 1 7.2 19.5 Z" fill="currentColor" opacity="0.22" />
+      <path d="M4 6 H20 M9.5 6 V4.5 A1 1 0 0 1 10.5 3.5 H13.5 A1 1 0 0 1 14.5 4.5 V6 M6 7 L7.2 19.5 A1.5 1.5 0 0 0 8.7 21 H15.3 A1.5 1.5 0 0 0 16.8 19.5 L18 7 M10 10 V17 M14 10 V17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  pin: (
+    <>
+      <path d="M12 21 C12 21 5.5 14.8 5.5 10 A6.5 6.5 0 1 1 18.5 10 C18.5 14.8 12 21 12 21 Z" fill="currentColor" opacity="0.22" />
+      <path d="M12 21 C12 21 5.5 14.8 5.5 10 A6.5 6.5 0 1 1 18.5 10 C18.5 14.8 12 21 12 21 Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <circle cx="12" cy="10" r="2.4" fill="none" stroke="currentColor" strokeWidth="1.8" />
+    </>
+  ),
+  tip: (
+    <>
+      <path d="M12 3 A6 6 0 0 1 15.5 13.8 A2 2 0 0 0 14.7 15.4 V16 H9.3 V15.4 A2 2 0 0 0 8.5 13.8 A6 6 0 0 1 12 3 Z" fill="currentColor" opacity="0.22" />
+      <path d="M9.3 16 V15.4 A2 2 0 0 0 8.5 13.8 A6 6 0 1 1 15.5 13.8 A2 2 0 0 0 14.7 15.4 V16 M9.5 18.5 H14.5 M10.5 21 H13.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+};
+function SekIkona({ id, size = 20 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ display: 'block', flexShrink: 0 }}>
+      {SEK_IKONY[id] || null}
+    </svg>
+  );
+}
+// Ikonka zarovnaná vedľa textu (poznámky, tlačidlá s popisom); dedí farbu, ak nie je zadaná
+function IkonaTxt({ id, size = 15, color, style }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color, ...style }}>
+      <SekIkona id={id} size={size} />
+    </span>
+  );
+}
 
 // Admin (môže písať a mazať novinky). Rovnaký e-mail vynucuje aj RLS priamo
 // v databáze — UI to len zrkadlí; aj keby niekto obišiel appku, zápis pustí
@@ -901,7 +1001,7 @@ function Dashboard({ session, demo }) {
   };
   const csvBtn = (onClick, label = 'CSV') => (
     <button className="fx-chip" onClick={onClick}
-      style={{ ...chipStyle(false), display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700 }}>⬇ {label}</button>
+      style={{ ...chipStyle(false), display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 700 }}><SekIkona id="download" size={15} />{label}</button>
   );
 
   // ── znovupoužiteľné bloky (volajú sa iba keď agg existuje) ────────────────
@@ -966,7 +1066,7 @@ function Dashboard({ session, demo }) {
             })}
           </div>
         )}
-      <div style={{ fontSize: 11, color: C.muted, marginTop: 12 }}>💡 klikni na zmenu pre filter detailu nižšie</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: C.muted, marginTop: 12 }}><IkonaTxt id="tip" size={14} />klikni na zmenu pre filter detailu nižšie</div>
     </Panel>
   );
 
@@ -1166,8 +1266,9 @@ function Dashboard({ session, demo }) {
   );
 
   const infoLenTrzby = () => (
-    <Panel><div style={{ fontSize: 13, color: C.muted }}>
-      ℹ️ Ročný pohľad všetkých pobočiek zobrazuje len tržby. Pre túto sekciu vyber konkrétnu pobočku alebo kratšie obdobie (mesiac/týždeň).
+    <Panel><div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, color: C.muted }}>
+      <IkonaTxt id="info" size={16} style={{ marginTop: 1 }} />
+      <span>Ročný pohľad všetkých pobočiek zobrazuje len tržby. Pre túto sekciu vyber konkrétnu pobočku alebo kratšie obdobie (mesiac/týždeň).</span>
     </div></Panel>
   );
 
@@ -1198,7 +1299,7 @@ function Dashboard({ session, demo }) {
             {bar('Kasa (20 %)', health.kasa, '.7s')}
           </div>
         </div>
-        {health.chybaHaccp > 0 && <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>ℹ️ {fmtNum(health.chybaHaccp)} dní bez merania teploty znižuje HACCP skóre.</div>}
+        {health.chybaHaccp > 0 && <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: C.muted, marginTop: 10 }}><IkonaTxt id="info" size={13} /><span>{fmtNum(health.chybaHaccp)} dní bez merania teploty znižuje HACCP skóre.</span></div>}
       </Panel>
     );
   };
@@ -1331,7 +1432,7 @@ function Dashboard({ session, demo }) {
     return (
       <>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '2px 2px 18px', animation: `fxUp .5s backwards` }}>
-          <span style={{ fontSize: 24 }}>📣</span>
+          <span style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: C.gold, flexShrink: 0 }}><SekIkona id="novinky" size={26} /></span>
           <div>
             <div style={{ fontSize: 21, fontWeight: 700, color: C.text, lineHeight: 1.1 }}>Novinky</div>
             <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>Oznamy pre všetkých manažérov</div>
@@ -1340,7 +1441,7 @@ function Dashboard({ session, demo }) {
 
         {jeAdmin && (
           <Panel delay={0.04} style={{ marginBottom: 20, border: `1px solid ${C.goldLine}` }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.sub, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>✍️ Napísať novinku</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, fontWeight: 700, color: C.sub, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}><IkonaTxt id="edit" size={14} />Napísať novinku</div>
             <input value={novTitulok} onChange={e => setNovTitulok(e.target.value)} placeholder="Titulok (napr. Nové jesenné menu)" maxLength={140}
               style={{ ...inpBase, marginBottom: 10 }} />
             <textarea value={novText} onChange={e => setNovText(e.target.value)} placeholder="Text oznamu…" rows={4} maxLength={4000}
@@ -1382,7 +1483,7 @@ function Dashboard({ session, demo }) {
                 </div>
                 {jeAdmin && (
                   <button className="fx-nav" onClick={() => zmazNovinku(n.id)} title="Zmazať novinku"
-                    style={{ border: 'none', background: 'none', color: C.muted, cursor: 'pointer', fontSize: 15, padding: 2, lineHeight: 1, flexShrink: 0 }}>🗑</button>
+                    style={{ border: 'none', background: 'none', color: C.muted, cursor: 'pointer', padding: 2, lineHeight: 1, flexShrink: 0 }}><SekIkona id="trash" size={17} /></button>
                 )}
               </div>
               <div style={{ fontSize: 14, color: C.sub, marginTop: 8, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{n.text}</div>
@@ -1474,7 +1575,7 @@ function Dashboard({ session, demo }) {
                     fontSize: 14, fontWeight: 600, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', width: '100%',
                     background: on ? 'linear-gradient(135deg,#d9a03f,#b87020)' : undefined, color: on ? C.dark2 : C.sub,
                     boxShadow: on ? '0 6px 16px rgba(184,112,32,.28)' : 'none' }}>
-                  <span style={{ fontSize: 16, width: 20, textAlign: 'center' }}>{s.ikona}</span>{s.label}
+                  <span style={{ width: 22, height: 22, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><SekIkona id={s.id} size={21} /></span>{s.label}
                   {s.id === 'novinky' && novNove > 0 && (
                     <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 800, color: '#fff', background: C.gold, borderRadius: 20, minWidth: 18, height: 18, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px', boxShadow: '0 2px 6px rgba(184,112,32,.35)' }}>{novNove}</span>
                   )}
@@ -1507,7 +1608,7 @@ function Dashboard({ session, demo }) {
                   ))}
                 </>
               ) : (pobocky && pobocky[0] && (
-                <div style={{ fontSize: 13, fontWeight: 700, color: C.gold, padding: '4px 2px' }}>📍 {pobocky[0]}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: C.gold, padding: '4px 2px' }}><SekIkona id="pin" size={16} />{pobocky[0]}</div>
               ))}
             </div>
             <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1559,7 +1660,7 @@ function Dashboard({ session, demo }) {
                       <div onClick={() => setSekcia('novinky')} className="fx-kpi" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12,
                         background: novinky[0].dolezite ? 'linear-gradient(135deg,rgba(217,160,63,.16),rgba(255,255,255,.82))' : C.panel,
                         border: `1px solid ${novinky[0].dolezite ? C.goldLine : C.border}`, borderRadius: 16, padding: '12px 16px', marginBottom: 16, boxShadow: '0 2px 16px rgba(90,70,45,.06)' }}>
-                        <span style={{ fontSize: 18 }}>📣</span>
+                        <span style={{ width: 20, height: 20, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: C.gold, flexShrink: 0 }}><SekIkona id="novinky" size={19} /></span>
                         <div style={{ minWidth: 0, flex: 1 }}>
                           <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: C.sub }}>Novinka{novNove > 0 ? ` · ${novNove} nové` : ''}</div>
                           <div style={{ fontSize: 14, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{novinky[0].titulok}</div>
@@ -1606,7 +1707,7 @@ function Dashboard({ session, demo }) {
                         {stavDatKarta()}
                       </>
                     ) : (
-                      <div style={{ fontSize: 12, color: C.muted }}>ℹ️ Ročný pohľad všetkých pobočiek zobrazuje len tržby — pre úlohy/odpisy/teploty/health vyber pobočku alebo kratšie obdobie.</div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: C.muted }}><IkonaTxt id="info" size={15} style={{ marginTop: 1 }} /><span>Ročný pohľad všetkých pobočiek zobrazuje len tržby — pre úlohy/odpisy/teploty/health vyber pobočku alebo kratšie obdobie.</span></div>
                     )}
                   </>
                 )}
