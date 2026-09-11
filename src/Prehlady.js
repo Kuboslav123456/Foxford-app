@@ -19,7 +19,7 @@
 // Space Grotesk, count-up čísla, kreslené SVG grafy + donut, CSS bary,
 // ambient pozadie). Grafy sú vlastné SVG/CSS — Chart.js sa tu už nepoužíva.
 // ═══════════════════════════════════════════════════════════════════════════
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 // Font redizajnu (Space Grotesk sa doťahuje cez @import v PrStyle)
@@ -55,6 +55,10 @@ const dayName = (i) => DNI_SK[new Date(i + 'T12:00:00').getDay()];
 
 const fmtEur = (n, dec = 0) => (n ?? 0).toLocaleString('sk-SK', { minimumFractionDigits: dec, maximumFractionDigits: dec }) + ' €';
 const fmtNum = (n) => (n ?? 0).toLocaleString('sk-SK');
+const fmtDateTime = (isoTs) => {
+  try { return new Date(isoTs).toLocaleString('sk-SK', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+  catch (_) { return ''; }
+};
 
 // ── CSV export (Sheet-ekvivalent, otvoriteľné v Exceli) ──────────────────────
 // BOM + oddeľovač ';' + desatinná čiarka (sk) = správne stĺpce aj diakritika v sk Exceli.
@@ -290,25 +294,26 @@ function PrStyle() {
 .fx-chip:active{transform:scale(.95)}
 .fx-mbtn{transition:background .35s,color .35s,transform .15s}
 .fx-mbtn:hover{transform:translateX(3px)}
+.fx-mbtn:not(.on):hover{background:rgba(184,112,32,.08)}
 .fx-mbtn:active{transform:scale(.97)}
 .fx-hrow{transition:background .25s}
 .fx-hrow:hover{background:rgba(184,112,32,.06)}
 .fx-ghost{transition:background .25s}
-.fx-ghost:hover{background:rgba(236,229,211,.08)!important}
+.fx-ghost:hover{background:rgba(184,112,32,.08)!important}
 .fx-nav{transition:transform .2s}
 .fx-nav:hover{transform:scale(1.18)}
 .fx-katrow{transition:background .2s}
 .fx-katrow:hover{background:rgba(184,112,32,.06)}
 .pr-layout{display:flex;min-height:100vh;align-items:stretch;position:relative}
-.pr-side{width:232px;flex-shrink:0;background:linear-gradient(180deg,${C.dark1},${C.dark2});color:${C.cream};display:flex;flex-direction:column;position:sticky;top:0;height:100vh;z-index:20;box-shadow:8px 0 40px rgba(40,25,5,.18)}
-.pr-menu{padding:12px 10px;display:flex;flex-direction:column;gap:4px;flex:1;overflow-y:auto}
+.pr-side{width:240px;flex-shrink:0;background:linear-gradient(180deg,rgba(255,255,255,.66),rgba(252,249,242,.40));backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);color:${C.text};display:flex;flex-direction:column;position:sticky;top:0;height:100vh;z-index:20;border-right:1px solid rgba(150,120,80,.12)}
+.pr-menu{padding:16px 13px;display:flex;flex-direction:column;gap:6px;flex:1;overflow-y:auto}
 .pr-main{flex:1;min-width:0;display:flex;flex-direction:column;position:relative;z-index:1}
 .pr-top{position:sticky;top:0;z-index:15;background:rgba(236,229,211,.88);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid rgba(150,120,80,.18);padding:14px 26px;display:flex;flex-direction:column;gap:10px}
 .pr-cont{padding:24px clamp(16px,2.2vw,44px) 48px;width:100%;box-sizing:border-box}
 .pr-charts{display:grid;gap:14px;grid-template-columns:1.6fr 1fr;margin-bottom:16px}
 @media(max-width:860px){
  .pr-layout{flex-direction:column}
- .pr-side{width:auto;height:auto;position:static;flex-direction:column}
+ .pr-side{width:auto;height:auto;position:static;flex-direction:column;border-right:none;border-bottom:1px solid rgba(150,120,80,.12)}
  .pr-menu{flex-direction:row;overflow-x:auto;padding:10px}
  .pr-menu .fx-mbtn{white-space:nowrap;flex-shrink:0;width:auto!important}
  .pr-cont{padding:18px 16px 40px}
@@ -623,14 +628,27 @@ function rozsahLabel(mode, date) {
 const MODY = [{ id: 'den', label: 'Deň' }, { id: 'tyzden', label: 'Týždeň' }, { id: 'mesiac', label: 'Mesiac' }, { id: 'rok', label: 'Rok' }];
 const SEKCIE = [
   { id: 'prehlad', ikona: '🏠', label: 'Prehľad' },
+  { id: 'novinky', ikona: '📣', label: 'Novinky' },
   { id: 'uzavierky', ikona: '💰', label: 'Uzávierky' },
   { id: 'ulohy', ikona: '✅', label: 'Úlohy' },
   { id: 'odpisy', ikona: '📉', label: 'Odpisy' },
   { id: 'teploty', ikona: '🌡️', label: 'Teploty' },
 ];
 
+// Admin (môže písať a mazať novinky). Rovnaký e-mail vynucuje aj RLS priamo
+// v databáze — UI to len zrkadlí; aj keby niekto obišiel appku, zápis pustí
+// iba databáza. Prípadných ďalších adminov stačí dopísať sem aj do RLS.
+const ADMIN_EMAILS = ['jakub.hrebenar@foxford.sk'];
+
+// Ukážkové novinky pre #prehlady-demo (naživo sa čítajú z tabuľky `novinky`)
+const DEMO_NOVINKY = [
+  { id: 'd1', created_at: '2026-09-10T08:30:00Z', titulok: 'Nové jesenné menu od pondelka', text: 'Od 15.9. spúšťame jesenné menu — tekvicové latte, hruškový cheesecake a nová polievka dňa. Rozpisky a materiály nájdete v sklade.', autor: 'jakub.hrebenar@foxford.sk', dolezite: true },
+  { id: 'd2', created_at: '2026-09-05T13:00:00Z', titulok: 'Mesačná inventúra', text: 'Pripomínam mesačnú inventúru — prosím uzavrite ju do posledného pracovného dňa v mesiaci.', autor: 'jakub.hrebenar@foxford.sk', dolezite: false },
+];
+
 function Dashboard({ session, demo }) {
   const email = session.user?.email || '';
+  const jeAdmin = demo || ADMIN_EMAILS.includes(email.trim().toLowerCase());
   // Zapamätaný filter (mode/sekcia/vlastný rozsah) — načíta sa raz na začiatku
   const F = useRef(null);
   if (F.current === null) { try { F.current = JSON.parse(localStorage.getItem('foxford-prehlady-filter') || '{}') || {}; } catch (_) { F.current = {}; } }
@@ -649,6 +667,15 @@ function Dashboard({ session, demo }) {
   const [filterKat, setFilterKat] = useState(null);     // klik na zmenu → filter detailu podľa kategórie
   const [detailDen, setDetailDen] = useState(null);     // deň otvorený v detaile (modal)
   const [sekcia, setSekcia] = useState(F.current.sekcia || 'prehlad');   // ľavé menu
+  // Novinky (oznamy admin → manažéri) — globálne pre všetkých prihlásených
+  const [novinky, setNovinky] = useState(null);
+  const [novNacitava, setNovNacitava] = useState(true);
+  const [novChyba, setNovChyba] = useState('');
+  const [novTitulok, setNovTitulok] = useState('');
+  const [novText, setNovText] = useState('');
+  const [novDolezite, setNovDolezite] = useState(false);
+  const [novUklada, setNovUklada] = useState(false);
+  const [novLastSeen, setNovLastSeen] = useState(() => { try { return localStorage.getItem('foxford-novinky-seen') || ''; } catch (_) { return ''; } });
 
   // Zapamätaj filter (nie vybraná pobočka — tú riadia oprávnenia; nie refDate — chceme aktuálne)
   useEffect(() => {
@@ -735,11 +762,57 @@ function Dashboard({ session, demo }) {
 
   const odhlasit = () => { if (demo) { window.location.hash = '#prehlady'; window.location.reload(); return; } sb.auth.signOut(); };
 
+  // ── Novinky: načítanie, zverejnenie, mazanie ───────────────────────────────
+  // Čítať môžu všetci prihlásení (RLS: to authenticated). Písať/mazať iba admin
+  // (RLS podľa e-mailu) — appka to overuje aj cez jeAdmin, ale rozhoduje databáza.
+  const nacitajNovinky = useCallback(async () => {
+    if (demo) { setNovinky(DEMO_NOVINKY); setNovNacitava(false); return; }
+    if (!sb) { setNovinky([]); setNovNacitava(false); return; }
+    setNovNacitava(true); setNovChyba('');
+    const { data: rows, error } = await sb.from('novinky')
+      .select('id, created_at, titulok, text, autor, dolezite')
+      .order('created_at', { ascending: false }).limit(100);
+    if (error) { setNovChyba('Novinky sa nepodarilo načítať.'); setNovinky([]); }
+    else setNovinky(rows || []);
+    setNovNacitava(false);
+  }, [demo]);
+  useEffect(() => { nacitajNovinky(); }, [nacitajNovinky]);
+
+  // Otvorenie sekcie Novinky = označ najnovšie ako prečítané (zhasne bodka v menu)
+  useEffect(() => {
+    if (sekcia === 'novinky' && novinky && novinky.length) {
+      const newest = novinky[0].created_at || '';
+      if (newest > novLastSeen) { try { localStorage.setItem('foxford-novinky-seen', newest); } catch (_) {} setNovLastSeen(newest); }
+    }
+  }, [sekcia, novinky]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  const zverejniNovinku = async () => {
+    const t = novTitulok.trim(), x = novText.trim();
+    if (!t || !x || novUklada) return;
+    if (demo) {
+      setNovinky([{ id: 'demo-' + Date.now(), created_at: new Date().toISOString(), titulok: t, text: x, autor: email, dolezite: novDolezite }, ...(novinky || [])]);
+      setNovTitulok(''); setNovText(''); setNovDolezite(false); return;
+    }
+    setNovUklada(true); setNovChyba('');
+    const { error } = await sb.from('novinky').insert({ titulok: t, text: x, autor: email, dolezite: novDolezite });
+    if (error) { setNovChyba('Zverejnenie zlyhalo: ' + (error.message || error)); setNovUklada(false); return; }
+    setNovTitulok(''); setNovText(''); setNovDolezite(false); setNovUklada(false);
+    nacitajNovinky();
+  };
+
+  const zmazNovinku = async (id) => {
+    if (typeof window !== 'undefined' && !window.confirm('Naozaj zmazať túto novinku?')) return;
+    if (demo) { setNovinky((novinky || []).filter(n => n.id !== id)); return; }
+    const { error } = await sb.from('novinky').delete().eq('id', id);
+    if (error) setNovChyba('Mazanie zlyhalo: ' + (error.message || error)); else nacitajNovinky();
+  };
+
   // ── Agregácie (aktuálne + predošlé obdobie pre porovnanie) ──────────────────
   const agg = useMemo(() => data ? computeAgg(data) : null, [data]);
   const prevAgg = useMemo(() => prevData ? computeAgg(prevData) : null, [prevData]);
 
   const viacPobociek = (pobocky || []).length > 1;
+  const novNove = (novinky || []).filter(n => (n.created_at || '') > novLastSeen).length;
   const kartyPct = agg && agg.trzby > 0 ? Math.round(agg.karty / agg.trzby * 100) : 0;
   const qerkoPct = agg && agg.trzby > 0 ? Math.round(agg.qerko / agg.trzby * 100) : 0;
   const hasErr = !!agg && agg.upozornenia.some(u => u.typ === 'err');
@@ -1218,31 +1291,109 @@ function Dashboard({ session, demo }) {
     return (
       <Panel title={`Kompletnosť meraní teplôt — ${obLabel}`} delay={0.06} style={{ marginBottom: 16 }}>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
+          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 4, fontSize: 11.5 }}>
             <thead><tr>
-              <th style={{ ...thC, textAlign: 'left', position: 'sticky', left: 0, background: C.panelFull }}>Zariadenie</th>
-              {dni.map(d => <th key={d} style={{ ...thC, textAlign: 'center', padding: '6px 4px' }}>{+d.slice(8)}</th>)}
+              <th style={{ ...thC, textAlign: 'left', width: '1%', padding: '4px 12px 8px 4px', position: 'sticky', left: 0, background: C.panelFull }}>Zariadenie</th>
+              {dni.map(d => <th key={d} style={{ ...thC, textAlign: 'center', padding: '4px 2px 8px', minWidth: 30, fontWeight: 600, color: C.sub }}>{+d.slice(8)}</th>)}
             </tr></thead>
             <tbody>
               {devices.map(dev => (
-                <tr key={dev} style={{ borderTop: '1px solid rgba(150,120,80,.12)' }}>
-                  <td style={{ ...tdC, fontWeight: 600, position: 'sticky', left: 0, background: C.panelFull }}>{dev}</td>
+                <tr key={dev}>
+                  <td style={{ ...tdC, fontWeight: 600, width: '1%', padding: '4px 12px 4px 4px', position: 'sticky', left: 0, background: C.panelFull }}>{dev}</td>
                   {dni.map(d => {
                     const h = m[dev + '|' + d];
-                    if (!h) return <td key={d} title={`${dayLabel(d)}: chýba`} style={{ padding: '5px 4px', textAlign: 'center', color: C.muted }}>–</td>;
-                    return <td key={d} title={`${dayLabel(d)}: ${h.value} °C`} style={{ padding: '5px 4px', textAlign: 'center', color: h.exceeded ? C.err : C.ok, fontWeight: 700 }}>{h.exceeded ? '!' : '✓'}</td>;
+                    const bg = !h ? 'rgba(150,120,80,.07)' : (h.exceeded ? C.errDim : C.okDim);
+                    const col = !h ? C.muted : (h.exceeded ? C.err : C.ok);
+                    const gl = !h ? '–' : (h.exceeded ? '!' : '✓');
+                    const tt = !h ? `${dayLabel(d)}: chýba meranie` : `${dayLabel(d)}: ${h.value} °C${h.exceeded ? ' — prekročené' : ''}`;
+                    return (
+                      <td key={d} style={{ padding: '0 1px', minWidth: 30 }}>
+                        <div title={tt} style={{ padding: '6px 0', borderRadius: 8, background: bg, color: col, fontWeight: 700, textAlign: 'center' }}>{gl}</div>
+                      </td>
+                    );
                   })}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>✓ v norme · <span style={{ color: C.err, fontWeight: 700 }}>!</span> prekročené · – chýba meranie (stĺpce = dni).{chyba > 0 ? ` Chýba ${fmtNum(chyba)} meraní.` : ''}</div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 14 }}>✓ v norme · <span style={{ color: C.err, fontWeight: 700 }}>!</span> prekročené · – chýba meranie (stĺpce = dni).{chyba > 0 ? ` Chýba ${fmtNum(chyba)} meraní.` : ''}</div>
       </Panel>
     );
   };
 
   // ── Detail dňa (modal, otvára sa klikom v „Stav dát") ──────────────────────
+  // ── Sekcia Novinky (zoznam pre všetkých + písanie pre admina) ──────────────
+  const novinkySekcia = () => {
+    const list = novinky || [];
+    const canPost = jeAdmin && novTitulok.trim() && novText.trim() && !novUklada;
+    const inpBase = { width: '100%', boxSizing: 'border-box', padding: '11px 14px', borderRadius: 12, border: `1px solid ${C.borderM}`, background: C.panelFull, fontSize: 14, fontFamily: 'inherit', color: C.text, outline: 'none' };
+    return (
+      <>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '2px 2px 18px', animation: `fxUp .5s backwards` }}>
+          <span style={{ fontSize: 24 }}>📣</span>
+          <div>
+            <div style={{ fontSize: 21, fontWeight: 700, color: C.text, lineHeight: 1.1 }}>Novinky</div>
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>Oznamy pre všetkých manažérov</div>
+          </div>
+        </div>
+
+        {jeAdmin && (
+          <Panel delay={0.04} style={{ marginBottom: 20, border: `1px solid ${C.goldLine}` }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.sub, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>✍️ Napísať novinku</div>
+            <input value={novTitulok} onChange={e => setNovTitulok(e.target.value)} placeholder="Titulok (napr. Nové jesenné menu)" maxLength={140}
+              style={{ ...inpBase, marginBottom: 10 }} />
+            <textarea value={novText} onChange={e => setNovText(e.target.value)} placeholder="Text oznamu…" rows={4} maxLength={4000}
+              style={{ ...inpBase, resize: 'vertical', lineHeight: 1.5 }} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: C.sub, cursor: 'pointer', userSelect: 'none' }}>
+                <input type="checkbox" checked={novDolezite} onChange={e => setNovDolezite(e.target.checked)} style={{ width: 16, height: 16, accentColor: C.gold, cursor: 'pointer' }} />
+                Označiť ako dôležité
+              </label>
+              <button className="fx-chip" onClick={zverejniNovinku} disabled={!canPost}
+                style={{ padding: '10px 24px', borderRadius: 22, border: 'none', fontFamily: 'inherit', fontSize: 13.5, fontWeight: 700,
+                  cursor: canPost ? 'pointer' : 'not-allowed', color: canPost ? '#fff' : C.muted,
+                  background: canPost ? 'linear-gradient(135deg,#d9a03f,#b87020)' : 'rgba(150,120,80,.12)',
+                  boxShadow: canPost ? '0 6px 16px rgba(184,112,32,.28)' : 'none' }}>
+                {novUklada ? 'Zverejňujem…' : 'Zverejniť'}
+              </button>
+            </div>
+            {novChyba && <div style={{ fontSize: 12.5, color: C.err, marginTop: 10 }}>{novChyba}</div>}
+          </Panel>
+        )}
+
+        {!jeAdmin && novChyba && <Panel style={{ marginBottom: 14 }}><div style={{ color: C.err, fontSize: 14 }}>{novChyba}</div></Panel>}
+
+        {novNacitava && !list.length && (
+          <div style={{ color: C.muted, fontSize: 14, padding: '40px 0', textAlign: 'center' }}>Načítavam novinky…</div>
+        )}
+        {!novNacitava && !list.length && (
+          <Panel><div style={{ color: C.sub, fontSize: 14, textAlign: 'center', padding: '14px 0' }}>Zatiaľ žiadne novinky.</div></Panel>
+        )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {list.map((n, i) => (
+            <Panel key={n.id} delay={Math.min(i * 0.05, 0.3)}
+              style={n.dolezite ? { border: `1px solid ${C.goldLine}`, background: 'linear-gradient(180deg,rgba(217,160,63,.10),rgba(255,255,255,.82))' } : undefined}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', minWidth: 0 }}>
+                  {n.dolezite && <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', color: C.dark2, background: C.goldLight, borderRadius: 20, padding: '3px 9px' }}>Dôležité</span>}
+                  <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>{n.titulok}</div>
+                </div>
+                {jeAdmin && (
+                  <button className="fx-nav" onClick={() => zmazNovinku(n.id)} title="Zmazať novinku"
+                    style={{ border: 'none', background: 'none', color: C.muted, cursor: 'pointer', fontSize: 15, padding: 2, lineHeight: 1, flexShrink: 0 }}>🗑</button>
+                )}
+              </div>
+              <div style={{ fontSize: 14, color: C.sub, marginTop: 8, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{n.text}</div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 12 }}>{fmtDateTime(n.created_at)}{n.autor ? ` · ${n.autor}` : ''}</div>
+            </Panel>
+          ))}
+        </div>
+      </>
+    );
+  };
+
   const dayDetailModal = () => {
     if (!detailDen || !agg) return null;
     const d = detailDen;
@@ -1304,44 +1455,48 @@ function Dashboard({ session, demo }) {
 
         {/* ── SIDEBAR ── */}
         <aside className="pr-side">
-          <div style={{ padding: '20px 16px 16px', borderBottom: `1px solid ${C.creamLine}` }}>
-            <div style={{ background: C.cream, borderRadius: 12, padding: '12px 14px', display: 'flex', justifyContent: 'center' }}>
+          <div style={{ padding: '24px 20px 18px', borderBottom: `1px solid rgba(150,120,80,.10)` }}>
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 6px' }}>
               <img src={`${PUBLIC}/foxford-logo.png.png`} alt="Foxford" style={{ width: '100%', maxWidth: 150, display: 'block' }} />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, padding: '0 4px' }}>
-              <div style={{ fontWeight: 700, fontSize: 17, letterSpacing: .2 }}>Prehľady</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 20, padding: '0 4px' }}>
+              <div style={{ fontWeight: 700, fontSize: 17, letterSpacing: .2, color: C.text }}>Prehľady</div>
               {demo && <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.2, color: C.dark2, background: C.goldLight, borderRadius: 20, padding: '3px 8px' }}>UKÁŽKA</div>}
             </div>
-            <div style={{ fontSize: 11, color: C.creamMuted, padding: '2px 4px 0' }}>manažérsky prístup</div>
+            <div style={{ fontSize: 11, color: C.muted, padding: '3px 4px 0' }}>manažérsky prístup</div>
           </div>
           <nav className="pr-menu">
             {SEKCIE.map(s => {
               const on = sekcia === s.id;
               return (
-                <button key={s.id} className="fx-mbtn" onClick={() => setSekcia(s.id)}
+                <button key={s.id} className={on ? 'fx-mbtn on' : 'fx-mbtn'} onClick={() => setSekcia(s.id)}
                   style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', border: 'none', borderRadius: 12,
                     fontSize: 14, fontWeight: 600, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', width: '100%',
-                    background: on ? 'linear-gradient(135deg,#d9a03f,#b87020)' : 'transparent', color: on ? C.dark2 : C.creamText,
-                    boxShadow: on ? '0 6px 18px rgba(184,112,32,.35)' : 'none' }}>
+                    background: on ? 'linear-gradient(135deg,#d9a03f,#b87020)' : undefined, color: on ? C.dark2 : C.sub,
+                    boxShadow: on ? '0 6px 16px rgba(184,112,32,.28)' : 'none' }}>
                   <span style={{ fontSize: 16, width: 20, textAlign: 'center' }}>{s.ikona}</span>{s.label}
+                  {s.id === 'novinky' && novNove > 0 && (
+                    <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 800, color: '#fff', background: C.gold, borderRadius: 20, minWidth: 18, height: 18, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px', boxShadow: '0 2px 6px rgba(184,112,32,.35)' }}>{novNove}</span>
+                  )}
                 </button>
               );
             })}
           </nav>
-          <div style={{ padding: 14, borderTop: `1px solid ${C.creamLine}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ fontSize: 11, color: C.creamMuted, padding: '0 4px', wordBreak: 'break-all' }}>{email}</div>
+          <div style={{ padding: 16, borderTop: `1px solid rgba(150,120,80,.10)`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontSize: 11, color: C.muted, padding: '0 4px', wordBreak: 'break-all' }}>{email}</div>
             <button className="fx-ghost" onClick={() => setZmenaHesla(true)}
-              style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(236,229,211,.18)', background: 'transparent',
-                color: 'rgba(236,229,211,.75)', fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>Zmeniť heslo</button>
+              style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(150,120,80,.22)', background: 'transparent',
+                color: C.sub, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>Zmeniť heslo</button>
             <button className="fx-ghost" onClick={odhlasit}
-              style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(240,110,90,.35)', background: 'transparent',
-                color: '#f0876e', fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>Odhlásiť</button>
+              style={{ padding: '9px 12px', borderRadius: 10, border: '1px solid rgba(208,48,48,.28)', background: 'transparent',
+                color: C.err, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>Odhlásiť</button>
           </div>
         </aside>
 
         {/* ── MAIN ── */}
         <main className="pr-main">
-          {/* Top bar: pobočka + obdobie */}
+          {/* Top bar: pobočka + obdobie (na Novinkách netreba) */}
+          {sekcia !== 'novinky' && (
           <div className="pr-top">
             <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', alignItems: 'center' }}>
               {viacPobociek ? (
@@ -1383,8 +1538,10 @@ function Dashboard({ session, demo }) {
               )}
             </div>
           </div>
+          )}
 
           <div className="pr-cont">
+            {sekcia === 'novinky' ? novinkySekcia() : (<>
             {pobocky && pobocky.length === 0 && (
               <Panel><div style={{ color: C.sub, fontSize: 14 }}>Tvoj účet zatiaľ nemá priradenú žiadnu pobočku — ozvi sa administrátorovi.</div></Panel>
             )}
@@ -1398,6 +1555,18 @@ function Dashboard({ session, demo }) {
                 {/* ═══ PREHĽAD (overview) ═══ */}
                 {sekcia === 'prehlad' && (
                   <>
+                    {novinky && novinky.length > 0 && (
+                      <div onClick={() => setSekcia('novinky')} className="fx-kpi" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12,
+                        background: novinky[0].dolezite ? 'linear-gradient(135deg,rgba(217,160,63,.16),rgba(255,255,255,.82))' : C.panel,
+                        border: `1px solid ${novinky[0].dolezite ? C.goldLine : C.border}`, borderRadius: 16, padding: '12px 16px', marginBottom: 16, boxShadow: '0 2px 16px rgba(90,70,45,.06)' }}>
+                        <span style={{ fontSize: 18 }}>📣</span>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: C.sub }}>Novinka{novNove > 0 ? ` · ${novNove} nové` : ''}</div>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{novinky[0].titulok}</div>
+                        </div>
+                        <span style={{ fontSize: 12.5, fontWeight: 700, color: C.gold, whiteSpace: 'nowrap' }}>Zobraziť →</span>
+                      </div>
+                    )}
                     <div style={gridKPI}>
                       <KPI label="Tržby" color={C.gold} delay={0}
                         value={<Num value={agg.trzby} animate={animate} format={n => fmtEur(Math.round(n))} />}
@@ -1492,6 +1661,7 @@ function Dashboard({ session, demo }) {
                 ))}
               </>
             )}
+            </>)}
           </div>
         </main>
       </div>
