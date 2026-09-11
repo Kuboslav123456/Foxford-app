@@ -1,7 +1,10 @@
 # SESSION HANDOFF — August 2026
 
 ## Aktuálna verzia
-**LIVE = v71** (nasadené 2026-09-11, overené naživo: version.json=71, live demo renderuje nový dizajn). História: v67 redizajn Prehľadov + rozšírené Uzávierky (A–M) + CSV export 4 typov; v68 periodický flush SB fronty (App.js, reliability); v69 vylepšenia Prehľadov (porovnanie/priemer/Stav dát/HACCP mriežka/Health-score/custom rozsah, nižšie); v70 = Prehľady na plnú šírku (`.pr-cont` bez `max-width:1180px`, adaptívny padding); **v71 = svetlý vzdušný sidebar + HACCP heatmapa + Novinky (nižšie)**. v69–v71 sú len `Prehlady.js` (lazy chunk) → tabletu sa nedotkli.
+**LIVE = v72** (nasadené 2026-09-11, overené naživo: version.json=72, live demo renderuje ikonky). História: v67 redizajn + rozšírené Uzávierky (A–M) + CSV export; v68 periodický flush SB fronty (App.js); v69 vylepšenia Prehľadov (porovnanie/priemer/Stav dát/HACCP mriežka/Health-score/custom rozsah); v70 plná šírka; v71 svetlý vzdušný sidebar + HACCP heatmapa + Novinky; **v72 = duotone ikonky namiesto emoji (nižšie)**. v69–v72 sú len `Prehlady.js` (lazy chunk) → tabletu sa nedotkli.
+
+### v72: Duotone ikonky — NASADENÉ (LIVE 2026-09-11)
+Podľa návrhu „Icon design proposals" (smer 1c duotone: mäkká výplň ~22–28 % + 1.8px obrys, 24×24, `currentColor` → dedia farbu textu). V `Prehlady.js` slovník `SEK_IKONY` + komponenty `SekIkona`/`IkonaTxt`. Nahradené emoji: sidebar (dom/zvonček/kalendár-fajka/štvorec-fajka/klesajúci-graf/teplomer), obsah (⬇ download na CSV, ℹ️ info, ✍️ ceruzka, 🗑 kôš, 📍 pin, 💡 žiarovka), zvonček v hlavičke/banneri Noviniek. **Status-glyphy (✓ ✗ ⚠ ▲▼) ostali ako text** (sémantické značky v dátach, nie ikonky). `SEKCIE` už nemá pole `ikona`. **Ďalšie ikonky rob v tom istom duotone štýle** — dopíš `path` do `SEK_IKONY` a použi `<SekIkona id="…"/>`. Deploy gotcha: gh-pages push spadol na sieť → `node_modules/.cache/gh-pages` zmazať a push zopakovať.
 
 ### v71: Svetlý sidebar + HACCP heatmapa + Novinky — NASADENÉ (LIVE 2026-09-11)
 Len `Prehlady.js` (+ bump verzie). Tri veci:
