@@ -1832,17 +1832,27 @@ export default function App() {
 
   // Obnova zo zálohy uloženej v tabuľke pobočky (GAS `?backup=latest&token=…`).
   // Funguje aj na zariadení, ktoré prišlo o localStorage aj o súborovú zálohu.
-  // Token je povinný od v64 (GAS doGet bez neho nič nevydá); staršie GAS param ignorujú.
+  // Od v73 sa posiela KÓD NA OBNOVU (READ_TOKEN v GAS), ktorý zadá admin ručne.
+  // Zámerne NIE je v appke ani v bundli: zapisovací token z bundlu si vie prečítať
+  // ktokoľvek, a nesmie ním vedieť stiahnuť zálohu (obsahuje uzávierky). GAS doGet
+  // prijme len tento kód; appka si ho nikam neukladá.
   const restoreFromCloud = async () => {
     if (!scriptUrl || /^URL_POBOCKA/.test(scriptUrl) || !/^https?:\/\//.test(scriptUrl)) {
       alert('Táto pobočka zatiaľ nemá napojenú tabuľku.');
       return;
     }
+    const kod = window.prompt('Obnova zálohy z tabuľky\n\nZadaj kód na obnovu (má ho admin):');
+    if (kod === null) return;                       // zrušené
+    const kodTrim = kod.trim();
+    if (!kodTrim) { alert('Bez kódu sa záloha z tabuľky nedá stiahnuť.'); return; }
     setCloudRestoring(true);
     try {
-      const res = await fetch(`${scriptUrl}?backup=latest&token=${encodeURIComponent(process.env.REACT_APP_GAS_TOKEN || '')}`);
+      const res = await fetch(`${scriptUrl}?backup=latest&token=${encodeURIComponent(kodTrim)}`);
       const parsed = JSON.parse(await res.text());
-      if (parsed.error) { alert(parsed.error); return; }
+      if (parsed.error) {
+        alert(parsed.error === 'Unauthorized' ? 'Nesprávny kód na obnovu.' : parsed.error);
+        return;
+      }
       if (parsed._app !== 'foxford' || !parsed.data || typeof parsed.data !== 'object') {
         alert('V tabuľke zatiaľ nie je platná záloha.');
         return;
@@ -4895,7 +4905,7 @@ export default function App() {
             </div>
 
             <div style={{ fontSize:10.5, color:C.muted, textAlign:'center', marginTop:12, lineHeight:1.6 }}>
-              Obnova prepíše dáta v tomto zariadení dátami zo zálohy.
+              Obnova prepíše dáta v tomto zariadení dátami zo zálohy. Obnova z tabuľky vyžaduje kód, ktorý má admin.
             </div>
 
             {/* Verzia zariadenia — nech sa dá overiť, či sa appka aktualizovala */}

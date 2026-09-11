@@ -6,14 +6,23 @@
 //   2. TOKEN: prepíš 'SEM_VLOZ_SVOJ_TOKEN' hodnotou zo svojho DOTERAJŠIEHO
 //      scriptu (riadok `const TOKEN = '...'`) — musí sedieť s tokenom appky
 //      (.env.local → REACT_APP_GAS_TOKEN), inak GAS odmietne všetky zápisy.
-//   3. Nasadiť → Spravovať nasadenia → ceruzka → Nová verzia → Nasadiť.
+//   3. READ_TOKEN: prepíš 'SEM_VLOZ_READ_TOKEN' dlhým náhodným kódom (tvar
+//      FXF-XXXX-XXXX-XXXX-XXXX). Ulož si ho do správcu hesiel. Tento kód NIE JE
+//      v appke ani v repe — zadáva ho admin ručne pri obnove zálohy z tabuľky.
+//   4. Nasadiť → Spravovať nasadenia → ceruzka → Nová verzia → Nasadiť.
 //      URL webhooku zostane rovnaká, v appke netreba nič meniť.
 //
+// DVA TOKENY (od v73):
+//   TOKEN      = zapisovací. Appka ho posiela v doPost. Je súčasťou verejného JS
+//                bundlu appky, preto NESMIE nič odomykať na čítanie.
+//   READ_TOKEN = čítací. Vyžaduje ho doGet (záloha ?backup=…, hárok Uzávierky).
+//                Pozná ho len admin; appka si ho vyžiada promptom a neukladá ho.
+//
 // HANDLERY (doPost): haccp, tasks_summary, inventory, odpis_daily,
-//   alkohol_daily, uzavierka_daily, bug_report, backup (NOVÉ — záloha dát appky)
-// doGet: číta hárok Uzávierky pre OBRATY tabuľku — NEMAZAŤ.
-//   Navyše ?backup=latest vráti poslednú zálohu appky ako JSON.
-//   POZOR: doGet aj doPost vyžadujú token — čítanie cez ?token=TVOJ_TOKEN v URL.
+//   alkohol_daily, uzavierka_daily, bug_report, backup (záloha dát appky)
+// doGet: ?backup=latest (alebo ?backup=2026-08-06) vráti zálohu appky ako JSON;
+//   bez parametra vráti hárok Uzávierky (pôvodne pre OBRATY tabuľku).
+//   VŽDY vyžaduje &token=READ_TOKEN — zapisovací TOKEN tu NEPLATÍ.
 //
 // ŽIADNE NOVÉ POVOLENIA: zálohy idú do skrytého hárku „Zálohy“ v tejto tabuľke,
 //   nie na Google Drive (naň Workspace účet pobočky nedostane povolenie na zápis).
@@ -23,16 +32,25 @@
 //   funkciu `migrateOdpisyTabs` → Spustiť (presunie záznamy a taby zmaže).
 // ═══════════════════════════════════════════════════════════════════════════
 
-const TOKEN = 'SEM_VLOZ_SVOJ_TOKEN';
+const TOKEN      = 'SEM_VLOZ_SVOJ_TOKEN';   // zapisovací (doPost) — je v bundli appky
+const READ_TOKEN = 'SEM_VLOZ_READ_TOKEN';   // čítací (doGet) — len admin, NIKDY do appky/repa
+
+// Porovnanie kódov bez ohľadu na medzery, pomlčky a veľkosť písmen — kód sa
+// diktuje po telefóne / klepe na tablete, nech ho nezhodí preklep vo formáte.
+function normToken(s) {
+  return String(s || '').replace(/[\s-]/g, '').toUpperCase();
+}
 
 function doGet(e) {
   try {
-    // Aj ČÍTANIE vyžaduje token (?token=…) — inak by si zálohu/uzávierky vedel
-    // stiahnuť ktokoľvek, kto pozná URL. Appka od v64 token posiela sama;
-    // ručné stiahnutie zálohy: ?backup=latest&token=TVOJ_TOKEN.
-    // Ak na túto URL niekedy napojíš OBRATY tabuľku, jej fetch musí pridať &token=.
+    // ČÍTANIE vyžaduje READ_TOKEN (?token=…). Zapisovací TOKEN tu zámerne
+    // neplatí — je vo verejnom bundli appky, takže by ním zálohu (uzávierky!)
+    // vedel stiahnuť ktokoľvek. READ_TOKEN pozná len admin.
+    // Kým je READ_TOKEN placeholder, doGet nevydá nič (bezpečný default).
+    // Ručné stiahnutie zálohy: ?backup=latest&token=READ_TOKEN.
     var tok = (e && e.parameter && e.parameter.token) ? String(e.parameter.token) : '';
-    if (tok !== TOKEN) return jsonResponse({ error: 'Unauthorized' });
+    var readOk = READ_TOKEN && READ_TOKEN !== 'SEM_VLOZ_READ_TOKEN' && normToken(tok) === normToken(READ_TOKEN);
+    if (!readOk) return jsonResponse({ error: 'Unauthorized' });
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
 
@@ -273,8 +291,8 @@ function doPost(e) {
     // povolenie nepotrebuje. Jeden riadok = jeden deň a pobočka (prepisuje sa),
     // drží sa posledných 60. Bunka má limit 50 000 znakov, preto sa JSON delí
     // na časti do stĺpcov D, E, F…
-    // Stiahnutie zálohy: otvor URL webovej aplikácie s ?backup=latest&token=TVOJ_TOKEN
-    // (alebo ?backup=2026-08-06&token=…) → JSON ulož ako .json → appka Sklad → 📥 Obnoviť zálohu.
+    // Stiahnutie zálohy: appka Sklad → „Obnoviť poslednú zálohu z tabuľky“ + kód (READ_TOKEN),
+    // alebo ručne URL webovej aplikácie s ?backup=latest&token=READ_TOKEN (aj ?backup=2026-08-06).
     else if (type === 'backup') {
       const CHUNK = 45000;
       let sheet = ss.getSheetByName('Zálohy');
