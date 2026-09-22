@@ -1,6 +1,13 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // FOXFORD — E-MAILOVÝ REPORTING zo Supabase databázy
 //
+// ⛔ STAV: VYPNUTÝ od 2026-09-22 (rozhodnutie Jakuba). Triggery v Apps Scripte
+//    zmazané, Script Property SUPABASE_SERVICE_KEY odstránená (nech nikde
+//    nezostáva kópia hlavného kľúča). Skript ostáva v repe len ako záloha —
+//    pri obnovení treba znova nastaviť Script Properties a spustiť nastavTriggery.
+//    Vypnutie: v editore vyber funkciu `vypniReport` → Spustiť (zmaže triggery),
+//    potom ⚙ Project Settings → Script Properties → zmazať SUPABASE_SERVICE_KEY.
+//
 // Posiela týždenný (pondelok) a mesačný (1. v mesiaci) súhrn za všetky pobočky:
 // tržby + porovnanie, splnenosť a problémové úlohy, HACCP prekročenia, odpisy,
 // upozornenia. E-mail chodí z Gmailu účtu, pod ktorým skript beží (MailApp).
@@ -335,6 +342,13 @@ function testReport() {
 }
 
 // Zapne automatické spúšťače (spusti raz ručne)
+// Vypnutie reportu: zmaže všetky časové triggery tohto projektu (nič iné).
+function vypniReport() {
+  var n = 0;
+  ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); n++; });
+  Logger.log('Report vypnutý — zmazaných triggerov: ' + n + '. Ešte zmaž Script Property SUPABASE_SERVICE_KEY.');
+}
+
 function nastavTriggery() {
   ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('posliTyzdennyReport').timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(7).inTimezone(TZ).create();

@@ -3,6 +3,9 @@
 ## Aktuálna verzia
 **LIVE = v73** (nasadené 2026-09-11 večer, overené naživo: version.json=73, gh-pages bez `.map`, nový kód obnovy v bundli, konzola čistá; GAS Obchodná s READ_TOKEN nasadený Jakubom a overený: bez tokenu/so zapisovacím = Unauthorized, s kódom na obnovu = záloha, zápis appky OK). História: v67 redizajn + rozšírené Uzávierky (A–M) + CSV export; v68 periodický flush SB fronty (App.js); v69 vylepšenia Prehľadov (porovnanie/priemer/Stav dát/HACCP mriežka/Health-score/custom rozsah); v70 plná šírka; v71 svetlý vzdušný sidebar + HACCP heatmapa + Novinky; **v72 = duotone ikonky namiesto emoji (nižšie)**. v69–v72 sú len `Prehlady.js` (lazy chunk) → tabletu sa nedotkli.
 
+### E-mailový reporting (gas/reporting.gs) — VYPNUTÝ (2026-09-22, Jakub)
+Rozhodnutie Jakuba. Vypnutie robí Jakub v Apps Scripte: funkcia `vypniReport` (zmaže triggery) alebo ⏰ Triggers → zmazať; potom ⚙ Project Settings → Script Properties → zmazať `SUPABASE_SERVICE_KEY` (kópia hlavného kľúča nemá dôvod existovať). Skript ostáva v repe ako záloha. Staršie poznámky „E-mailový reporting FUNGUJE" nižšie sú historické.
+
 ### v73: Kód na obnovu zálohy z tabuľky (READ_TOKEN) + bez source máp — NASADENÉ (LIVE 2026-09-11)
 Bezpečnostný audit 2026-09-11 (curl anon kľúčom + verejný bundle + celá git história 377 commitov): **Supabase tesné** (RLS blokuje anon SELECT/UPDATE/DELETE na všetkých 10 tabuľkách aj INSERT do manager_pobocky/novinky/branches; OpenAPI 401, GraphQL vypnutý, žiadne tajné kľúče v bundli ani v histórii, .env.local nikdy commitnutý). Opravené hneď (Jakub): nasadený GAS Obchodná mal starý `doGet` bez kontroly tokenu → nasadil `gas/Code.gs` ako novú verziu (overené: bez tokenu `Unauthorized`); Supabase mal otvorenú registráciu → vypnutá (`disable_signup:true`, overené).
 Zostávalo: zapisovací GAS token je vo verejnom bundli → ním sa dala cez `doGet` stiahnuť záloha (obsahuje uzávierky). Riešenie v73:
