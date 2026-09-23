@@ -219,8 +219,20 @@ function prevRozsah(mode, refDate, od, doD) {
   return span(rozsah(mode, d)[0]);   // od začiatku predošlého obdobia, rovnako veľa dní
 }
 
+// ── Uzávierka v Prehľadoch: povinná (true) alebo voliteľná (false) ──────────
+// Od 2026-09-23 VOLITEĽNÁ: tablety majú kartu Uzávierka dočasne skrytú (App.js
+// UZAVIERKA_TAB_ENABLED=false, prevádzky robia uzávierky na papier), takže chýbajúca
+// uzávierka nie je chyba. Ovláda „Stav dát" (✗ → –, kompletnosť bez uzávierky),
+// peňažné KPI (bez uzávierok „—" namiesto 0 € ▼100 %), health-score (bez kasy,
+// váhy 56/44) a detail dňa. Pri návrate karty na tablet prepnúť späť na true.
+const UZAVIERKA_POVINNA = false;
+const POZN_PAPIER = 'uzávierky sa robia na papieri';
+
 // ── UKÁŽKOVÝ REŽIM (#prehlady-demo) — vymyslené dáta, bez prihlásenia ────────
-const DEMO = typeof window !== 'undefined' && window.location.hash === '#prehlady-demo';
+// #prehlady-demo-papier = tá istá ukážka, ale bez uzávierok v aktuálnom období
+// (ako to vidia manažéri, kým sa uzávierky robia na papieri).
+const DEMO = typeof window !== 'undefined' && /^#prehlady-demo(-papier)?$/.test(window.location.hash);
+const DEMO_PAPIER = typeof window !== 'undefined' && window.location.hash === '#prehlady-demo-papier';
 const DEMO_POBOCKY = ['Obchodná', 'Nivy', 'Cubicon', 'Levice', 'Martin', 'Žilina', 'Poprad', 'Prešov', 'Košice'];
 let _demoCache = null;
 function demoRows() {
@@ -818,7 +830,7 @@ function Dashboard({ session, demo }) {
       if (demo) {
         const all = demoRows();
         const f = (rows, a, b) => rows.filter(r => r.day >= a && r.day <= b && (vybrana === '*' || r.branch === vybrana));
-        setData({ uzavierky: f(all.uzavierky, od, doD), odpisy: lenTrzby ? [] : f(all.odpisy, od, doD),
+        setData({ uzavierky: DEMO_PAPIER ? [] : f(all.uzavierky, od, doD), odpisy: lenTrzby ? [] : f(all.odpisy, od, doD),
                   tasks: lenTrzby ? [] : f(all.tasks, od, doD), haccp: lenTrzby ? [] : f(all.haccp, od, doD) });
         setPrevData(lenTrzby ? null : { uzavierky: f(all.uzavierky, pod, pdoD), odpisy: [],
                   tasks: f(all.tasks, pod, pdoD), haccp: f(all.haccp, pod, pdoD) });
@@ -917,6 +929,8 @@ function Dashboard({ session, demo }) {
   const qerkoPct = agg && agg.trzby > 0 ? Math.round(agg.qerko / agg.trzby * 100) : 0;
   const hasErr = !!agg && agg.upozornenia.some(u => u.typ === 'err');
   const hasKasa = !!agg && (agg.kasaSpolu !== 0 || Object.keys(agg.kasaPos).length > 0);
+  // Bez uzávierok v období a uzávierka voliteľná (papier) → peňažné KPI ukazujú „—", nie 0 € ▼100 %
+  const bezUzavierok = !UZAVIERKA_POVINNA && !!agg && agg.uzRows.length === 0;
   const pctCol = (!agg || agg.pct == null) ? C.gold : agg.pct >= 90 ? C.ok : agg.pct >= 70 ? C.gold : C.err;
 
   // Porovnanie s predošlým obdobím
@@ -941,7 +955,12 @@ function Dashboard({ session, demo }) {
     if (Object.values(agg.kasaPos).some(x => x.kasa < 0)) kasa -= 30;
     if (Object.values(agg.kasaPos).some(x => x.kasa > 1000)) kasa -= 10;
     kasa = Math.max(0, Math.min(100, kasa));
-    return { total: Math.round(ulohy * 0.45 + haccp * 0.35 + kasa * 0.20),
+    // Bez uzávierok (papier, uzávierka voliteľná) kasa do skóre nevstupuje — váhy sa
+    // prerozdelia na úlohy 56 % / HACCP 44 % (0.45/0.80, 0.35/0.80); inak by prázdna
+    // kasa pridávala „zadarmo" 20 bodov.
+    const bezKasy = !UZAVIERKA_POVINNA && agg.uzRows.length === 0;
+    const total = bezKasy ? ulohy * 0.5625 + haccp * 0.4375 : ulohy * 0.45 + haccp * 0.35 + kasa * 0.20;
+    return { total: Math.round(total), bezKasy,
              ulohy: Math.round(ulohy), haccp: Math.round(haccp), kasa: Math.round(kasa), chybaHaccp };
   }, [agg, od, doD]);
   const healthCol = (s) => s >= 85 ? C.ok : s >= 70 ? C.gold : C.err;
@@ -1024,14 +1043,14 @@ function Dashboard({ session, demo }) {
   const grafTrzieb = (delay = 0.18) => (
     <Panel delay={delay} dur=".55s" title={mode === 'rok' ? `Mesačné tržby — ${obLabel}` : `Vývoj tržieb — ${obLabel}`} style={{ minWidth: 0 }}>
       {Object.keys(agg.poDni).length === 0
-        ? <div style={{ color: C.muted, fontSize: 13, padding: '30px 0' }}>V tomto období nie sú žiadne uzávierky.</div>
+        ? <div style={{ color: C.muted, fontSize: 13, padding: '30px 0' }}>{bezUzavierok ? `Uzávierky sa robia na papieri — graf tržieb je dočasne bez dát.` : 'V tomto období nie sú žiadne uzávierky.'}</div>
         : <TrzbyChart agg={agg} mode={mode} vybrana={vybrana} pobocky={pobocky} animate={animate} />}
     </Panel>
   );
 
   const donutKarta = (delay = 0.25) => (
     <Panel delay={delay} dur=".55s" title="Podiely platieb" style={{ minWidth: 0 }}>
-      {agg.trzby > 0 ? <DonutPodiely agg={agg} animate={animate} /> : <div style={{ color: C.muted, fontSize: 13 }}>Bez tržieb v období.</div>}
+      {agg.trzby > 0 ? <DonutPodiely agg={agg} animate={animate} /> : <div style={{ color: C.muted, fontSize: 13 }}>{bezUzavierok ? 'Uzávierky sa robia na papieri.' : 'Bez tržieb v období.'}</div>}
     </Panel>
   );
 
@@ -1294,9 +1313,11 @@ function Dashboard({ session, demo }) {
             <div style={{ fontSize: 11, color: C.muted }}>zo 100</div>
           </div>
           <div style={{ flex: 1, minWidth: 220, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {bar('Úlohy (45 %)', health.ulohy, '.5s')}
-            {bar('HACCP (35 %)', health.haccp, '.6s')}
-            {bar('Kasa (20 %)', health.kasa, '.7s')}
+            {bar(health.bezKasy ? 'Úlohy (56 %)' : 'Úlohy (45 %)', health.ulohy, '.5s')}
+            {bar(health.bezKasy ? 'HACCP (44 %)' : 'HACCP (35 %)', health.haccp, '.6s')}
+            {health.bezKasy
+              ? <div style={{ fontSize: 11.5, color: C.muted }}>Kasa — bez dát ({POZN_PAPIER}), do skóre sa nepočíta.</div>
+              : bar('Kasa (20 %)', health.kasa, '.7s')}
           </div>
         </div>
         {health.chybaHaccp > 0 && <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: C.muted, marginTop: 10 }}><IkonaTxt id="info" size={13} /><span>{fmtNum(health.chybaHaccp)} dní bez merania teploty znižuje HACCP skóre.</span></div>}
@@ -1319,14 +1340,15 @@ function Dashboard({ session, demo }) {
       data.tasks.forEach(t => perB[t.branch] && perB[t.branch].ul.add(t.day));
       data.haccp.forEach(h => perB[h.branch] && perB[h.branch].te.add(h.day));
       const N = dni.length;
-      const cell = (s) => { const n = s.size, col = n >= N ? C.ok : n === 0 ? C.err : C.gold; return <td style={{ ...tdC, textAlign: 'right', color: col, fontWeight: 700 }}>{n}/{N}</td>; };
+      // req=false (voliteľný typ): chýbajúce dni nie sú chyba → neutrálna farba
+      const cell = (s, req = true) => { const n = s.size, col = n >= N ? C.ok : !req ? C.muted : n === 0 ? C.err : C.gold; return <td style={{ ...tdC, textAlign: 'right', color: col, fontWeight: 700 }}>{n}/{N}</td>; };
       return (
         <Panel title={`Stav dát — ${obLabel} (${N} dní)`} delay={0.3} style={{ marginBottom: 16 }}>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, fontVariantNumeric: 'tabular-nums' }}>
               <thead><tr>
                 <th style={{ ...thC, textAlign: 'left' }}>Pobočka</th>
-                <th style={{ ...thC, textAlign: 'right' }}>Uzávierky</th>
+                <th style={{ ...thC, textAlign: 'right' }}>Uzávierky{!UZAVIERKA_POVINNA && <span style={{ color: C.muted, fontWeight: 400 }}> (voliteľné)</span>}</th>
                 <th style={{ ...thC, textAlign: 'right' }}>Úlohy</th>
                 <th style={{ ...thC, textAlign: 'right' }}>Teploty</th>
               </tr></thead>
@@ -1334,19 +1356,19 @@ function Dashboard({ session, demo }) {
                 {(pobocky || []).map(b => (
                   <tr key={b} className="fx-hrow" style={{ borderTop: '1px solid rgba(150,120,80,.12)' }}>
                     <td style={{ ...tdC, fontWeight: 600 }}>{b}</td>
-                    {cell(perB[b].uz)}{cell(perB[b].ul)}{cell(perB[b].te)}
+                    {cell(perB[b].uz, UZAVIERKA_POVINNA)}{cell(perB[b].ul)}{cell(perB[b].te)}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>Koľko dní z obdobia má daný typ dát. Nižšie číslo = chýbajúce dni (kandidát na backfill).</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>Koľko dní z obdobia má daný typ dát. Nižšie číslo = chýbajúce dni (kandidát na backfill).{!UZAVIERKA_POVINNA && <> Uzávierky sú dočasne voliteľné ({POZN_PAPIER}).</>}</div>
         </Panel>
       );
     }
     // manažér jednej pobočky — deň × typ
     const dot = (on, req) => <span style={{ color: on ? C.ok : (req ? C.err : C.muted), fontWeight: 700 }}>{on ? '✓' : (req ? '✗' : '–')}</span>;
-    const kompletných = dni.filter(d => uzDays.has(d) && ulDays.has(d) && teDays.has(d)).length;
+    const kompletných = dni.filter(d => (!UZAVIERKA_POVINNA || uzDays.has(d)) && ulDays.has(d) && teDays.has(d)).length;
     return (
       <Panel delay={0.3} style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
@@ -1367,7 +1389,7 @@ function Dashboard({ session, demo }) {
               {[...dni].reverse().map(d => (
                 <tr key={d} className="fx-hrow" onClick={() => setDetailDen(d)} style={{ borderTop: '1px solid rgba(150,120,80,.12)', cursor: 'pointer' }}>
                   <td style={{ ...tdC, fontWeight: 600 }}>{dayLabel(d)} <span style={{ color: C.muted, fontWeight: 400 }}>{dayName(d).slice(0, 2)}</span></td>
-                  <td style={{ padding: '7px 10px', textAlign: 'center' }}>{dot(uzDays.has(d), true)}</td>
+                  <td style={{ padding: '7px 10px', textAlign: 'center' }}>{dot(uzDays.has(d), UZAVIERKA_POVINNA)}</td>
                   <td style={{ padding: '7px 10px', textAlign: 'center' }}>{dot(ulDays.has(d), true)}</td>
                   <td style={{ padding: '7px 10px', textAlign: 'center' }}>{dot(teDays.has(d), true)}</td>
                   <td style={{ padding: '7px 10px', textAlign: 'center' }}>{dot(odDays.has(d), false)}</td>
@@ -1376,7 +1398,9 @@ function Dashboard({ session, demo }) {
             </tbody>
           </table>
         </div>
-        <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>✓ máme · ✗ chýba (uzávierka/úlohy/teploty povinné denne) · – odpisy nemuseli byť. Klik na deň → detail.</div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>{UZAVIERKA_POVINNA
+          ? '✓ máme · ✗ chýba (uzávierka/úlohy/teploty povinné denne) · – odpisy nemuseli byť.'
+          : `✓ máme · ✗ chýba (úlohy/teploty povinné denne) · – odpisy a uzávierka nemuseli byť (${POZN_PAPIER}).`} Klik na deň → detail.</div>
       </Panel>
     );
   };
@@ -1523,7 +1547,7 @@ function Dashboard({ session, demo }) {
                 <Row l="Qerko (+tringelt)" v={fmtEur(uz.qerko + uz.qerkoTr, 2)} />
                 {uz.jManko != null && <Row l="Tringelt/Manko" v={fmtEur(uz.jManko, 2)} />}
                 <Row l="Kasa večer" v={uz.kasa == null ? '—' : fmtEur(uz.kasa, 2)} />
-              </>) : <div style={{ fontSize: 13, color: C.err, fontWeight: 600 }}>✗ Uzávierka chýba</div>}
+              </>) : <div style={{ fontSize: 13, color: UZAVIERKA_POVINNA ? C.err : C.muted, fontWeight: 600 }}>{UZAVIERKA_POVINNA ? '✗ Uzávierka chýba' : `– bez uzávierky (${POZN_PAPIER})`}</div>}
             </Box>
             <Box title="Úlohy a teploty">
               {dtasks.length ? <Row l="Splnené úlohy" v={`${dtasks.filter(t => t.done).length} / ${dtasks.length}`} /> : <div style={{ fontSize: 13, color: C.err, fontWeight: 600 }}>✗ Úlohy chýbajú</div>}
@@ -1670,13 +1694,13 @@ function Dashboard({ session, demo }) {
                     )}
                     <div style={gridKPI}>
                       <KPI label="Tržby" color={C.gold} delay={0}
-                        value={<Num value={agg.trzby} animate={animate} format={n => fmtEur(Math.round(n))} />}
-                        note={<>{obLabel}{prevAgg ? <> · <Delta cur={agg.trzby} prev={prevAgg.trzby} /></> : null}</>} />
-                      <KPI label="Platobné karty" color={C.gold} delay={0.07} note={`${kartyPct} % z tržieb`}
-                        value={<Num value={agg.karty} animate={animate} format={n => fmtEur(Math.round(n))} />} />
-                      <KPI label="Qerko" color={C.fialova} delay={0.14} note={`${qerkoPct} % z obratu`}
-                        value={<Num value={agg.qerko} animate={animate} format={n => fmtEur(Math.round(n))} />} />
-                      <KPI label="Hotovosť v kase" color={hasErr ? C.err : C.text} delay={0.21} note={vybrana === '*' ? 'súčet pobočiek' : 'zostatok večer'}
+                        value={bezUzavierok ? '—' : <Num value={agg.trzby} animate={animate} format={n => fmtEur(Math.round(n))} />}
+                        note={bezUzavierok ? `${obLabel} · ${POZN_PAPIER}` : <>{obLabel}{prevAgg ? <> · <Delta cur={agg.trzby} prev={prevAgg.trzby} /></> : null}</>} />
+                      <KPI label="Platobné karty" color={C.gold} delay={0.07} note={bezUzavierok ? POZN_PAPIER : `${kartyPct} % z tržieb`}
+                        value={bezUzavierok ? '—' : <Num value={agg.karty} animate={animate} format={n => fmtEur(Math.round(n))} />} />
+                      <KPI label="Qerko" color={C.fialova} delay={0.14} note={bezUzavierok ? POZN_PAPIER : `${qerkoPct} % z obratu`}
+                        value={bezUzavierok ? '—' : <Num value={agg.qerko} animate={animate} format={n => fmtEur(Math.round(n))} />} />
+                      <KPI label="Hotovosť v kase" color={hasErr ? C.err : C.text} delay={0.21} note={bezUzavierok ? POZN_PAPIER : (vybrana === '*' ? 'súčet pobočiek' : 'zostatok večer')}
                         value={hasKasa ? <Num value={agg.kasaSpolu} animate={animate} format={n => fmtEur(n, 2)} /> : '—'} />
                     </div>
                     {!lenTrzby && healthKarta()}
@@ -1689,8 +1713,8 @@ function Dashboard({ session, demo }) {
                       <>
                         <div style={gridKPI}>
                           <KPI size={27} label="Priemerná denná tržba" color={C.gold} delay={0.30}
-                            value={<Num value={agg.priemerDenna} animate={animate} format={n => fmtEur(Math.round(n))} />}
-                            note={prevAgg ? <Delta cur={agg.priemerDenna} prev={prevAgg.priemerDenna} /> : 'za deň s tržbou'} />
+                            value={bezUzavierok ? '—' : <Num value={agg.priemerDenna} animate={animate} format={n => fmtEur(Math.round(n))} />}
+                            note={bezUzavierok ? POZN_PAPIER : (prevAgg ? <Delta cur={agg.priemerDenna} prev={prevAgg.priemerDenna} /> : 'za deň s tržbou')} />
                           <KPI size={27} label="Splnenosť úloh" color={pctCol} delay={0.37}
                             value={agg.pct === null ? '—' : <Num value={agg.pct} animate={animate} format={n => Math.round(n) + ' %'} />}
                             note={prevAgg && prevAgg.pct != null && agg.pct != null ? <Delta cur={agg.pct} prev={prevAgg.pct} /> : null}>
