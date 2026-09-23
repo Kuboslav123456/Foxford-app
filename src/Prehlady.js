@@ -226,7 +226,17 @@ function prevRozsah(mode, refDate, od, doD) {
 // peňažné KPI (bez uzávierok „—" namiesto 0 € ▼100 %), health-score (bez kasy,
 // váhy 56/44) a detail dňa. Pri návrate karty na tablet prepnúť späť na true.
 const UZAVIERKA_POVINNA = false;
-const POZN_PAPIER = 'uzávierky sa robia na papieri';
+
+// ── Uzávierky v Prehľadoch SKRYTÉ (2026-09-23, Jakub: „dajme preč uzávierky aj
+//    z prehľadov, schovať") ──────────────────────────────────────────────────
+// true = sekcia Uzávierky v menu, peňažné KPI (Tržby, Karty, Qerko, Hotovosť,
+// Priemerná denná), graf tržieb, podiely platieb, najlepší/najslabší deň, stĺpec
+// Uzávierka v „Stave dát" a box Uzávierka v detaile dňa sa NEZOBRAZUJÚ a tabuľka
+// uzavierky_log sa ANI NENAČÍTAVA (tržby sa nedostanú do prehliadača manažéra).
+// Dáta v Supabase ostávajú nedotknuté. Návrat: false (+ pri návrate karty na
+// tablet UZAVIERKA_TAB_ENABLED v App.js a UZAVIERKA_POVINNA hore).
+const UZAVIERKY_SKRYTE = true;
+const POZN_PAPIER = UZAVIERKY_SKRYTE ? 'uzávierky sú dočasne skryté' : 'uzávierky sa robia na papieri';
 
 // ── UKÁŽKOVÝ REŽIM (#prehlady-demo) — vymyslené dáta, bez prihlásenia ────────
 // #prehlady-demo-papier = tá istá ukážka, ale bez uzávierok v aktuálnom období
@@ -778,7 +788,7 @@ function Dashboard({ session, demo }) {
   const [histStrana, setHistStrana] = useState(1);
   const [filterKat, setFilterKat] = useState(null);     // klik na zmenu → filter detailu podľa kategórie
   const [detailDen, setDetailDen] = useState(null);     // deň otvorený v detaile (modal)
-  const [sekcia, setSekcia] = useState(F.current.sekcia || 'prehlad');   // ľavé menu
+  const [sekcia, setSekcia] = useState((UZAVIERKY_SKRYTE && F.current.sekcia === 'uzavierky') ? 'prehlad' : (F.current.sekcia || 'prehlad'));   // ľavé menu (skrytá sekcia → Prehľad)
   // Novinky (oznamy admin → manažéri) — globálne pre všetkých prihlásených
   const [novinky, setNovinky] = useState(null);
   const [novNacitava, setNovNacitava] = useState(true);
@@ -830,9 +840,9 @@ function Dashboard({ session, demo }) {
       if (demo) {
         const all = demoRows();
         const f = (rows, a, b) => rows.filter(r => r.day >= a && r.day <= b && (vybrana === '*' || r.branch === vybrana));
-        setData({ uzavierky: DEMO_PAPIER ? [] : f(all.uzavierky, od, doD), odpisy: lenTrzby ? [] : f(all.odpisy, od, doD),
+        setData({ uzavierky: (DEMO_PAPIER || UZAVIERKY_SKRYTE) ? [] : f(all.uzavierky, od, doD), odpisy: lenTrzby ? [] : f(all.odpisy, od, doD),
                   tasks: lenTrzby ? [] : f(all.tasks, od, doD), haccp: lenTrzby ? [] : f(all.haccp, od, doD) });
-        setPrevData(lenTrzby ? null : { uzavierky: f(all.uzavierky, pod, pdoD), odpisy: [],
+        setPrevData(lenTrzby ? null : { uzavierky: UZAVIERKY_SKRYTE ? [] : f(all.uzavierky, pod, pdoD), odpisy: [],
                   tasks: f(all.tasks, pod, pdoD), haccp: f(all.haccp, pod, pdoD) });
         setNacitava(false);
         return;
@@ -844,11 +854,11 @@ function Dashboard({ session, demo }) {
           return x;
         };
         const [uz, od_, ta, ha, puz, pta, pha] = await Promise.all([
-          fetchAll(q('uzavierky_log', 'day, branch, kasa, meno, created_at, data', od, doD)),
+          UZAVIERKY_SKRYTE ? [] : fetchAll(q('uzavierky_log', 'day, branch, kasa, meno, created_at, data', od, doD)),
           lenTrzby ? [] : fetchAll(q('odpisy_log', 'day, branch, item, qty, unit, reason, author, day_note', od, doD)),
           lenTrzby ? [] : fetchAll(q('tasks_log', 'day, branch, category, done, task, issue, done_by, inspector, done_time', od, doD)),
           lenTrzby ? [] : fetchAll(q('haccp_log', 'day, branch, device, value, max_limit, exceeded, inspector, shift', od, doD)),
-          lenTrzby ? [] : fetchAll(q('uzavierky_log', 'day, branch, kasa, meno, created_at, data', pod, pdoD)),
+          (lenTrzby || UZAVIERKY_SKRYTE) ? [] : fetchAll(q('uzavierky_log', 'day, branch, kasa, meno, created_at, data', pod, pdoD)),
           lenTrzby ? [] : fetchAll(q('tasks_log', 'day, branch, category, done', pod, pdoD)),
           lenTrzby ? [] : fetchAll(q('haccp_log', 'day, branch, exceeded', pod, pdoD)),
         ]);
@@ -1287,7 +1297,7 @@ function Dashboard({ session, demo }) {
   const infoLenTrzby = () => (
     <Panel><div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, color: C.muted }}>
       <IkonaTxt id="info" size={16} style={{ marginTop: 1 }} />
-      <span>Ročný pohľad všetkých pobočiek zobrazuje len tržby. Pre túto sekciu vyber konkrétnu pobočku alebo kratšie obdobie (mesiac/týždeň).</span>
+      <span>{UZAVIERKY_SKRYTE ? 'Ročný pohľad všetkých pobočiek nenačítava prevádzkové dáta (príliš veľa záznamov). Pre túto sekciu vyber konkrétnu pobočku alebo kratšie obdobie (mesiac/týždeň).' : 'Ročný pohľad všetkých pobočiek zobrazuje len tržby. Pre túto sekciu vyber konkrétnu pobočku alebo kratšie obdobie (mesiac/týždeň).'}</span>
     </div></Panel>
   );
 
@@ -1348,7 +1358,7 @@ function Dashboard({ session, demo }) {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, fontVariantNumeric: 'tabular-nums' }}>
               <thead><tr>
                 <th style={{ ...thC, textAlign: 'left' }}>Pobočka</th>
-                <th style={{ ...thC, textAlign: 'right' }}>Uzávierky{!UZAVIERKA_POVINNA && <span style={{ color: C.muted, fontWeight: 400 }}> (voliteľné)</span>}</th>
+                {!UZAVIERKY_SKRYTE && <th style={{ ...thC, textAlign: 'right' }}>Uzávierky{!UZAVIERKA_POVINNA && <span style={{ color: C.muted, fontWeight: 400 }}> (voliteľné)</span>}</th>}
                 <th style={{ ...thC, textAlign: 'right' }}>Úlohy</th>
                 <th style={{ ...thC, textAlign: 'right' }}>Teploty</th>
               </tr></thead>
@@ -1356,13 +1366,13 @@ function Dashboard({ session, demo }) {
                 {(pobocky || []).map(b => (
                   <tr key={b} className="fx-hrow" style={{ borderTop: '1px solid rgba(150,120,80,.12)' }}>
                     <td style={{ ...tdC, fontWeight: 600 }}>{b}</td>
-                    {cell(perB[b].uz, UZAVIERKA_POVINNA)}{cell(perB[b].ul)}{cell(perB[b].te)}
+                    {!UZAVIERKY_SKRYTE && cell(perB[b].uz, UZAVIERKA_POVINNA)}{cell(perB[b].ul)}{cell(perB[b].te)}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>Koľko dní z obdobia má daný typ dát. Nižšie číslo = chýbajúce dni (kandidát na backfill).{!UZAVIERKA_POVINNA && <> Uzávierky sú dočasne voliteľné ({POZN_PAPIER}).</>}</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>Koľko dní z obdobia má daný typ dát. Nižšie číslo = chýbajúce dni (kandidát na backfill).{!UZAVIERKA_POVINNA && !UZAVIERKY_SKRYTE && <> Uzávierky sú dočasne voliteľné ({POZN_PAPIER}).</>}</div>
         </Panel>
       );
     }
@@ -1380,7 +1390,7 @@ function Dashboard({ session, demo }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
             <thead><tr>
               <th style={{ ...thC, textAlign: 'left' }}>Deň</th>
-              <th style={{ ...thC, textAlign: 'center' }}>Uzávierka</th>
+              {!UZAVIERKY_SKRYTE && <th style={{ ...thC, textAlign: 'center' }}>Uzávierka</th>}
               <th style={{ ...thC, textAlign: 'center' }}>Úlohy</th>
               <th style={{ ...thC, textAlign: 'center' }}>Teploty</th>
               <th style={{ ...thC, textAlign: 'center' }}>Odpisy</th>
@@ -1389,7 +1399,7 @@ function Dashboard({ session, demo }) {
               {[...dni].reverse().map(d => (
                 <tr key={d} className="fx-hrow" onClick={() => setDetailDen(d)} style={{ borderTop: '1px solid rgba(150,120,80,.12)', cursor: 'pointer' }}>
                   <td style={{ ...tdC, fontWeight: 600 }}>{dayLabel(d)} <span style={{ color: C.muted, fontWeight: 400 }}>{dayName(d).slice(0, 2)}</span></td>
-                  <td style={{ padding: '7px 10px', textAlign: 'center' }}>{dot(uzDays.has(d), UZAVIERKA_POVINNA)}</td>
+                  {!UZAVIERKY_SKRYTE && <td style={{ padding: '7px 10px', textAlign: 'center' }}>{dot(uzDays.has(d), UZAVIERKA_POVINNA)}</td>}
                   <td style={{ padding: '7px 10px', textAlign: 'center' }}>{dot(ulDays.has(d), true)}</td>
                   <td style={{ padding: '7px 10px', textAlign: 'center' }}>{dot(teDays.has(d), true)}</td>
                   <td style={{ padding: '7px 10px', textAlign: 'center' }}>{dot(odDays.has(d), false)}</td>
@@ -1398,7 +1408,9 @@ function Dashboard({ session, demo }) {
             </tbody>
           </table>
         </div>
-        <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>{UZAVIERKA_POVINNA
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>{UZAVIERKY_SKRYTE
+          ? '✓ máme · ✗ chýba (úlohy/teploty povinné denne) · – odpisy nemuseli byť.'
+          : UZAVIERKA_POVINNA
           ? '✓ máme · ✗ chýba (uzávierka/úlohy/teploty povinné denne) · – odpisy nemuseli byť.'
           : `✓ máme · ✗ chýba (úlohy/teploty povinné denne) · – odpisy a uzávierka nemuseli byť (${POZN_PAPIER}).`} Klik na deň → detail.</div>
       </Panel>
@@ -1540,7 +1552,7 @@ function Dashboard({ session, demo }) {
             <button onClick={() => setDetailDen(null)} style={{ ...chipStyle(false), padding: '4px 11px' }}>✕</button>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <Box title="Uzávierka">
+            {!UZAVIERKY_SKRYTE && <Box title="Uzávierka">
               {uz ? (<>
                 <Row l="Tržba" v={fmtEur(uz.obrat, 2)} />
                 <Row l="Karty" v={fmtEur(uz.karta, 2)} />
@@ -1548,7 +1560,7 @@ function Dashboard({ session, demo }) {
                 {uz.jManko != null && <Row l="Tringelt/Manko" v={fmtEur(uz.jManko, 2)} />}
                 <Row l="Kasa večer" v={uz.kasa == null ? '—' : fmtEur(uz.kasa, 2)} />
               </>) : <div style={{ fontSize: 13, color: UZAVIERKA_POVINNA ? C.err : C.muted, fontWeight: 600 }}>{UZAVIERKA_POVINNA ? '✗ Uzávierka chýba' : `– bez uzávierky (${POZN_PAPIER})`}</div>}
-            </Box>
+            </Box>}
             <Box title="Úlohy a teploty">
               {dtasks.length ? <Row l="Splnené úlohy" v={`${dtasks.filter(t => t.done).length} / ${dtasks.length}`} /> : <div style={{ fontSize: 13, color: C.err, fontWeight: 600 }}>✗ Úlohy chýbajú</div>}
               {dhaccp.length ? <Row l="Merania teplôt" v={`${dhaccp.length}${dhExceed.length ? ` · ${dhExceed.length} prekročení` : ''}`} /> : <div style={{ fontSize: 13, color: C.err, fontWeight: 600 }}>✗ Teploty chýbajú</div>}
@@ -1591,7 +1603,7 @@ function Dashboard({ session, demo }) {
             <div style={{ fontSize: 11, color: C.muted, padding: '3px 4px 0' }}>manažérsky prístup</div>
           </div>
           <nav className="pr-menu">
-            {SEKCIE.map(s => {
+            {SEKCIE.filter(s => s.id !== 'uzavierky' || !UZAVIERKY_SKRYTE).map(s => {
               const on = sekcia === s.id;
               return (
                 <button key={s.id} className={on ? 'fx-mbtn on' : 'fx-mbtn'} onClick={() => setSekcia(s.id)}
@@ -1692,7 +1704,7 @@ function Dashboard({ session, demo }) {
                         <span style={{ fontSize: 12.5, fontWeight: 700, color: C.gold, whiteSpace: 'nowrap' }}>Zobraziť →</span>
                       </div>
                     )}
-                    <div style={gridKPI}>
+                    {!UZAVIERKY_SKRYTE && <div style={gridKPI}>
                       <KPI label="Tržby" color={C.gold} delay={0}
                         value={bezUzavierok ? '—' : <Num value={agg.trzby} animate={animate} format={n => fmtEur(Math.round(n))} />}
                         note={bezUzavierok ? `${obLabel} · ${POZN_PAPIER}` : <>{obLabel}{prevAgg ? <> · <Delta cur={agg.trzby} prev={prevAgg.trzby} /></> : null}</>} />
@@ -1702,19 +1714,19 @@ function Dashboard({ session, demo }) {
                         value={bezUzavierok ? '—' : <Num value={agg.qerko} animate={animate} format={n => fmtEur(Math.round(n))} />} />
                       <KPI label="Hotovosť v kase" color={hasErr ? C.err : C.text} delay={0.21} note={bezUzavierok ? POZN_PAPIER : (vybrana === '*' ? 'súčet pobočiek' : 'zostatok večer')}
                         value={hasKasa ? <Num value={agg.kasaSpolu} animate={animate} format={n => fmtEur(n, 2)} /> : '—'} />
-                    </div>
+                    </div>}
                     {!lenTrzby && healthKarta()}
                     {upoz()}
-                    <div className="pr-charts">
+                    {!UZAVIERKY_SKRYTE && <div className="pr-charts">
                       {grafTrzieb()}
                       {donutKarta()}
-                    </div>
+                    </div>}
                     {!lenTrzby ? (
                       <>
                         <div style={gridKPI}>
-                          <KPI size={27} label="Priemerná denná tržba" color={C.gold} delay={0.30}
+                          {!UZAVIERKY_SKRYTE && <KPI size={27} label="Priemerná denná tržba" color={C.gold} delay={0.30}
                             value={bezUzavierok ? '—' : <Num value={agg.priemerDenna} animate={animate} format={n => fmtEur(Math.round(n))} />}
-                            note={bezUzavierok ? POZN_PAPIER : (prevAgg ? <Delta cur={agg.priemerDenna} prev={prevAgg.priemerDenna} /> : 'za deň s tržbou')} />
+                            note={bezUzavierok ? POZN_PAPIER : (prevAgg ? <Delta cur={agg.priemerDenna} prev={prevAgg.priemerDenna} /> : 'za deň s tržbou')} />}
                           <KPI size={27} label="Splnenosť úloh" color={pctCol} delay={0.37}
                             value={agg.pct === null ? '—' : <Num value={agg.pct} animate={animate} format={n => Math.round(n) + ' %'} />}
                             note={prevAgg && prevAgg.pct != null && agg.pct != null ? <Delta cur={agg.pct} prev={prevAgg.pct} /> : null}>
@@ -1723,7 +1735,7 @@ function Dashboard({ session, demo }) {
                           <KPI size={27} label="HACCP prekročenia" color={agg.prekrocenia.length ? C.err : C.ok} delay={0.44} note="teplotných limitov"
                             value={<Num value={agg.prekrocenia.length} animate={animate} format={n => fmtNum(Math.round(n))} />} />
                         </div>
-                        {agg.bestDay && vybrana !== '*' && (
+                        {!UZAVIERKY_SKRYTE && agg.bestDay && vybrana !== '*' && (
                           <div style={{ fontSize: 12, color: C.muted, marginTop: -6, marginBottom: 16 }}>
                             Najlepší deň: <b style={{ color: C.text }}>{dayLabel(agg.bestDay)}</b> ({fmtEur(Math.round(agg.poDni[agg.bestDay]))}) · najslabší: <b style={{ color: C.text }}>{dayLabel(agg.worstDay)}</b> ({fmtEur(Math.round(agg.poDni[agg.worstDay]))})
                           </div>
@@ -1731,7 +1743,7 @@ function Dashboard({ session, demo }) {
                         {stavDatKarta()}
                       </>
                     ) : (
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: C.muted }}><IkonaTxt id="info" size={15} style={{ marginTop: 1 }} /><span>Ročný pohľad všetkých pobočiek zobrazuje len tržby — pre úlohy/odpisy/teploty/health vyber pobočku alebo kratšie obdobie.</span></div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: C.muted }}><IkonaTxt id="info" size={15} style={{ marginTop: 1 }} /><span>{UZAVIERKY_SKRYTE ? 'Ročný pohľad všetkých pobočiek nenačítava prevádzkové dáta (príliš veľa záznamov) — pre úlohy/odpisy/teploty/health vyber pobočku alebo kratšie obdobie.' : 'Ročný pohľad všetkých pobočiek zobrazuje len tržby — pre úlohy/odpisy/teploty/health vyber pobočku alebo kratšie obdobie.'}</span></div>
                     )}
                   </>
                 )}
