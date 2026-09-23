@@ -39,6 +39,14 @@ const hexToRgba = (hex, a) => {
 };
 
 const BRANCH_PIN = '1234';
+
+// Karta „Uzávierka" (denná uzávierka kasy) — DOČASNE SKRYTÁ z menu tabletu
+// (2026-09-23, Jakub: prevádzky prešli späť na papier kvôli bezpečnosti, vrátime
+// sa k tomu neskôr). Formulár, dáta v localStorage (foxford-uzavierky), odosielanie
+// do tabuľky/Supabase aj záloha ostávajú v kóde nedotknuté — návrat = prepnúť na
+// true + bump verzie + deploy. Kým je false, karta nie je v menu a ak by sa tab
+// akokoľvek aktivoval, appka ho prepne späť na Úlohy.
+const UZAVIERKA_TAB_ENABLED = false;
 // Zvýš toto číslo keď zmeníš INIT_INV — všetky pobočky dostanú nový základ
 const INV_DATA_VERSION = '4';
 
@@ -1055,6 +1063,9 @@ export default function App() {
   const [online, setOnline]     = useState(navigator.onLine);
   const [uiZoom, setUiZoom]     = useState(() => parseFloat(localStorage.getItem('foxford-zoom') || '1'));
   const [tab, setTab]           = useState('tasks');
+  // Poistka pre skrytú kartu Uzávierka (UZAVIERKA_TAB_ENABLED=false): keby sa tab
+  // aktivoval (staršia záložka, budúca zmena), vráť sa na Úlohy.
+  useEffect(() => { if (!UZAVIERKA_TAB_ENABLED && tab === 'uzavierka') setTab('tasks'); }, [tab]);
   const [subTab, setSubTab]     = useState('denné');
   const [denneTab, setDenneTab] = useState('ranné');
   const [expCat, setExpCat]     = useState(null);
@@ -4235,7 +4246,7 @@ export default function App() {
           { id:'uzavierka', label:'Uzávierka' },
           { id:'inventory', label:'Sklad' },
           { id:'notes',     label:'Správy' },
-        ].map(({ id, label }) => {
+        ].filter(t => t.id !== 'uzavierka' || UZAVIERKA_TAB_ENABLED).map(({ id, label }) => {
           const hasAlert = id === 'temps' && (lastHaccpDate !== new Date().toDateString() || lastHaccpDateVecerne !== new Date().toDateString());
           const active = tab === id;
           const clr = active ? '#FFFFFF' : '#7C766B';
